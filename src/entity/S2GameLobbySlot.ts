@@ -1,0 +1,76 @@
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, Unique } from 'typeorm';
+import { S2GameLobby } from './S2GameLobby';
+import { S2Profile } from './S2Profile';
+import { S2GameLobbyPlayerJoin } from './S2GameLobbyPlayerJoin';
+
+export enum S2GameLobbySlotKind {
+    Open = 'open',
+    AI = 'ai',
+    Human = 'human',
+}
+
+@Entity()
+@Unique('lobby_slot', ['lobby', 'slotNumber'])
+@Index('lobby_player', ['lobby', 'profile'])
+export class S2GameLobbySlot {
+    @PrimaryGeneratedColumn()
+    id: number;
+
+    @ManyToOne(type => S2GameLobby, {
+        onDelete: 'RESTRICT',
+        onUpdate: 'RESTRICT',
+    })
+    @Index('lobby')
+    lobby: S2GameLobby;
+
+    @Column({
+        type: 'tinyint',
+        unsigned: true,
+    })
+    slotNumber: number;
+
+    @Column({
+        type: 'tinyint',
+        unsigned: true,
+    })
+    team: number;
+
+    @Column({
+        type: 'enum',
+        nullable: true,
+        enum: S2GameLobbySlotKind,
+    })
+    kind: S2GameLobbySlotKind;
+
+    @ManyToOne(type => S2Profile, {
+        onDelete: 'RESTRICT',
+        onUpdate: 'RESTRICT',
+    })
+    @Index('profile')
+    profile: S2Profile;
+
+    @ManyToOne(type => S2GameLobbyPlayerJoin, {
+        nullable: true,
+        onDelete: 'RESTRICT',
+        onUpdate: 'RESTRICT',
+    })
+    joinInfo: S2GameLobbyPlayerJoin;
+
+    @Column({
+        type: 'varchar',
+        length: 12,
+        nullable: true,
+    })
+    name: string;
+
+    @Column({
+        nullable: true,
+    })
+    joinedAt: Date;
+
+    // TODO: remove
+    @Column({
+        nullable: true,
+    })
+    leftAt: Date;
+}

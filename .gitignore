@@ -1,0 +1,11 @@
+/.vscode/
+/node_modules/
+/out/
+/coverage/
+/data/
+/tmp/
+/tests/
+/etc/
+sync*.sh
+.env*
+!.env-example
