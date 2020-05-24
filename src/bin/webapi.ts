@@ -19,6 +19,7 @@ import * as https from 'https';
 import * as http2 from 'http2';
 import { execAsync } from '../helpers';
 import { S2GameLobbySlotKind } from '../entity/S2GameLobbySlot';
+import { stripIndents } from 'common-tags';
 
 setupFileLogger('webapi');
 let conn: orm.Connection;
@@ -30,6 +31,8 @@ const bnDepot = new BattleDepot('data/depot');
 const pubBnetDir = new NestedHashDir('data/bnet');
 
 function stripEntityIds(data: any) {
+    // TODO: remove
+    return data;
     if (typeof data === 'object' && data !== null) {
         if (typeof data.id === 'number') {
             delete data.id;
@@ -50,14 +53,14 @@ server.register(fastifyStatic, {
 
 server.register(fastifyRateLimit, {
     global: true,
-    max: 100,
-    timeWindow: 1000 * 60,
+    max: 500,
+    timeWindow: 1000 * 60 * 5,
 });
 
 server.register(<any>fastifyPagination, {
     strategy: limitOffsetPaginationStrategy({
-        defaultLimit: 100,
-        maximumLimit: 1000,
+        defaultLimit: 50,
+        maximumLimit: 500,
     }),
 });
 
@@ -106,13 +109,44 @@ server.addHook('onResponse', (req, reply, done) => {
 // });
 
 server.register(fastifyOAS, <fastifyOAS.FastifyOASOptions>{
-    routePrefix: '/docs',
+    routePrefix: '/docs/api',
     exposeRoute: true,
     hideUntagged: true,
     swagger: {
         info: {
-            title: 'SC2 Arcade API',
-            description: 'Unofficial StarCraft II Arcade API.',
+            title: 'StarCraft II Arcade API (Unofficial)',
+            description: stripIndents`
+                This API is provided free of charge for non profit use.
+
+                Anyone with intentions to utilize it to build something for a wider audience should first seek approval.
+
+                ---
+
+                ### Where does this data come form?
+
+                It's collected by bots. They take use of game protocol to gain access to live data such as list of open lobbies. \\
+                ...
+
+                ### Is this project open source?
+
+                Not yet, however I plan to open source as soon as I feel comfortable doing so - there are some security concerns I need to address first, before making that move. It's likely a matter of days/weeks.
+
+                However, only half of this project will be open-sourced - the non critical part of it. That is all the services which are responsible of handling the data feed provided by SC2 bots.
+
+                Code of everything that interacts with internal system of Battle.net servers will stay private. The reason behind that is to keep this project alive as long as possible. Since the bots could've been abused in ways I'd not like. Such as disrupting the arcade by bot-hosting lobbies etc. Which in turn could attract Blizzard's attention and that would likely affect longevity of this service in one way or another.
+
+                ### Rate limiting
+
+                Current limits are: up to 500 requests in the span of 5 minutes.
+
+                ### Pagination
+
+                ...
+
+                ---
+
+                *// Talv*
+            `,
         },
         servers: [
             { url: 'http://localhost:8090', description: 'development' },
@@ -127,7 +161,16 @@ server.register(fastifyOAS, <fastifyOAS.FastifyOASOptions>{
         tags: [
             {
                 name: 'Lobbies',
-                description: 'Game lobbies.',
+                description: stripIndents`
+                    Publicly hosted games on Arcade.\n
+                    **Privately hosted lobbies aren't supported** by this service and likely never will due to technical limitations.
+                `,
+            },
+            {
+                name: 'Maps',
+                description: stripIndents`
+                    Maps & mods published on the Battle.net. Currently database is limited to maps that have been hosted at least once since this project has started (~1 Feb 2020). At this time it's the only method of populating the database. I've began working on improvements in that regard, with the goal to include every single map published to Battle.net. With ability to auto-discover newly published documents, even before they're hosted for the first time.
+                `,
             },
         ],
     }
@@ -143,6 +186,8 @@ server.get('/lobbies/active', {
         .createQueryBuilder('lobby')
         .leftJoinAndSelect('lobby.slots', 'slot')
         .leftJoinAndSelect('slot.profile', 'profile')
+        // .leftJoinAndSelect('lobby.joinHistory', 'joinHistory')
+        // .leftJoinAndSelect('joinHistory.profile', 'joinHistoryProfile')
         .andWhere('lobby.status = :status OR lobby.closedAt >= FROM_UNIXTIME(UNIX_TIMESTAMP()-20)', { status: GameLobbyStatus.Open })
         .addOrderBy('lobby.createdAt', 'ASC')
         .addOrderBy('slot.slotNumber', 'ASC')
@@ -258,8 +303,12 @@ server.get('/maps/:regionId', {
 
     const [ result, count ] = await conn.getRepository(S2Document)
         .createQueryBuilder('mapDoc')
-        .innerJoinAndMapOne('mapDoc.currentVersion', 'mapDoc.docVersions', 'currentVersion', 'currentVersion.document = mapDoc.id')
-        .andWhere('(currentVersion.majorVersion = mapDoc.currentMajorVersion AND currentVersion.minorVersion = mapDoc.currentMinorVersion)')
+        .leftJoinAndMapOne(
+            'mapDoc.currentVersion',
+            S2DocumentVersion,
+            'currentVersion',
+            'currentVersion.document = mapDoc.id AND currentVersion.majorVersion = mapDoc.currentMajorVersion AND currentVersion.minorVersion = mapDoc.currentMinorVersion'
+        )
         .andWhere('mapDoc.regionId = :regionId', { regionId: request.params.regionId })
         .take(limit)
         .skip(offset)
@@ -301,25 +350,22 @@ server.get('/maps/:region/:mapId/recent-games', {
         tags: ['Maps'],
         summary: 'Games history for specific map',
     },
-    config: {
-        rateLimit: {
-            max: 10,
-            timeWindow: 1000 * 60
-        }
-    }
 }, async (request, reply) => {
     const { limit, offset } = request.parsePagination();
 
+    // requesting total count of matching rows gets progressively more expensive, especially for very popular maps (Direct Strike..)
+    // however, fetching just a slice of rows at any offset is fast, regardless of the sorting direction
+    // TODO: consider caching `count` result independetly from rows, with much higher cache duration
     const [ result, count ] = await conn.getRepository(S2GameLobby)
         .createQueryBuilder('lobby')
-        .select(['lobby.regionId', 'lobby.bnetBucketId', 'lobby.bnetRecordId', 'lobby.closedAt'])
+        .select(['lobby.bnetBucketId', 'lobby.bnetRecordId', 'lobby.closedAt'])
         .andWhere('lobby.regionId = :region', { region: request.params.region })
         .andWhere('lobby.mapBnetId = :bnetId', { bnetId: request.params.mapId })
         .andWhere('lobby.status = :status', { status: GameLobbyStatus.Started })
-        // .addOrderBy('lobby.closedAt', 'DESC')
-        .addOrderBy('lobby.id', 'DESC')
+        .addOrderBy('lobby.id', 'ASC')
         .take(limit)
         .skip(offset)
+        .cache(60000)
         .getManyAndCount()
     ;
 
@@ -329,7 +375,7 @@ server.get('/maps/:region/:mapId/recent-games', {
 
 server.get('/bnet/:hash(^\\w+).jpg', {
     schema: {
-        tags: ['Battle.net cache'],
+        tags: ['Battle.net depot'],
     },
 }, async (request, reply) => {
     const jpgPath = pubBnetDir.pathTo(`${request.params.hash}.jpg`);
