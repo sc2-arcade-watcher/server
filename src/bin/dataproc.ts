@@ -165,7 +165,7 @@ class DbProc {
     }
 
     protected async doUpdateSlots(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc) {
-        if (s2lobby.slots && lobbyData.slotsPreviewUpdatedAt < s2lobby.slotsUpdatedAt) return;
+        if (lobbyData.slotsPreviewUpdatedAt <= s2lobby.slotsUpdatedAt) return;
 
         const slotKindMap = {
             [LobbyPvExSlotKind.Computer]: S2GameLobbySlotKind.AI,
@@ -179,8 +179,6 @@ class DbProc {
             }
             if (s2lobby.slots.length > lobbyData.slots.length) {
                 const removedSlots = s2lobby.slots.splice(lobbyData.slots.length).filter((s2slot, idx) => {
-                    if (idx < lobbyData.slots.length) return false;
-                    s2lobby.slots.splice(idx, 1);
                     if (s2slot.joinInfo) {
                         throw new Error('FIXME');
                     }
@@ -189,9 +187,9 @@ class DbProc {
                 await this.conn.getRepository(S2GameLobbySlot).delete(removedSlots.map(x => x.id));
             }
             else {
-                const newSlots = lobbyData.slots.map((infoSlot, idx) => {
+                const addedSlots = lobbyData.slots.map((infoSlot, idx) => {
                     if (idx < s2lobby.slots.length) {
-                        return s2lobby.slots[idx];
+                        return void 0;
                     }
                     const s2slot = new S2GameLobbySlot();
                     Object.assign(s2slot, {
@@ -201,12 +199,9 @@ class DbProc {
                         kind: S2GameLobbySlotKind.Open,
                     } as S2GameLobbySlot);
                     return s2slot;
-                });
-                const addedSlots = newSlots.filter(slot => {
-                    return !this.conn.getRepository(S2GameLobbySlot).hasId(slot);
-                });
+                }).filter(x => x !== void 0);
                 await this.conn.getRepository(S2GameLobbySlot).insert(addedSlots);
-                s2lobby.slots = newSlots;
+                s2lobby.slots.push(...addedSlots);
             }
         }
         else {
@@ -540,7 +535,11 @@ class DbProc {
         if (ev.lobby.slots) {
             await this.doUpdateSlots(s2lobby, ev.lobby);
         }
-        if (ev.lobby.status !== GameLobbyStatus.Started && s2lobby.slots.length) {
+        if (
+            (ev.lobby.status !== GameLobbyStatus.Started && s2lobby.slots.length)
+            // (ev.lobby.slotsPreviewUpdatedAt && ev.lobby.slotsPreviewUpdatedAt >= s2lobby.slotsUpdatedAt)
+        ) {
+            logger.verbose(`slot data wiped. src=${ev.feedName} ${this.s2region.code}#${ev.lobby.initInfo.lobbyId}`);
             await this.em.getRepository(S2GameLobbyPlayerJoin).createQueryBuilder()
                 .update()
                 .set({ leftAt: ev.lobby.closedAt })
@@ -568,7 +567,7 @@ class DbProc {
             status: ev.lobby.status,
         });
         this.lobbiesCache.delete(ev.lobby.initInfo.lobbyId);
-        logger.info(`CLOSED src=${ev.feedName} ${this.s2region.code}#${ev.lobby.initInfo.lobbyId} ${ev.lobby.closedAt.toISOString()}`);
+        logger.info(`CLOSED src=${ev.feedName} ${this.s2region.code}#${ev.lobby.initInfo.lobbyId} ${ev.lobby.closedAt.toISOString()} status=${s2lobby.status}`);
     }
 
     async onUpdateLobbySnapshot(ev: JournalEventUpdateLobbySnapshot) {
@@ -608,13 +607,21 @@ process.on('unhandledRejection', e => { throw e; });
 async function run() {
     setupFileLogger('dataproc');
 
-    const allRegions = [
+    let activeRegions = [
         GameRegion.US,
         GameRegion.EU,
         GameRegion.KR,
     ];
+    if (process.argv.length > 2) {
+        const regionId = Number(process.argv[2]);
+        if (regionId < 1 || regionId > 3) {
+            logger.error(`provided invalid region`);
+            return;
+        }
+        activeRegions = [regionId];
+    }
 
-    const workers = await Promise.all(allRegions.map(async region => {
+    const workers = await Promise.all(activeRegions.map(async region => {
         const worker = new DbProc(region);
         await worker.open();
         return worker;
