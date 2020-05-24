@@ -7,8 +7,8 @@
     },
     "scripts": {
         "clean": "rm -rf out/*",
-        "build": "tsc -p ./",
-        "build:watch": "tsc -watch -p ./",
+        "build": "rm -rf out/* && tsc -p ./",
+        "build:watch": "rm -rf out/* && tsc -watch -p ./",
         "test": "jest --env=node --colors --coverage test"
     },
     "dependencies": {

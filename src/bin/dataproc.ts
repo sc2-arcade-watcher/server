@@ -305,8 +305,7 @@ class DbProc {
             if (!s2profile) {
                 s2profile = new S2Profile();
                 Object.assign(s2profile, infoProfile);
-                const result = await this.conn.getRepository(S2Profile).insert(s2profile);
-                // s2profile.id = result.identifiers.shift() as any;
+                await this.conn.getRepository(S2Profile).insert(s2profile);
             }
         }
         this.profilesCache.set(profKey, s2profile);
@@ -466,6 +465,7 @@ class DbProc {
         catch (err) {
             if (isErrDuplicateEntry(err)) {
                 s2lobby = await this.getLobby(ev.lobby);
+                const snapshotTimeDiff = ev.lobby.snapshotUpdatedAt.getTime() - s2lobby.snapshotUpdatedAt.getTime();
                 if (s2lobby.closedAt && s2lobby.closedAt < ev.lobby.createdAt) {
                     logger.info(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} lobby reopened`, [
                         [s2lobby.createdAt, ev.lobby.createdAt],
@@ -484,20 +484,23 @@ class DbProc {
                         slotsHumansTotal: ev.lobby.slotsHumansTotal,
                     });
                 }
-                else if (s2lobby.snapshotUpdatedAt < ev.lobby.snapshotUpdatedAt) {
+                else if (snapshotTimeDiff > 0) {
                     logger.verbose(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} lobby reappeared`, [
+                        [snapshotTimeDiff],
                         [s2lobby.createdAt, ev.lobby.createdAt],
                         [s2lobby.closedAt, ev.lobby.closedAt],
                         [s2lobby.snapshotUpdatedAt, ev.lobby.snapshotUpdatedAt],
                         [s2lobby.slotsUpdatedAt, ev.lobby.slotsPreviewUpdatedAt],
                     ]);
-                    await this.updateLobby(s2lobby, {
-                        snapshotUpdatedAt: ev.lobby.snapshotUpdatedAt,
-                        lobbyTitle: ev.lobby.lobbyName,
-                        hostName: ev.lobby.hostName,
-                        slotsHumansTaken: ev.lobby.slotsHumansTaken,
-                        slotsHumansTotal: ev.lobby.slotsHumansTotal,
-                    });
+                    if (snapshotTimeDiff >= 1000) {
+                        await this.updateLobby(s2lobby, {
+                            snapshotUpdatedAt: ev.lobby.snapshotUpdatedAt,
+                            lobbyTitle: ev.lobby.lobbyName,
+                            hostName: ev.lobby.hostName,
+                            slotsHumansTaken: ev.lobby.slotsHumansTaken,
+                            slotsHumansTotal: ev.lobby.slotsHumansTotal,
+                        });
+                    }
                 }
             }
             else {
@@ -513,8 +516,9 @@ class DbProc {
             if (s2lobby.status === GameLobbyStatus.Unknown && ev.lobby.status !== GameLobbyStatus.Unknown) {
                 logger.warn(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} reopening lobby with status=${s2lobby.status}`);
                 await this.updateLobby(s2lobby, {
-                    closedAt: ev.lobby.closedAt,
-                    status: ev.lobby.status,
+                    closedAt: null,
+                    status: GameLobbyStatus.Open,
+
                     snapshotUpdatedAt: ev.lobby.snapshotUpdatedAt,
                     hostName: ev.lobby.hostName,
                     lobbyTitle: ev.lobby.lobbyName,
@@ -537,9 +541,7 @@ class DbProc {
         }
         if (
             (ev.lobby.status !== GameLobbyStatus.Started && s2lobby.slots.length)
-            // (ev.lobby.slotsPreviewUpdatedAt && ev.lobby.slotsPreviewUpdatedAt >= s2lobby.slotsUpdatedAt)
         ) {
-            logger.verbose(`slot data wiped. src=${ev.feedName} ${this.s2region.code}#${ev.lobby.initInfo.lobbyId}`);
             await this.em.getRepository(S2GameLobbyPlayerJoin).createQueryBuilder()
                 .update()
                 .set({ leftAt: ev.lobby.closedAt })
@@ -567,7 +569,7 @@ class DbProc {
             status: ev.lobby.status,
         });
         this.lobbiesCache.delete(ev.lobby.initInfo.lobbyId);
-        logger.info(`CLOSED src=${ev.feedName} ${this.s2region.code}#${ev.lobby.initInfo.lobbyId} ${ev.lobby.closedAt.toISOString()} status=${s2lobby.status}`);
+        logger.info(`CLOSED src=${ev.feedName} ${this.s2region.code}#${ev.lobby.initInfo.lobbyId} ${ev.lobby.closedAt.toISOString()} status=${ev.lobby.status}`);
     }
 
     async onUpdateLobbySnapshot(ev: JournalEventUpdateLobbySnapshot) {
