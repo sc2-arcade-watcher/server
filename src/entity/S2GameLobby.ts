@@ -184,7 +184,7 @@ export class S2GameLobby {
     @OneToMany(type => S2GameLobbyPlayerJoin, joinInfo => joinInfo.lobby, {
         cascade: false,
     })
-    joinInfos: S2GameLobbyPlayerJoin[];
+    joinHistory: S2GameLobbyPlayerJoin[];
 
     getSlots(opts: { kinds?: S2GameLobbySlotKind[], teams?: number[] }): S2GameLobbySlot[] {
         return this.slots.filter(slot => {
@@ -192,5 +192,9 @@ export class S2GameLobby {
             if (opts.teams && !opts.teams.find(x => x === slot.team)) return false;
             return true;
         });
+    }
+
+    getLeavers() {
+        return this.joinHistory.filter(x => x.leftAt !== null).sort((a, b) => a.leftAt.getTime() - b.leftAt.getTime());
     }
 }
