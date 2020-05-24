@@ -38,7 +38,7 @@ export class S2Profile {
     name: string;
 
     @Column({
-        type: 'smallint',
+        type: 'mediumint',
         unsigned: true,
     })
     discriminator: number;

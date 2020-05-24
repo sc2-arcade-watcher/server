@@ -128,7 +128,9 @@ export class S2GameLobby {
     })
     mapVariantIndex: number;
 
-    @Column()
+    @Column({
+        length: 80,
+    })
     mapVariantMode: string;
 
     @ManyToOne(type => S2DocumentVersion, {
@@ -158,10 +160,16 @@ export class S2GameLobby {
     })
     multiModDocumentVersion: S2DocumentVersion;
 
-    @Column()
+    @Column({
+        length: 80,
+        // length: 64,
+        // 64 is probably actual correct limit?
+    })
     lobbyTitle: string;
 
-    @Column()
+    @Column({
+        length: 12,
+    })
     hostName: string;
 
     @Column({

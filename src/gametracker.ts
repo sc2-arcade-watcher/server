@@ -32,11 +32,19 @@ function parsePlayerProfile(s: string): PlayerProfile {
 }
 
 
+interface PreviewRequestStatus {
+    lobbyId: number;
+    reqEntry: SignalLobbyRequest;
+    basicPreview?: SignalLobbyPreview;
+    extendedPreview?: SignalLobbyPvEx;
+}
+
 export interface TrackedLobby extends DataLobbyCreate {
     cursor: JournalFeedCursor;
     createdAt: Date;
     updatedAt: Date;
     preview?: GameLobbyPreview;
+    previewHistory: PreviewRequestStatus[];
 }
 
 export interface TrackedLobbyCreate extends DataLobbyCreate {
@@ -62,13 +70,6 @@ interface TrackedLobbyPreview {
 
 interface TrackedLobbyListCount {
     count: number;
-}
-
-interface PreviewRequestStatus {
-    lobbyId: number;
-    reqEntry: SignalLobbyRequest;
-    basicPreview?: SignalLobbyPreview;
-    extendedPreview?: SignalLobbyPvEx;
 }
 
 function serializeBasicPreview(basicPreview: DataLobbyPreview | GameLobbyPreview) {
@@ -279,6 +280,7 @@ export class JournalReader {
             cursor: Object.assign({}, this.lblsCursor),
             createdAt: this.dateFromEvent(this.recentListEntry),
             updatedAt: this.dateFromEvent(this.recentListEntry),
+            previewHistory: [],
         } as TrackedLobby, ev);
         delete (<any>gm as SignalLobbyCreate).$kind;
         delete (<any>gm as SignalLobbyCreate).$version;
@@ -482,11 +484,22 @@ export class JournalReader {
                         if (x.hostName === gmlobby.hostName) return true;
                         return x.preview && x.preview.slots.filter(y => y.name === gmlobby.hostName).length;
                     }).length === 1;
-                    if (!isNameUnique) continue;
-                    const tmpExtendedPv = serializeExtendedPreview(entryPvEx);
-                    if (tmpExtendedPv.find(x => x.substr(3) === gmlobby.hostName)) {
-                        exPvCandidates.push(entryPvEx);
+                    if (!isNameUnique) {
+                        continue;
                     }
+                    // check if player names from the event match the hostName of tested lobby
+                    const tmpExtendedPv = serializeExtendedPreview(entryPvEx);
+                    if (!tmpExtendedPv.find(x => x.substr(3) === gmlobby.hostName)) {
+                        continue;
+                    }
+                    // check if amount of slots is matching prev request
+                    const recentPreviewReq = gmlobby.previewHistory.reverse().find(x => x.extendedPreview);
+                    if (recentPreviewReq && recentPreviewReq.extendedPreview.slots.length !== entryPvEx.slots.length) {
+                        logger.verbose(`possibly incomplete LBPE, slot missmatch. lob=${reqInfo.lobbyId} prev=${recentPreviewReq.extendedPreview.slots.length} now=${entryPvEx.slots.length}`);
+                        logger.debug(`slots info`, recentPreviewReq.extendedPreview.slots, entryPvEx.slots);
+                        continue;
+                    }
+                    exPvCandidates.push(entryPvEx);
                 }
             }
 
@@ -503,7 +516,8 @@ export class JournalReader {
 
             reqInfo.extendedPreview = exPvCandidates.shift();
             this.recentExPvResponses.delete(reqInfo.extendedPreview);
-            // delete early only if it has both preview kinds, otherwise hold on
+
+            // forward early only if it has both preview events what confirms the data is correct
             if (reqInfo.basicPreview) {
                 this.forwardCompletePreviewRequests(key);
             }
@@ -621,6 +635,7 @@ export class JournalReader {
 
     protected forwardPreview(lobbyId: number) {
         const reqInfo = this.recentPreviewRequests.get(lobbyId);
+        this.openLobbies.get(lobbyId).previewHistory.push(reqInfo);
         this._onLobbyPreview.emit({
             lobbyId: lobbyId,
             requstedAt: this.dateFromEvent(reqInfo.reqEntry.$timestamp),

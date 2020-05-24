@@ -24,11 +24,13 @@ export class S2GameLobbyPlayerJoin {
 
     @Column({
         nullable: false,
+        precision: 3,
     })
     joinedAt: Date;
 
     @Column({
         nullable: true,
+        precision: 3,
     })
     leftAt: Date;
 }

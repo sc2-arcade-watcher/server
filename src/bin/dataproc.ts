@@ -225,6 +225,7 @@ class DbProc {
             const updatedSlots = await Promise.all(lobbyData.slots.map(async (infoSlot, idx) => {
                 const s2slot = s2lobby.slots[idx];
                 if (idx !== (s2slot.slotNumber - 1)) {
+                    logger.error('wtf2', idx, s2slot.slotNumber, s2slot, infoSlot, s2lobby, lobbyData);
                     throw new Error('wtf2');
                 }
                 const newS2SlotKind = slotKindMap[infoSlot.kind];
@@ -464,7 +465,10 @@ class DbProc {
                 s2lobby = await this.getLobby(ev.lobby);
                 if (s2lobby.closedAt && s2lobby.closedAt < ev.lobby.createdAt) {
                     logger.info(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} lobby reopened`, [
-                        s2lobby.createdAt, s2lobby.closedAt, ev.lobby.createdAt,
+                        [s2lobby.createdAt, ev.lobby.createdAt],
+                        [s2lobby.closedAt, ev.lobby.closedAt],
+                        [s2lobby.snapshotUpdatedAt, ev.lobby.snapshotUpdatedAt],
+                        [s2lobby.slotsUpdatedAt, ev.lobby.slotsPreviewUpdatedAt],
                     ]);
                     await this.updateLobby(s2lobby, {
                         status: GameLobbyStatus.Open,
@@ -479,7 +483,10 @@ class DbProc {
                 }
                 else if (s2lobby.snapshotUpdatedAt < ev.lobby.snapshotUpdatedAt) {
                     logger.verbose(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} lobby reappeared`, [
-                        s2lobby.createdAt, s2lobby.closedAt, ev.lobby.createdAt,
+                        [s2lobby.createdAt, ev.lobby.createdAt],
+                        [s2lobby.closedAt, ev.lobby.closedAt],
+                        [s2lobby.snapshotUpdatedAt, ev.lobby.snapshotUpdatedAt],
+                        [s2lobby.slotsUpdatedAt, ev.lobby.slotsPreviewUpdatedAt],
                     ]);
                     await this.updateLobby(s2lobby, {
                         snapshotUpdatedAt: ev.lobby.snapshotUpdatedAt,
