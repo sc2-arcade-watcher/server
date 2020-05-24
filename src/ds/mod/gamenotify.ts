@@ -1,321 +1,51 @@
-import * as orm from 'typeorm';
 import { User, TextChannel, Message, RichEmbed, RichEmbedOptions, Snowflake, DiscordAPIError, PartialTextBasedChannelFields, DMChannel } from 'discord.js';
-import { DsBot } from '../../bin/dsbot';
 import { BotTask, DiscordErrorCode, GeneralCommand, formatObjectAsMessage, ExtendedCommandInfo } from '../dscommon';
 import { S2GameLobby } from '../../entity/S2GameLobby';
 import { GameLobbyStatus, GameRegion } from '../../gametracker';
-import { S2GameLobbySlot } from '../../entity/S2GameLobbySlot';
-import { DiscordClientStatus } from '../../ds/dscommon';
+import { S2GameLobbySlot, S2GameLobbySlotKind } from '../../entity/S2GameLobbySlot';
 import { sleep, sleepUnless } from '../../helpers';
 import { logger, logIt } from '../../logger';
 import { DsGameTrackRule } from '../../entity/DsGameTrackRule';
 import { DsGameLobbyMessage } from '../../entity/DsGameLobbyMessage';
-import { CommandMessage, FriendlyError, ArgumentCollector } from 'discord.js-commando';
-import { S2Region } from '../../entity/S2Region';
-import { stripIndents } from 'common-tags';
+import { S2GameLobbyRepository } from '../../repository/S2GameLobbyRepository';
+import deepEqual = require('deep-equal');
 
-interface NotificationSubscribeArgs {
-    targetChannel?: TextChannel | DMChannel;
-    mapName: string;
-    isMapNameExact: boolean;
-    region: keyof typeof GameRegion;
-    variant: string | null;
-    timeDelay: number;
-    humanSlotsMin: number;
-    showLeavers: boolean;
-    deleteMessageStarted: boolean;
-    deleteMessageDisbanded: boolean;
-}
-
-class NotificationNewCommand extends GeneralCommand {
-    constructor(client: DsBot, info: ExtendedCommandInfo) {
-        info = Object.assign(<ExtendedCommandInfo>{
-            name: 'gn.new',
-            description: 'Add new notification for game lobby',
-            guildOnly: true,
-            userPermissions: ['MANAGE_GUILD'],
-            examples: [
-                'gn.new #channel "MAPNAME GOES HERE"',
-                'gn.new #channel "MAPNAME GOES HERE" Y ANY ANY 0 0 1 N N',
-            ],
-            args: [
-                {
-                    key: 'targetChannel',
-                    type: 'channel',
-                    prompt: 'Designate channel on which to post notifications',
-                },
-                {
-                    key: 'mapName',
-                    type: 'string',
-                    prompt: 'Provide name of the map (or substring)',
-                    min: 3,
-                    max: 64,
-                },
-                {
-                    key: 'isMapNameExact',
-                    type: 'boolean',
-                    prompt: 'Should match map name exactly? [`YES`] | Or containing substring? [`NO`]',
-                },
-                {
-                    key: 'region',
-                    type: 'string',
-                    prompt: 'Designate game region [US/EU/KR/ANY]',
-                    validate: (val: string): boolean => {
-                        val = val.toUpperCase();
-                        if (val === 'ANY') return true;
-                        if (GameRegion[val as any]) return true;
-                        return false;
-                    },
-                    parse: (val: string): keyof typeof GameRegion => {
-                        val = val.toUpperCase();
-                        if (val === 'ANY') return void 0;
-                        return val as keyof typeof GameRegion;
-                    },
-                },
-                {
-                    key: 'variant',
-                    type: 'string',
-                    prompt: 'Name of game variant [Use `ANY` to ignore this requirement]',
-                    max: 64,
-                    parse: (val: string) => {
-                        if (val.trim().toUpperCase() === 'ANY') {
-                            return null;
-                        }
-                        return val;
-                    },
-                },
-                {
-                    key: 'timeDelay',
-                    type: 'integer',
-                    prompt: 'For how long should game lobby be open before posting notification (in seconds)? [Use \`0\` to ignore this requirement]',
-                    min: 0,
-                    max: 3600,
-                },
-                {
-                    key: 'humanSlotsMin',
-                    type: 'integer',
-                    prompt: 'How many players must join the lobby before posting notification? [Use \`0\` to ignore this requirement]',
-                    min: 0,
-                    max: 16,
-                },
-                {
-                    key: 'showLeavers',
-                    type: 'boolean',
-                    prompt: 'Show players who left the lobby in addition to active ones? [Yes/No]',
-                },
-                {
-                    key: 'deleteMessageStarted',
-                    type: 'boolean',
-                    prompt: 'Should the message be deleted once game has started? [Yes/No]',
-                },
-                {
-                    key: 'deleteMessageDisbanded',
-                    type: 'boolean',
-                    prompt: 'Should the message be deleted if lobby is disbanded? [Yes/No]',
-                },
-            ],
-        }, info);
-        if (info.dmOnly) {
-            info.args = info.args.splice(1);
-        }
-        super(client, info);
-    }
-
-    public async exec(msg: CommandMessage, args: NotificationSubscribeArgs) {
-        const rule = new DsGameTrackRule();
-        if (msg.channel instanceof TextChannel) {
-            const chan = msg.channel;
-            const rcount = await this.client.conn.getRepository(DsGameTrackRule).count({ guild: chan.guild.id, enabled: true });
-            if (chan.guild.memberCount <= (5 * rcount) && !this.client.isOwner(msg.author)) {
-                return msg.reply(`Exceeded curent limit - one subscription per 5 members of the guild. (Limit might be lifted in the future).`);
-            }
-            rule.guild = chan.guild.id;
-            rule.channel = args.targetChannel.id;
-        }
-        else if (msg.channel instanceof DMChannel) {
-            const chan = msg.channel;
-            const rcount = await this.client.conn.getRepository(DsGameTrackRule).count({ user: chan.recipient.id, enabled: true });
-            if (10 <= rcount && !this.client.isOwner(msg.author)) {
-                return msg.reply(`Exceeded curent limit - 10 subscriptions per user. (Limit might be lifted in the future).`);
-            }
-            rule.user = chan.recipient.id;
-        }
-        else {
-            throw new FriendlyError('Unsupported channel type');
-        }
-
-        rule.mapName = args.mapName;
-        rule.isMapNamePartial = !args.isMapNameExact;
-        if (args.region) {
-            rule.region = await this.client.conn.getRepository(S2Region).findOneOrFail({ code: args.region });
-        }
-        rule.variant = args.variant;
-        rule.timeDelay = args.timeDelay || null;
-        rule.humanSlotsMin = args.humanSlotsMin || null;
-        rule.showLeavers = args.showLeavers;
-        rule.deleteMessageStarted = args.deleteMessageStarted;
-        rule.deleteMessageDisbanded = args.deleteMessageDisbanded;
-        await this.client.conn.getRepository(DsGameTrackRule).save(rule);
-        this.client.tasks.gnotify.trackRules.set(rule.id, rule);
-
-        return msg.reply(stripIndents`
-            Success! Subscription has been setup, assigned ID: \`${rule.id}\`.
-            From now on you'll be reported about **new** game lobbies which match the configuration.
-            To verify its parameters use \`gn.list\`.
-        `);
-    }
-}
-
-class NotificationNewDmCommand extends NotificationNewCommand {
-    constructor(client: DsBot) {
-        const info: ExtendedCommandInfo = {
-            name: 'gn.newdm',
-            guildOnly: false,
-            dmOnly: true,
-        };
-        super(client, info);
-        this.description += ' (via DM)';
-    }
-}
-
-class NotificationDeleteCommand extends GeneralCommand {
-    constructor(client: DsBot) {
-        super(client, {
-            name: 'gn.del',
-            description: 'Remove existing subscription.',
-            userPermissions: ['MANAGE_GUILD'],
-            args: [
-                {
-                    key: 'id',
-                    type: 'integer',
-                    prompt: 'Provie identifier of subscription',
-                },
-            ],
-        });
-    }
-
-    public async exec(msg: CommandMessage, args: { id: number }) {
-        const subscription = this.client.tasks.gnotify.trackRules.get(args.id);
-        if (!subscription) {
-            return msg.reply('Incorrect ID');
-        }
-
-        if (msg.channel instanceof TextChannel) {
-            const chan = msg.channel;
-            if (subscription.guild !== chan.guild.id) {
-                return msg.reply('Incorrect ID');
-            }
-        }
-        else if (msg.channel instanceof DMChannel) {
-            const chan = msg.channel;
-            if (subscription.user !== chan.recipient.id) {
-                return msg.reply('Incorrect ID');
-            }
-        }
-        else {
-            throw new FriendlyError('Unsupported channel type');
-        }
-
-        this.client.tasks.gnotify.trackRules.delete(args.id);
-        await this.client.conn.getRepository(DsGameTrackRule).update(args.id, { enabled: false });
-        return msg.reply('Done');
-    }
-}
-
-class NotificationListCommand extends GeneralCommand {
-    constructor(client: DsBot) {
-        super(client, {
-            name: 'gn.list',
-            description: 'List your existing subscriptions.',
-            userPermissions: ['MANAGE_GUILD'],
-        });
-    }
-
-    public async exec(msg: CommandMessage) {
-        let rules: DsGameTrackRule[] = [];
-
-        if (msg.channel instanceof TextChannel) {
-            const chan = msg.channel;
-            rules = Array.from(this.client.tasks.gnotify.trackRules.values()).filter(x => {
-                return x.guild === chan.guild.id;
-            });
-        }
-        else if (msg.channel instanceof DMChannel) {
-            const chan = msg.channel;
-            rules = Array.from(this.client.tasks.gnotify.trackRules.values()).filter(x => {
-                return x.user === chan.recipient.id;
-            });
-        }
-        else {
-            throw new FriendlyError(`Expected a valid channel, received: "${String(msg.channel)}"`);
-        }
-
-        if (!rules.length) {
-            return msg.reply(`You've no active subscriptions.`);
-        }
-
-        const rembed: RichEmbedOptions = {
-            title: 'Active subscriptions',
-            fields: [],
-        };
-
-        for (const rsub of rules) {
-            rembed.fields.push({
-                name: `Sub ID: **${rsub.id}**`,
-                value: formatObjectAsMessage({
-                    'Created at': rsub.createdAt.toUTCString(),
-                    'Channel': (<TextChannel>this.client.channels.get(rsub.channel))?.name,
-                    'Map name': rsub.mapName,
-                    'Partial match of map name': rsub.isMapNamePartial,
-                    'Region': rsub?.region?.code ?? 'ANY',
-                    'Map variant': rsub?.variant ?? 'ANY',
-                    'Delay of a notification': Number(rsub.timeDelay),
-                    'Minimum number of human slots': Number(rsub.humanSlotsMin),
-                    'Show players who left the lobby': rsub.showLeavers,
-                    'Delete message after start': rsub.deleteMessageStarted,
-                    'Delete message if disbanded': rsub.deleteMessageDisbanded,
-                }),
-                inline: false,
-            });
-        }
-
-        return msg.reply('', { embed: rembed});
-    }
-}
-
-class NotificationReloadCommand extends GeneralCommand {
-    constructor(client: DsBot) {
-        super(client, {
-            name: 'gn.reload',
-            ownerOnly: true,
-        });
-    }
-
-    public async exec(msg: CommandMessage) {
-        await this.client.tasks.gnotify.reloadSubscriptions();
-        return msg.reply(`Done. Active subscriptions count: ${this.client.tasks.gnotify.trackRules.size}.`);
-    }
-}
-
-interface GameLobbyCandidate {
-    rule: DsGameTrackRule;
-    lobby: S2GameLobby;
-}
-
-interface GameLobbyPost {
+interface PostedGameLobby {
     // embed?: RichEmbedOptions;
-    postedMessages: Set<DsGameLobbyMessage>;
+    msg: DsGameLobbyMessage;
+}
+
+class TrackedGameLobby {
+    candidates = new Set<DsGameTrackRule>();
+    postedMessages = new Set<PostedGameLobby>();
+
+    constructor (public lobby: S2GameLobby) {
+    }
+
+    updateInfo(newLobbyInfo: S2GameLobby) {
+        const previousInfo = this.lobby;
+        this.lobby = newLobbyInfo;
+        if (previousInfo.createdAt?.getTime() !== newLobbyInfo.createdAt?.getTime()) return true;
+        if (previousInfo.closedAt?.getTime() !== newLobbyInfo.closedAt?.getTime()) return true;
+        if (previousInfo.status !== newLobbyInfo.status) return true;
+        if (previousInfo.lobbyTitle !== newLobbyInfo.lobbyTitle) return true;
+        if (previousInfo.hostName !== newLobbyInfo.hostName) return true;
+        if (previousInfo.slotsHumansTaken !== newLobbyInfo.slotsHumansTaken) return true;
+        if (previousInfo.slotsHumansTotal !== newLobbyInfo.slotsHumansTotal) return true;
+        if (!deepEqual(previousInfo.slots, newLobbyInfo.slots)) return true;
+        return false;
+    }
+
+    isClosedStatusConcluded() {
+        if (this.lobby.status === GameLobbyStatus.Open) return false;
+        const tdiff = Date.now() - this.lobby.closedAt.getTime();
+        return tdiff > 30000;
+    }
 }
 
 export class LobbyNotifierTask extends BotTask {
-    trackedLobbies = new Map<number, S2GameLobby>();
+    trackedLobbies = new Map<number, TrackedGameLobby>();
     trackRules = new Map<number, DsGameTrackRule>();
-
-    candidates = new Map<number, Set<GameLobbyCandidate>>();
-    lobbyPosts = new Map<number, GameLobbyPost>();
-
-    offsetLobbyId = 0;
-    firstUpdate = true;
 
     async reloadSubscriptions() {
         this.trackRules.clear();
@@ -329,14 +59,8 @@ export class LobbyNotifierTask extends BotTask {
 
     async load() {
         await this.reloadSubscriptions();
-
-        this.client.registry.registerCommands([
-            NotificationNewCommand,
-            NotificationNewDmCommand,
-            NotificationDeleteCommand,
-            NotificationListCommand,
-            NotificationReloadCommand,
-        ]);
+        await this.restore();
+        await this.flushMessages();
 
         setTimeout(this.update.bind(this), 1000).unref();
         setInterval(this.flushMessages.bind(this), 60000 * 3600).unref();
@@ -347,8 +71,11 @@ export class LobbyNotifierTask extends BotTask {
 
     @logIt({
         resDump: true,
+        level: 'verbose',
     })
     protected async flushMessages() {
+        // FIXME:
+        return;
         if (!await this.waitUntilReady()) return;
         const res = await this.conn.getRepository(DsGameLobbyMessage).delete([
             'updated_at < FROM_UNIXTIME(UNIX_TIMESTAMP()-3600*24)',
@@ -357,89 +84,67 @@ export class LobbyNotifierTask extends BotTask {
         return res.affected;
     }
 
-    @logIt()
+    @logIt({
+        level: 'verbose',
+    })
     protected async restore() {
-        const lobMessages = await this.conn.getRepository(DsGameLobbyMessage)
+        const lobbyMessages = await this.conn.getRepository(DsGameLobbyMessage)
             .createQueryBuilder('lmsg')
             .innerJoinAndSelect('lmsg.rule', 'rule')
             .innerJoinAndSelect('lmsg.lobby', 'lobby')
-            .innerJoinAndSelect('lobby.region', 'region')
-            .innerJoinAndSelect('lobby.mapDocumentVersion', 'mapDocVer')
-            .innerJoinAndSelect('mapDocVer.document', 'mapDoc')
-            .innerJoinAndSelect('lobby.players', 'player')
             .andWhere('lmsg.completed = false')
             .getMany()
         ;
+        if (!lobbyMessages.length) return;
 
-        for (const lmsg of lobMessages) {
-            let s2gm: S2GameLobby;
-            s2gm = this.trackedLobbies.get(lmsg.lobby.id);
-            if (!s2gm) {
-                s2gm = lmsg.lobby;
-                this.trackedLobbies.set(s2gm.id, s2gm);
-                this.lobbyPosts.set(s2gm.id, {
-                    // embed: void 0,
-                    postedMessages: new Set(),
-                });
-            }
-            else {
-                lmsg.lobby = s2gm;
-            }
+        const freshLobbyInfo = await this.conn.getCustomRepository(S2GameLobbyRepository)
+            .prepareDetailedSelect()
+            .andWhere('lobby.id IN (:trackedLobbies)', {
+                'trackedLobbies': lobbyMessages.map(x => x.lobby.id),
+            })
+            .getMany()
+        ;
 
-            this.lobbyPosts.get(s2gm.id).postedMessages.add(lmsg);
+        for (const lobbyInfo of freshLobbyInfo) {
+            const trackedLobby = new TrackedGameLobby(lobbyInfo);
+            this.trackedLobbies.set(lobbyInfo.id, trackedLobby);
         }
 
-        await Promise.all(Array.from(this.trackedLobbies.values()).map(x => this.updateLobbyMessage(x)));
+        for (const lobbyMsg of lobbyMessages) {
+            const trackedLobby = this.trackedLobbies.get(lobbyMsg.lobby.id);
+            trackedLobby.postedMessages.add({ msg: lobbyMsg });
+            lobbyMsg.lobby = trackedLobby.lobby;
+        }
     }
 
-    @logIt()
     async update() {
         this.running = true;
         while (await this.waitUntilReady()) {
-            if (this.firstUpdate) {
-                await this.restore();
-                await this.flushMessages();
-                this.firstUpdate = false;
-            }
-
-            await this.updatePlayers();
-            await sleepUnless(500, () => !this.client.doShutdown);
-
-            await this.updateOpenLobbies();
+            await this.updateTrackedLobbies();
+            await this.discoverNewLobbies();
             await this.evaluateCandidates();
-            await this.updateClosedLobbies();
-            // TODO: update lobby details
-            await sleepUnless(500, () => !this.client.doShutdown);
+
+            await sleepUnless(1000, () => !this.client.doShutdown);
         }
         this.running = false;
     }
 
-    protected async updateOpenLobbies() {
-        const newLobbies = await this.conn.getRepository(S2GameLobby)
-            .createQueryBuilder('lobby')
-            .innerJoinAndSelect('lobby.region', 'region')
-            .innerJoinAndSelect('lobby.mapDocumentVersion', 'mapDocVer')
-            .innerJoinAndSelect('mapDocVer.document', 'mapDoc')
-            .innerJoinAndSelect('lobby.players', 'player')
-            .andWhere('lobby.status = :status', { status: GameLobbyStatus.Open })
+    @logIt({
+        level: 'verbose',
+    })
+    protected async discoverNewLobbies() {
+        const newLobbiesInfo = await this.conn.getCustomRepository(S2GameLobbyRepository)
+            .prepareDetailedSelect()
             .andWhere('lobby.id NOT IN (:trackedLobbies)', { 'trackedLobbies': [0].concat(Array.from(this.trackedLobbies.keys())) })
-            .andWhere('lobby.id > :id', { id: this.offsetLobbyId })
-            .orderBy('lobby.createdAt', 'ASC')
+            .andWhere('lobby.status = :status', { status: GameLobbyStatus.Open })
             .getMany()
         ;
 
-        logger.debug(`newlobs: ${newLobbies.length}`);
+        logger.verbose(`Newly discovered lobbies, count=${newLobbiesInfo.length}`);
 
-        for (const s2gm of newLobbies) {
-            if (s2gm.id > this.offsetLobbyId) {
-                this.offsetLobbyId = s2gm.id;
-            }
-
-            if (this.lobbyPosts.has(s2gm.id)) {
-                continue;
-            }
-
-            const candidates = new Set<GameLobbyCandidate>();
+        for (const s2gm of newLobbiesInfo) {
+            const trackedLobby = new TrackedGameLobby(s2gm);
+            this.trackedLobbies.set(s2gm.id, trackedLobby);
 
             for (const rule of this.trackRules.values()) {
                 if (
@@ -451,126 +156,73 @@ export class LobbyNotifierTask extends BotTask {
                     (!rule.variant || rule.variant === s2gm.mapVariantMode) &&
                     (!rule.region || rule.region.id === s2gm.region.id)
                 ) {
-                    candidates.add({
-                        lobby: s2gm,
-                        rule: rule,
-                    });
+                    trackedLobby.candidates.add(rule);
                 }
             }
 
-            if (candidates.size > 0) {
-                this.candidates.set(s2gm.id, candidates);
-                this.trackedLobbies.set(s2gm.id, s2gm);
-                this.lobbyPosts.set(s2gm.id, {
-                    // embed: embedGameLobby(s2gm),
-                    postedMessages: new Set(),
-                });
-                logger.info(`New lobby ${s2gm.region.code}#${s2gm.bnetRecordId} for "${s2gm.mapDocumentVersion.document.name}". Matching rules=${candidates.size}`);
+            if (trackedLobby.candidates.size > 0) {
+                logger.info(`New lobby ${s2gm.region.code}#${s2gm.bnetRecordId} for "${s2gm.mapDocumentVersion.document.name}". Matching rules=${trackedLobby.candidates.size}`);
             }
         }
     }
 
     protected async evaluateCandidates() {
-        const pendingPosts: Promise<void>[] = [];
+        const pendingCandidates = Array.from(this.trackedLobbies.entries()).filter(([lobId, trackedLobby]) => {
+            return this.trackedLobbies.get(lobId).candidates.size > 0;
+        });
+        if (!pendingCandidates.length) return;
 
-        for (const [lobId, candidates] of this.candidates) {
-            const s2gm = this.trackedLobbies.get(lobId);
-            for (const currCand of candidates) {
-                const timeDiff = (Date.now() - s2gm.createdAt.getTime()) / 1000;
+        logger.verbose(`Pending candidates, count=${pendingCandidates.length}`);
+        await Promise.all(pendingCandidates.map(async ([lobId, trackedLobby]) => {
+            const trackLob = this.trackedLobbies.get(lobId);
+            for (const currCand of trackedLobby.candidates) {
+                const timeDiff = (Date.now() - trackLob.lobby.createdAt.getTime()) / 1000;
+                const humanOccupiedSlots = trackLob.lobby.getSlots({ kinds: [S2GameLobbySlotKind.Human] });
                 if (
-                    (currCand.rule.timeDelay && currCand.rule.timeDelay > timeDiff) &&
-                    (currCand.rule.humanSlotsMin && currCand.rule.humanSlotsMin > Math.max(s2gm.slotsHumansTaken, s2gm.activePlayers.length))
+                    (currCand.timeDelay && currCand.timeDelay > timeDiff) &&
+                    (currCand.humanSlotsMin && currCand.humanSlotsMin > humanOccupiedSlots.length)
                 ) {
                     continue;
                 }
-                pendingPosts.push(this.postLobbyMessage(s2gm, this.lobbyPosts.get(s2gm.id), currCand.rule));
-                candidates.delete(currCand);
+                const result = await this.postLobbyMessage(trackedLobby, currCand);
+                if (result !== false) {
+                    trackedLobby.candidates.delete(currCand);
+                }
             }
-        }
-
-        await Promise.all(pendingPosts);
+        }));
     }
 
-    protected async updateClosedLobbies() {
-        if (this.trackedLobbies.size <= 0) return;
+    @logIt({
+        level: 'verbose',
+    })
+    protected async updateTrackedLobbies() {
+        if (!this.trackedLobbies.size) return;
 
-        const closedLobbies = await this.conn.getRepository(S2GameLobby)
-            .createQueryBuilder('lobby')
-            .select(['lobby.id', 'lobby.status', 'lobby.closedAt', 'lobby.slotsHumansTaken', 'lobby.slotsHumansTotal', 'lobby.hostName', 'lobby.lobbyTitle'])
-            .innerJoinAndSelect('lobby.players', 'player')
-            .andWhereInIds(Array.from(this.trackedLobbies.keys()))
-            .andWhere('lobby.status != :status', { status: GameLobbyStatus.Open })
+        const freshLobbyInfo = await this.conn.getCustomRepository(S2GameLobbyRepository)
+            .prepareDetailedSelect()
+            .andWhere('lobby.id IN (:trackedLobbies)', { 'trackedLobbies': Array.from(this.trackedLobbies.keys()) })
             .getMany()
         ;
-        const pendingUpdates: Promise<void>[] = [];
 
-        for (const lob of closedLobbies) {
-            const s2gm = this.trackedLobbies.get(lob.id);
-            Object.assign(s2gm, lob);
-
-            logger.info(`Lobby ${s2gm.region.code}#${s2gm.bnetRecordId} for "${s2gm.mapDocumentVersion.document.name}" has ${s2gm.status} | ${s2gm.closedAt.toUTCString()}`);
-
-            this.trackedLobbies.delete(lob.id);
-            this.candidates.delete(lob.id);
-
-            pendingUpdates.push(this.updateLobbyMessage(s2gm));
-        }
-
-        await Promise.all(pendingUpdates);
-    }
-
-    async updatePlayers() {
-        if (this.trackedLobbies.size <= 0) return;
-
-        let trackedPlayers = Array.from(this.trackedLobbies.values()).map(x => x.activePlayers.map(v => v.id)).flat();
-        if (!trackedPlayers.length) {
-            trackedPlayers = [0];
-        }
-
-        if (trackedPlayers.length) {
-            const newPlayers = await this.conn.getRepository(S2GameLobbySlot)
-                .createQueryBuilder('player')
-                .leftJoin('player.lobby', 'lobby')
-                .addSelect(['lobby.id', 'lobby.slotsHumansTaken', 'lobby.slotsHumansTotal', 'lobby.hostName', 'lobby.lobbyTitle'])
-                .andWhere('lobby.id IN (:trackedLobbies)', { 'trackedLobbies': Array.from(this.trackedLobbies.keys()) })
-                .andWhere('player.id NOT IN (:allPlayers)', { 'allPlayers': trackedPlayers })
-                .andWhere('player.leftAt IS NULL')
-                .getMany()
-            ;
-            for (const player of newPlayers) {
-                const s2gm = this.trackedLobbies.get(player.lobby.id);
-                Object.assign(s2gm, player.lobby);
-                logger.info(`Player "${player.name}" joined ${s2gm.region.code}#${s2gm.bnetRecordId} "${s2gm.mapDocumentVersion.document.name}" [${s2gm.slotsHumansTaken}/${s2gm.slotsHumansTotal}]`);
-                s2gm.slots = s2gm.slots.filter(x => x.id !== player.id);
-                s2gm.slots.push(player);
+        let updateCount = 0;
+        await Promise.all(freshLobbyInfo.map(async lobbyInfo => {
+            const trackedLobby = this.trackedLobbies.get(lobbyInfo.id);
+            const needsUpdate = trackedLobby.updateInfo(lobbyInfo);
+            if (trackedLobby.postedMessages.size) {
+                if (needsUpdate || trackedLobby.isClosedStatusConcluded()) {
+                    await this.updateLobbyMessage(trackedLobby);
+                }
+                if (!trackedLobby.postedMessages.size) {
+                    logger.verbose(`Stopped tracking ${lobbyInfo.region.code}#${lobbyInfo.bnetRecordId} candidates=${trackedLobby.candidates.size}`);
+                }
             }
-
-            const leftPlayers = await this.conn.getRepository(S2GameLobbySlot)
-                .createQueryBuilder('player')
-                .innerJoin('player.lobby', 'lobby')
-                .addSelect(['lobby.id', 'lobby.slotsHumansTaken', 'lobby.slotsHumansTotal', 'lobby.hostName', 'lobby.lobbyTitle'])
-                .andWhere('lobby.id IN (:trackedLobbies)', { 'trackedLobbies': Array.from(this.trackedLobbies.keys()) })
-                .andWhere('player.id IN (:ids)', { 'ids': trackedPlayers })
-                .andWhere('player.leftAt IS NOT NULL')
-                .getMany()
-            ;
-            for (const player of leftPlayers) {
-                const s2gm = this.trackedLobbies.get(player.lobby.id);
-                Object.assign(s2gm, player.lobby);
-                logger.info(`Player "${player.name}" left ${s2gm.region.code}#${s2gm.bnetRecordId} "${s2gm.mapDocumentVersion.document.name}" [${s2gm.slotsHumansTaken}/${s2gm.slotsHumansTotal}]`);
-                s2gm.slots = s2gm.slots.filter(x => x.id !== player.id);
-                s2gm.slots.push(player);
+            if (lobbyInfo.status !== GameLobbyStatus.Open) {
+                this.trackedLobbies.delete(lobbyInfo.id);
             }
+            ++updateCount;
+        }));
 
-
-            const affectedLobbies = new Set(newPlayers.map(x => x.lobby.id).concat(leftPlayers.map(x => x.lobby.id)))
-            const pendingUpdates: Promise<void>[] = [];
-            for (const lobId of affectedLobbies) {
-                const s2gm = this.trackedLobbies.get(lobId);
-                pendingUpdates.push(this.updateLobbyMessage(s2gm));
-            }
-            await Promise.all(pendingUpdates);
-        }
+        logger.verbose(`Updated tracked lobbies count=${updateCount}`);
     }
 
     protected async fetchDestChannel(rule: DsGameTrackRule): Promise<TextChannel | DMChannel> {
@@ -606,11 +258,21 @@ export class LobbyNotifierTask extends BotTask {
         }
     }
 
-    protected async postLobbyMessage(s2gm: S2GameLobby, lpost: GameLobbyPost, rule: DsGameTrackRule) {
+    @logIt({
+        argsDump: (trackedLobby: TrackedGameLobby) => [
+            trackedLobby.lobby.id,
+            trackedLobby.lobby.mapDocumentVersion.document.name,
+            trackedLobby.lobby.hostName,
+            trackedLobby.lobby.slotsHumansTaken,
+            trackedLobby.lobby.slots.length
+        ],
+        level: 'debug',
+    })
+    protected async postLobbyMessage(trackedLobby: TrackedGameLobby, rule: DsGameTrackRule) {
         const gameLobMessage = new DsGameLobbyMessage();
-        gameLobMessage.lobby = s2gm;
+        gameLobMessage.lobby = trackedLobby.lobby;
         gameLobMessage.rule = rule;
-        const lbEmbed = embedGameLobby(s2gm, rule);
+        const lbEmbed = embedGameLobby(trackedLobby.lobby, rule);
 
         let chan: TextChannel | DMChannel;
         try {
@@ -627,12 +289,21 @@ export class LobbyNotifierTask extends BotTask {
         catch (err) {
             if (err instanceof DiscordAPIError) {
                 if (err.code === DiscordErrorCode.MissingPermissions || err.code === DiscordErrorCode.MissingAccess) {
-                    logger.error(`Failed to send message for lobby #${s2gm.id}, rule #${rule.id}`, err.message);
-                    await this.conn.getRepository(DsGameTrackRule).update(rule.id, { enabled: false });
-                    this.trackRules.delete(rule.id);
-                    return;
+                    logger.error(`Failed to send message for lobby #${trackedLobby.lobby.id}, rule #${rule.id}`, err.message);
+                    const tdiff = Date.now() - rule.createdAt.getTime();
+                    if (tdiff >= 1000 * 60 * 10) {
+                        logger.info(`Deleting rule #${rule.id}`);
+                        await this.conn.getRepository(DsGameTrackRule).update(rule.id, { enabled: false });
+                        this.trackRules.delete(rule.id);
+                    }
+                    else {
+                        logger.info(`Deleting rule #${rule.id}`);
+                        return false;
+                    }
                 }
-                logger.error(`Failed to send message for lobby #${s2gm.id}, rule #${rule.id}`, err, lbEmbed, rule, s2gm);
+                else {
+                    logger.error(`Failed to send message for lobby #${trackedLobby.lobby.id}, rule #${rule.id}`, err, lbEmbed, rule, trackedLobby.lobby);
+                }
                 return;
             }
             else {
@@ -645,54 +316,64 @@ export class LobbyNotifierTask extends BotTask {
         const res = await this.conn.getRepository(DsGameLobbyMessage).insert(gameLobMessage);
         gameLobMessage.id = res.identifiers[0].id;
 
-        lpost.postedMessages.add(gameLobMessage);
+        trackedLobby.postedMessages.add({ msg: gameLobMessage, });
+        return true;
     }
 
-    protected async releaseLobbyMessage(lpost: GameLobbyPost, lmsg: DsGameLobbyMessage) {
-        await this.conn.getRepository(DsGameLobbyMessage).update(lmsg.id, { updatedAt: new Date(), completed: true });
-        lpost.postedMessages.delete(lmsg);
+    protected async releaseLobbyMessage(trackedLobby: TrackedGameLobby, lobbyMsg: PostedGameLobby) {
+        await this.conn.getRepository(DsGameLobbyMessage).update(lobbyMsg.msg.id, { updatedAt: new Date(), completed: true });
+        trackedLobby.postedMessages.delete(lobbyMsg);
     }
 
-    protected async editLobbyMessage(lpost: GameLobbyPost, lmsg: DsGameLobbyMessage) {
-        const lbEmbed = embedGameLobby(lmsg.lobby, lmsg.rule);
+    protected async editLobbyMessage(trackedLobby: TrackedGameLobby, lobbyMsg: PostedGameLobby) {
+        const lbEmbed = embedGameLobby(trackedLobby.lobby, lobbyMsg.msg.rule);
         try {
-            const chan = await this.fetchDestChannel(lmsg.rule);
+            const chan = await this.fetchDestChannel(lobbyMsg.msg.rule);
             if (!chan) {
-                await this.releaseLobbyMessage(lpost, lmsg);
+                await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                 return;
             }
-            const msg = await chan.fetchMessage(lmsg.message);
+            const msg = await chan.fetchMessage(lobbyMsg.msg.message);
             if (!msg) {
-                await this.releaseLobbyMessage(lpost, lmsg);
+                await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                 return;
             }
             await msg.edit('', { embed: lbEmbed });
             if (
-                (lmsg.lobby.status === GameLobbyStatus.Started && lmsg.rule.deleteMessageStarted) ||
-                (lmsg.lobby.status === GameLobbyStatus.Abandoned && lmsg.rule.deleteMessageDisbanded) ||
-                (lmsg.lobby.status === GameLobbyStatus.Unknown && lmsg.rule.deleteMessageDisbanded)
+                (trackedLobby.lobby.status === GameLobbyStatus.Started && lobbyMsg.msg.rule.deleteMessageStarted) ||
+                (trackedLobby.lobby.status === GameLobbyStatus.Abandoned && lobbyMsg.msg.rule.deleteMessageDisbanded) ||
+                (trackedLobby.lobby.status === GameLobbyStatus.Unknown && lobbyMsg.msg.rule.deleteMessageDisbanded)
             ) {
-                msg.delete(5000).then(async (msg) => {
-                    await this.releaseLobbyMessage(lpost, lmsg);
-                }, async (err) => {
-                    if (err.code === DiscordErrorCode.UnknownMessage) {
-                        await this.releaseLobbyMessage(lpost, lmsg);
-                        return;
+                if (trackedLobby.isClosedStatusConcluded()) {
+                    try {
+                        await msg.delete();
+                        await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                     }
-                    logger.error(`Failed to delete`, err);
-                });
+                    catch (err) {
+                        if (err instanceof DiscordAPIError) {
+                            if (err.code === DiscordErrorCode.UnknownMessage) {
+                                await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
+                                return;
+                            }
+                            logger.error(`Failed to delete`, err);
+                        }
+                        else {
+                            throw err;
+                        }
+                    }
+                }
             }
-            else if (lmsg.lobby.status !== GameLobbyStatus.Open) {
-                await this.releaseLobbyMessage(lpost, lmsg);
+            else if (trackedLobby.lobby.status !== GameLobbyStatus.Open) {
+                await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
             }
         }
         catch (err) {
             if (err instanceof DiscordAPIError) {
                 if (err.code === DiscordErrorCode.UnknownMessage || err.code === DiscordErrorCode.MissingAccess) {
-                    await this.releaseLobbyMessage(lpost, lmsg);
+                    await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                     return;
                 }
-                logger.error(`Failed to update message for lobby #${lmsg.lobby.id}, rule #${lmsg.rule.id}`, err, lbEmbed, lmsg.rule);
+                logger.error(`Failed to update message for lobby #${trackedLobby.lobby.id}, rule #${lobbyMsg.msg.rule.id}`, err, lbEmbed, lobbyMsg.msg.rule);
             }
             else {
                 throw err;
@@ -701,26 +382,30 @@ export class LobbyNotifierTask extends BotTask {
     }
 
     @logIt({
-        argsDump: (s2gm: S2GameLobby) => [s2gm.id, s2gm.mapDocumentVersion.document.name, s2gm.hostName, s2gm.slotsHumansTaken, s2gm.slots.length]
+        argsDump: (trackedLobby: TrackedGameLobby) => [
+            trackedLobby.lobby.id,
+            trackedLobby.lobby.mapDocumentVersion.document.name,
+            trackedLobby.lobby.hostName,
+            trackedLobby.lobby.slotsHumansTaken,
+            trackedLobby.lobby.slots.length
+        ],
+        level: 'debug',
     })
-    protected async updateLobbyMessage(s2gm: S2GameLobby) {
+    protected async updateLobbyMessage(trackedLobby: TrackedGameLobby) {
         const pendingPosts: Promise<void>[] = [];
-        const lpost = this.lobbyPosts.get(s2gm.id);
-        // lpost.embed = embedGameLobby(s2gm);
-        for (const lmsg of lpost.postedMessages) {
-            pendingPosts.push(this.editLobbyMessage(lpost, lmsg));
+        for (const lobbyMsg of trackedLobby.postedMessages) {
+            pendingPosts.push(this.editLobbyMessage(trackedLobby, lobbyMsg));
         }
         await Promise.all(pendingPosts);
     }
 }
 
 function formatTimeDiff(a: Date, b: Date) {
-    const secsDiff = ((a.getTime() - b.getTime()) / 1000);
+    const secsDiff = Math.max(((a.getTime() - b.getTime()) / 1000), 0.0);
     return `${(Math.floor(secsDiff / 60)).toFixed(0).padStart(2, '0')}:${Math.floor(secsDiff % 60).toFixed(0).padStart(2, '0')}`;
 }
 
 function embedGameLobby(s2gm: S2GameLobby, rule: DsGameTrackRule): RichEmbedOptions {
-    // \`v${s2gm.mapDocumentVersion.majorVersion}.${s2gm.mapDocumentVersion.minorVersion}\`
     // battlenet:://starcraft/map/${s2gm.region.id}/${s2gm.mapDocumentVersion.document.bnetId}
     const em: RichEmbedOptions = {
         title: `${s2gm.mapDocumentVersion.document.name}`,
@@ -799,51 +484,124 @@ function embedGameLobby(s2gm: S2GameLobby, rule: DsGameTrackRule): RichEmbedOpti
         });
     }
 
-    const activePlayers = s2gm.activePlayers;
-    if ((s2gm.status === GameLobbyStatus.Open || s2gm.status === GameLobbyStatus.Started) && activePlayers.length) {
+    if (!s2gm.slots.length) return em;
+
+    const teamsNumber = (new Set(s2gm.slots.map(x => x.team))).size;
+    const activeSlots = s2gm.slots.filter(x => x.kind !== S2GameLobbySlotKind.Open).sort((a, b) => b.slotKindPriority - a.slotKindPriority);
+    const humanSlots = s2gm.slots.filter(x => x.kind === S2GameLobbySlotKind.Human);
+
+    function formatSlotRows(slotsList: S2GameLobbySlot[], opts: { includeTeamNumber?: boolean } = {}) {
         const ps: string[] = [];
         let i = 1;
-        for (const player of activePlayers.sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())) {
-            ps.push([
-                `\`${i.toString().padStart(Math.floor(1 + activePlayers.length / 10), '0')}.`,
-                ` +${formatTimeDiff(player.joinedAt, s2gm.createdAt)}\` `,
-                ` **${player.name}**`,
-                (player.name === s2gm.hostName ? '　(host)' : '')
-            ].join(''));
+        for (const slot of slotsList) {
+            const wparts: string[] = [];
+            wparts.push(`\`${i.toString().padStart(slotsList.length.toString().length, '0')})`);
+
+            if (
+                opts.includeTeamNumber &&
+                (slot.kind === S2GameLobbySlotKind.Human || slot.kind === S2GameLobbySlotKind.AI)
+            ) {
+                wparts.push(` T${slot.team}`);
+            }
+
+            if (slot.kind === S2GameLobbySlotKind.Human) {
+                let fullname = slot.profile ? `${slot.profile.name}#${slot.profile.discriminator}` : slot.name;
+
+                wparts.push(` ${formatTimeDiff(slot.joinInfo?.joinedAt ?? s2gm.slotsUpdatedAt, s2gm.createdAt)}\``);
+
+                // force monospace font on KR to fit more characters in the same line
+                if (s2gm.regionId === 3) {
+                    fullname = `\`${fullname}\``;
+                    wparts.push(` ${fullname === s2gm.hostName ? `__${fullname}__` : `${fullname}`} `);
+                }
+                else {
+                    wparts.push(` ${fullname === s2gm.hostName ? `__**${fullname}**__` : `**${fullname}**`}`);
+                }
+            }
+            else if (slot.kind === S2GameLobbySlotKind.AI) {
+                wparts.push(`  AI  \``);
+            }
+            else if (slot.kind === S2GameLobbySlotKind.Open) {
+                wparts.push(` OPEN \``);
+            }
+            ps.push(wparts.join(''));
             ++i;
         }
-        em.fields.push({
-            name: `Players [${activePlayers.length}/${s2gm.slotsHumansTotal}]`,
-            value: ps.join('\n'),
-            inline: false,
-        });
+        return ps;
     }
 
-    // FIXME: leavers
-    // const leftPlayers = s2gm.leftPlayers;
-    // if (rule.showLeavers && leftPlayers.length) {
-    //     const ps: string[] = [];
-    //     let i = 1;
-    //     for (const player of leftPlayers.sort((a, b) => a.leftAt.getTime() - b.leftAt.getTime())) {
-    //         ps.push([
-    //             `\`${i.toString().padStart(Math.floor(1 + leftPlayers.length / 10), '0')}.`,
-    //             ` +${formatTimeDiff(player.joinedAt, s2gm.createdAt)} >`,
-    //             ` +${formatTimeDiff(player.leftAt, s2gm.createdAt)}\` `,
-    //             ` ~~${player.name}~~`,
-    //         ].join(''));
-    //         ++i;
-    //     }
+    if ((s2gm.status === GameLobbyStatus.Open || s2gm.status === GameLobbyStatus.Started) && activeSlots.length) {
+        let teamSizes: number[] = [];
+        for (const slot of s2gm.slots) {
+            if (!teamSizes[slot.team]) teamSizes[slot.team] = 0;
+            teamSizes[slot.team] += 1;
+        }
+        teamSizes = teamSizes.filter(x => typeof x === 'number');
 
-    //     while (ps.join('\n').length > 1024) {
-    //         ps.splice(0, 1);
-    //     }
+        const useRichLayout = (
+            (teamsNumber >= 2 && s2gm.slots.length / teamsNumber >= 2) &&
+            (Math.max(...teamSizes) <= 6)
+        );
 
-    //     em.fields.push({
-    //         name: `Seen players [${leftPlayers.length}]`,
-    //         value: ps.join('\n'),
-    //         inline: false,
-    //     });
-    // }
+        if (useRichLayout) {
+            for (let currTeam = 1; currTeam <= teamsNumber; currTeam++) {
+                const currTeamSlots = s2gm.getSlots({ teams: [currTeam] }).sort((a, b) => b.slotKindPriority - a.slotKindPriority);
+                const currTeamOccupied = s2gm.getSlots({ kinds: [S2GameLobbySlotKind.Human, S2GameLobbySlotKind.AI], teams: [currTeam] });
+                const formattedSlots = formatSlotRows(currTeamSlots);
+
+                if (!em.fields.find(x => x.name === 'Title')) {
+                    em.fields.find(x => x.name === 'Variant').inline = false;
+                }
+                em.fields.push({
+                    // name: `Team ${currTeam} [${currTeamOccupied.length}/${currTeamSlots.length}]`,
+                    name: `Team ${currTeam}`,
+                    value: formattedSlots.join('\n'),
+                    inline: true,
+                });
+                if ((currTeam % 2) === 0 && teamsNumber > currTeam) {
+                    em.fields.push({ name: `\u200B`, value: `\u200B`, inline: false, });
+                }
+            }
+        }
+        else {
+            const occupiedSlots = s2gm.getSlots({ kinds: [S2GameLobbySlotKind.Human, S2GameLobbySlotKind.AI] });
+            const formattedSlots = formatSlotRows(occupiedSlots, {
+                includeTeamNumber: teamsNumber > 1 && Math.max(...teamSizes) > 1,
+            });
+            em.fields.push({
+                name: `Players [${occupiedSlots.length}/${s2gm.slots.length}]`,
+                value: formattedSlots.join('\n'),
+                inline: false,
+            });
+        }
+    }
+
+    let leftPlayers = s2gm.getLeavers();
+    if (rule.showLeavers || s2gm.status === GameLobbyStatus.Open) {
+        if (!rule.showLeavers) {
+            leftPlayers = leftPlayers.filter(x => (Date.now() - x.leftAt.getTime()) <= 40000);
+        }
+        if (leftPlayers.length) {
+            const ps: string[] = [];
+            for (const joinInfo of leftPlayers) {
+                ps.push([
+                    `\`${formatTimeDiff(joinInfo.joinedAt, s2gm.createdAt)} >`,
+                    ` ${formatTimeDiff(joinInfo.leftAt, s2gm.createdAt)}\` `,
+                    ` ~~${joinInfo.profile.name}#${joinInfo.profile.discriminator}~~`,
+                ].join(''));
+            }
+
+            while (ps.join('\n').length > 1024) {
+                ps.splice(0, 1);
+            }
+
+            em.fields.push({
+                name: `Seen players [${leftPlayers.length}]`,
+                value: ps.join('\n'),
+                inline: false,
+            });
+        }
+    }
 
     return em;
 }

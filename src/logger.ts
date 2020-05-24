@@ -82,7 +82,7 @@ export interface LogItOptions {
 
 export function logIt(lgOpts: LogItOptions = {}) {
     lgOpts = Object.assign<LogItOptions, LogItOptions>({
-        level: 'info',
+        level: 'verbose',
         profiling: true,
         profTime: false,
         profMemory: false,

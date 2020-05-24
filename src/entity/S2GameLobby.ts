@@ -3,7 +3,8 @@ import { S2Region } from './S2Region';
 import { S2DocumentVersion } from './S2DocumentVersion';
 import { S2Document } from './S2Document';
 import { GameLobbyStatus } from '../gametracker';
-import { S2GameLobbySlot } from './S2GameLobbySlot';
+import { S2GameLobbySlot, S2GameLobbySlotKind } from './S2GameLobbySlot';
+import { S2GameLobbyPlayerJoin } from './S2GameLobbyPlayerJoin';
 
 @Entity()
 @Unique('bnet_id', ['bnetBucketId', 'bnetRecordId'])
@@ -180,11 +181,16 @@ export class S2GameLobby {
     })
     slots: S2GameLobbySlot[];
 
-    get activePlayers(): S2GameLobbySlot[] {
-        return [];
-    }
+    @OneToMany(type => S2GameLobbyPlayerJoin, joinInfo => joinInfo.lobby, {
+        cascade: false,
+    })
+    joinInfos: S2GameLobbyPlayerJoin[];
 
-    get leftPlayers(): S2GameLobbySlot[] {
-        return [];
+    getSlots(opts: { kinds?: S2GameLobbySlotKind[], teams?: number[] }): S2GameLobbySlot[] {
+        return this.slots.filter(slot => {
+            if (opts.kinds && !opts.kinds.find(x => x === slot.kind)) return false;
+            if (opts.teams && !opts.teams.find(x => x === slot.team)) return false;
+            return true;
+        });
     }
 }

@@ -13,6 +13,7 @@
     },
     "dependencies": {
         "common-tags": "^1.8.0",
+        "deep-equal": "^2.0.3",
         "discord.js": "^11.5.1",
         "discord.js-commando": "^0.10.0",
         "dotenv": "^8.2.0",
@@ -33,6 +34,7 @@
     },
     "devDependencies": {
         "@types/common-tags": "^1.8.0",
+        "@types/deep-equal": "^1.0.1",
         "@types/dotenv": "^8.2.0",
         "@types/fastify-rate-limit": "^2.0.0",
         "@types/fs-extra": "^8.0.1",

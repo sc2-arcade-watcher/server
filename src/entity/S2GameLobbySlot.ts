@@ -63,14 +63,12 @@ export class S2GameLobbySlot {
     })
     name: string;
 
-    @Column({
-        nullable: true,
-    })
-    joinedAt: Date;
-
-    // TODO: remove
-    @Column({
-        nullable: true,
-    })
-    leftAt: Date;
+    get slotKindPriority(): number {
+        const slotKindMap = {
+            [S2GameLobbySlotKind.Open]: 1,
+            [S2GameLobbySlotKind.AI]: 2,
+            [S2GameLobbySlotKind.Human]: 3,
+        };
+        return slotKindMap[this.kind];
+    }
 }

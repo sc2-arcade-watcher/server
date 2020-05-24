@@ -9,12 +9,14 @@ import { InviteCommand } from '../ds/cmd/invite';
 import { StatusTask } from '../ds/mod/status';
 import { DMChannel } from 'discord.js';
 import { sleep, execAsync } from '../helpers';
+import { SubscriptionsTask } from '../ds/mod/subscriptions';
 
 export class DsBot extends CommandoClient {
     conn: orm.Connection;
     slitedb: sqlite.Database;
     tasks: {
         gnotify: LobbyNotifierTask;
+        subscription: SubscriptionsTask,
         status: StatusTask;
     };
     doShutdown: boolean;
@@ -86,7 +88,7 @@ export class DsBot extends CommandoClient {
     }
 
     async prepare() {
-        this.slitedb = await sqlite.open('data/commando-settings.db')
+        this.slitedb = await sqlite.open('data/commando-settings.db');
         this.setProvider(new SQLiteProvider(this.slitedb));
         this.conn = await orm.createConnection();
     }
@@ -94,6 +96,7 @@ export class DsBot extends CommandoClient {
     async install() {
         this.tasks = {
             gnotify: new LobbyNotifierTask(this),
+            subscription: new SubscriptionsTask(this),
             status: new StatusTask(this)
         };
 

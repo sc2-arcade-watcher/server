@@ -20,10 +20,11 @@ export class StatusTask extends BotTask {
                 await this.showOpenLobbyCount();
                 await sleepUnless(10000, () => !this.client.doShutdown);
             }
-            for (let i = 0; i < 1 && !this.client.doShutdown; ++i) {
-                await this.showNumberOfRecentGames();
-                await sleepUnless(20000, () => !this.client.doShutdown);
-            }
+            // FIXME:
+            // for (let i = 0; i < 1 && !this.client.doShutdown; ++i) {
+            //     await this.showNumberOfRecentGames();
+            //     await sleepUnless(20000, () => !this.client.doShutdown);
+            // }
         }
         this.running = false;
     }
