@@ -178,17 +178,18 @@ class DbProc {
                 logger.warn(`updated available slots ${this.s2region.code}#${s2lobby.bnetRecordId} prevSlotCount=${s2lobby.slots.length} newSlotCount=${lobbyData.slots.length}`);
             }
             if (s2lobby.slots.length > lobbyData.slots.length) {
-                ([] as S2GameLobbySlot[]).concat(s2lobby.slots).forEach(async (s2slot, idx) => {
-                    if (idx < lobbyData.slots.length) return;
+                const removedSlots = s2lobby.slots.splice(lobbyData.slots.length).filter((s2slot, idx) => {
+                    if (idx < lobbyData.slots.length) return false;
                     s2lobby.slots.splice(idx, 1);
                     if (s2slot.joinInfo) {
                         throw new Error('FIXME');
                     }
-                    await this.conn.getRepository(S2GameLobbySlot).delete(s2slot);
+                    return true;
                 });
+                await this.conn.getRepository(S2GameLobbySlot).delete(removedSlots.map(x => x.id));
             }
             else {
-                s2lobby.slots = await Promise.all(lobbyData.slots.map(async (infoSlot, idx) => {
+                const newSlots = lobbyData.slots.map((infoSlot, idx) => {
                     if (idx < s2lobby.slots.length) {
                         return s2lobby.slots[idx];
                     }
@@ -199,9 +200,13 @@ class DbProc {
                         team: infoSlot.team,
                         kind: S2GameLobbySlotKind.Open,
                     } as S2GameLobbySlot);
-                    await this.conn.getRepository(S2GameLobbySlot).insert(s2slot);
                     return s2slot;
-                }));
+                });
+                const addedSlots = newSlots.filter(slot => {
+                    return !this.conn.getRepository(S2GameLobbySlot).hasId(slot);
+                });
+                await this.conn.getRepository(S2GameLobbySlot).insert(addedSlots);
+                s2lobby.slots = newSlots;
             }
         }
         else {
@@ -263,13 +268,16 @@ class DbProc {
                             }
                         }
                     }
-                    Object.assign(s2slot, {
+
+                    const changedData: Partial<S2GameLobbySlot> = {
                         team: infoSlot.team,
                         kind: newS2SlotKind,
                         profile: newS2profiles[idx],
                         name: infoSlot.name,
-                    } as S2GameLobbySlot);
-                    return trans.getRepository(S2GameLobbySlot).update(s2slot.id, s2slot);
+                        joinInfo: s2slot.joinInfo,
+                    };
+                    Object.assign(s2slot, changedData);
+                    return trans.getRepository(S2GameLobbySlot).update(s2slot.id, changedData);
                 }
             }));
 
