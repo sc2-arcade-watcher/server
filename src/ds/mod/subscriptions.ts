@@ -4,7 +4,7 @@ import { DsBot } from '../../bin/dsbot';
 import { BotTask, DiscordErrorCode, GeneralCommand, formatObjectAsMessage, ExtendedCommandInfo } from '../dscommon';
 import { GameRegion } from '../../gametracker';
 import { logger, logIt } from '../../logger';
-import { DsGameTrackRule } from '../../entity/DsGameTrackRule';
+import { DsGameLobbySubscription } from '../../entity/DsGameLobbySubscription';
 import { CommandMessage, FriendlyError } from 'discord.js-commando';
 import { S2Region } from '../../entity/S2Region';
 import { stripIndents } from 'common-tags';
@@ -118,23 +118,23 @@ class NotificationNewCommand extends GeneralCommand {
     }
 
     public async exec(msg: CommandMessage, args: NotificationSubscribeArgs) {
-        const rule = new DsGameTrackRule();
+        const rule = new DsGameLobbySubscription();
         if (msg.channel instanceof TextChannel) {
             const chan = msg.channel;
-            const rcount = await this.client.conn.getRepository(DsGameTrackRule).count({ guild: chan.guild.id, enabled: true });
+            const rcount = await this.client.conn.getRepository(DsGameLobbySubscription).count({ guildId: chan.guild.id, enabled: true });
             if (chan.guild.memberCount <= (5 * rcount) && !this.client.isOwner(msg.author)) {
                 return msg.reply(`Exceeded curent limit - one subscription per 5 members of the guild. (Limit might be lifted in the future).`);
             }
-            rule.guild = chan.guild.id;
-            rule.channel = args.targetChannel.id;
+            rule.guildId = chan.guild.id;
+            rule.channelId = args.targetChannel.id;
         }
         else if (msg.channel instanceof DMChannel) {
             const chan = msg.channel;
-            const rcount = await this.client.conn.getRepository(DsGameTrackRule).count({ user: chan.recipient.id, enabled: true });
+            const rcount = await this.client.conn.getRepository(DsGameLobbySubscription).count({ userId: chan.recipient.id, enabled: true });
             if (10 <= rcount && !this.client.isOwner(msg.author)) {
                 return msg.reply(`Exceeded curent limit - 10 subscriptions per user. (Limit might be lifted in the future).`);
             }
-            rule.user = chan.recipient.id;
+            rule.userId = chan.recipient.id;
         }
         else {
             throw new FriendlyError('Unsupported channel type');
@@ -151,8 +151,8 @@ class NotificationNewCommand extends GeneralCommand {
         rule.showLeavers = args.showLeavers;
         rule.deleteMessageStarted = args.deleteMessageStarted;
         rule.deleteMessageDisbanded = args.deleteMessageDisbanded;
-        await this.client.conn.getRepository(DsGameTrackRule).save(rule);
-        this.client.tasks.gnotify.trackRules.set(rule.id, rule);
+        await this.client.conn.getRepository(DsGameLobbySubscription).save(rule);
+        this.client.tasks.lreporter.trackRules.set(rule.id, rule);
 
         return msg.reply(stripIndents`
             Success! Subscription has been setup, assigned ID: \`${rule.id}\`.
@@ -191,20 +191,20 @@ class NotificationDeleteCommand extends GeneralCommand {
     }
 
     public async exec(msg: CommandMessage, args: { id: number }) {
-        const subscription = this.client.tasks.gnotify.trackRules.get(args.id);
+        const subscription = this.client.tasks.lreporter.trackRules.get(args.id);
         if (!subscription) {
             return msg.reply('Incorrect ID');
         }
 
         if (msg.channel instanceof TextChannel) {
             const chan = msg.channel;
-            if (subscription.guild !== chan.guild.id) {
+            if (subscription.guildId !== chan.guild.id) {
                 return msg.reply('Incorrect ID');
             }
         }
         else if (msg.channel instanceof DMChannel) {
             const chan = msg.channel;
-            if (subscription.user !== chan.recipient.id) {
+            if (subscription.userId !== chan.recipient.id) {
                 return msg.reply('Incorrect ID');
             }
         }
@@ -212,8 +212,8 @@ class NotificationDeleteCommand extends GeneralCommand {
             throw new FriendlyError('Unsupported channel type');
         }
 
-        this.client.tasks.gnotify.trackRules.delete(args.id);
-        await this.client.conn.getRepository(DsGameTrackRule).update(args.id, { enabled: false });
+        this.client.tasks.lreporter.trackRules.delete(args.id);
+        await this.client.conn.getRepository(DsGameLobbySubscription).update(args.id, { enabled: false });
         return msg.reply('Done');
     }
 }
@@ -228,18 +228,18 @@ class NotificationListCommand extends GeneralCommand {
     }
 
     public async exec(msg: CommandMessage) {
-        let rules: DsGameTrackRule[] = [];
+        let rules: DsGameLobbySubscription[] = [];
 
         if (msg.channel instanceof TextChannel) {
             const chan = msg.channel;
-            rules = Array.from(this.client.tasks.gnotify.trackRules.values()).filter(x => {
-                return x.guild === chan.guild.id;
+            rules = Array.from(this.client.tasks.lreporter.trackRules.values()).filter(x => {
+                return x.guildId === chan.guild.id;
             });
         }
         else if (msg.channel instanceof DMChannel) {
             const chan = msg.channel;
-            rules = Array.from(this.client.tasks.gnotify.trackRules.values()).filter(x => {
-                return x.user === chan.recipient.id;
+            rules = Array.from(this.client.tasks.lreporter.trackRules.values()).filter(x => {
+                return x.userId === chan.recipient.id;
             });
         }
         else {
@@ -260,7 +260,7 @@ class NotificationListCommand extends GeneralCommand {
                 name: `Sub ID: **${rsub.id}**`,
                 value: formatObjectAsMessage({
                     'Created at': rsub.createdAt.toUTCString(),
-                    'Channel': (<TextChannel>this.client.channels.get(rsub.channel))?.name,
+                    'Channel': (<TextChannel>this.client.channels.get(rsub.channelId))?.name,
                     'Map name': rsub.mapName,
                     'Partial match of map name': rsub.isMapNamePartial,
                     'Region': rsub?.region?.code ?? 'ANY',
@@ -288,8 +288,8 @@ class NotificationReloadCommand extends GeneralCommand {
     }
 
     public async exec(msg: CommandMessage) {
-        await this.client.tasks.gnotify.reloadSubscriptions();
-        return msg.reply(`Done. Active subscriptions count: ${this.client.tasks.gnotify.trackRules.size}.`);
+        await this.client.tasks.lreporter.reloadSubscriptions();
+        return msg.reply(`Done. Active subscriptions count: ${this.client.tasks.lreporter.trackRules.size}.`);
     }
 }
 

@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, ManyToOne, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { S2GameLobby } from './S2GameLobby';
-import { DsGameTrackRule } from './DsGameTrackRule';
+import { DsGameLobbySubscription } from './DsGameLobbySubscription';
 
 @Entity()
 export class DsGameLobbyMessage {
@@ -20,29 +20,35 @@ export class DsGameLobbyMessage {
     })
     lobby: S2GameLobby;
 
-    @ManyToOne(type => DsGameTrackRule, {
-        nullable: false,
+    @ManyToOne(type => DsGameLobbySubscription, {
+        nullable: true,
         onUpdate: 'RESTRICT',
         onDelete: 'CASCADE',
     })
-    rule: DsGameTrackRule;
+    rule?: DsGameLobbySubscription;
 
     @Column({
         type: 'bigint',
         nullable: true,
     })
-    owner: string;
+    userId: string;
 
     @Column({
         type: 'bigint',
         nullable: true,
     })
-    channel: string;
+    guildId: string;
+
+    @Column({
+        type: 'bigint',
+        nullable: true,
+    })
+    channelId: string;
 
     @Column({
         type: 'bigint',
     })
-    message: string;
+    messageId: string;
 
     @Column({
         default: false,

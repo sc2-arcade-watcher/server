@@ -4,18 +4,19 @@ import * as sqlite from 'sqlite';
 import { setupFileLogger, logger } from '../logger';
 import { CommandoClient, CommandoClientOptions, FriendlyError, SQLiteProvider } from 'discord.js-commando';
 import { BotTask } from '../ds/dscommon';
-import { LobbyNotifierTask } from '../ds/mod/gamenotify';
+import { LobbyReporterTask } from '../ds/mod/lobbyReporter';
 import { InviteCommand } from '../ds/cmd/invite';
 import { StatusTask } from '../ds/mod/status';
 import { DMChannel } from 'discord.js';
 import { sleep, execAsync } from '../helpers';
 import { SubscriptionsTask } from '../ds/mod/subscriptions';
+import { LobbyPublishCommand } from '../ds/cmd/lobbyPublish';
 
 export class DsBot extends CommandoClient {
     conn: orm.Connection;
     slitedb: sqlite.Database;
     tasks: {
-        gnotify: LobbyNotifierTask;
+        lreporter: LobbyReporterTask;
         subscription: SubscriptionsTask,
         status: StatusTask;
     };
@@ -85,6 +86,7 @@ export class DsBot extends CommandoClient {
             commandState: false,
         });
         this.registry.registerCommand(InviteCommand);
+        this.registry.registerCommand(LobbyPublishCommand);
     }
 
     async prepare() {
@@ -95,7 +97,7 @@ export class DsBot extends CommandoClient {
 
     async install() {
         this.tasks = {
-            gnotify: new LobbyNotifierTask(this),
+            lreporter: new LobbyReporterTask(this),
             subscription: new SubscriptionsTask(this),
             status: new StatusTask(this)
         };

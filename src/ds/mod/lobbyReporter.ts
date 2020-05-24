@@ -5,10 +5,16 @@ import { GameLobbyStatus, GameRegion } from '../../gametracker';
 import { S2GameLobbySlot, S2GameLobbySlotKind } from '../../entity/S2GameLobbySlot';
 import { sleep, sleepUnless } from '../../helpers';
 import { logger, logIt } from '../../logger';
-import { DsGameTrackRule } from '../../entity/DsGameTrackRule';
+import { DsGameLobbySubscription } from '../../entity/DsGameLobbySubscription';
 import { DsGameLobbyMessage } from '../../entity/DsGameLobbyMessage';
 import { S2GameLobbyRepository } from '../../repository/S2GameLobbyRepository';
 import deepEqual = require('deep-equal');
+
+export interface DestChannelOpts {
+    userId: string;
+    guildId: string;
+    channelId: string;
+}
 
 interface PostedGameLobby {
     // embed?: RichEmbedOptions;
@@ -16,7 +22,7 @@ interface PostedGameLobby {
 }
 
 class TrackedGameLobby {
-    candidates = new Set<DsGameTrackRule>();
+    candidates = new Set<DsGameLobbySubscription>();
     postedMessages = new Set<PostedGameLobby>();
 
     constructor (public lobby: S2GameLobby) {
@@ -43,13 +49,13 @@ class TrackedGameLobby {
     }
 }
 
-export class LobbyNotifierTask extends BotTask {
+export class LobbyReporterTask extends BotTask {
     trackedLobbies = new Map<number, TrackedGameLobby>();
-    trackRules = new Map<number, DsGameTrackRule>();
+    trackRules = new Map<number, DsGameLobbySubscription>();
 
     async reloadSubscriptions() {
         this.trackRules.clear();
-        for (const rule of await this.conn.getRepository(DsGameTrackRule).find({
+        for (const rule of await this.conn.getRepository(DsGameLobbySubscription).find({
             relations: ['region'],
             where: { enabled: true },
         })) {
@@ -129,6 +135,10 @@ export class LobbyNotifierTask extends BotTask {
         this.running = false;
     }
 
+    postLobby(lobby: S2GameLobby) {
+        // this.postLobbyMessage
+    }
+
     @logIt({
         level: 'verbose',
     })
@@ -184,7 +194,7 @@ export class LobbyNotifierTask extends BotTask {
                 ) {
                     continue;
                 }
-                const result = await this.postLobbyMessage(trackedLobby, currCand);
+                const result = await this.postSubscribedLobby(trackedLobby, currCand);
                 if (result !== false) {
                     trackedLobby.candidates.delete(currCand);
                 }
@@ -213,7 +223,7 @@ export class LobbyNotifierTask extends BotTask {
                     await this.updateLobbyMessage(trackedLobby);
                 }
                 if (!trackedLobby.postedMessages.size) {
-                    logger.verbose(`Stopped tracking ${lobbyInfo.region.code}#${lobbyInfo.bnetRecordId} candidates=${trackedLobby.candidates.size}`);
+                    logger.debug(`Stopped tracking ${lobbyInfo.region.code}#${lobbyInfo.bnetRecordId} candidates=${trackedLobby.candidates.size}`);
                 }
             }
             if (lobbyInfo.status !== GameLobbyStatus.Open) {
@@ -225,37 +235,57 @@ export class LobbyNotifierTask extends BotTask {
         logger.verbose(`Updated tracked lobbies count=${updateCount}`);
     }
 
-    protected async fetchDestChannel(rule: DsGameTrackRule): Promise<TextChannel | DMChannel> {
-        if (rule.user) {
-            const destUser = await this.client.fetchUser(rule.user);
-            if (!destUser) {
-                logger.error(`User doesn't exist, rule #${rule.id}`, rule);
-                return;
+    protected async fetchDestChannel(opts: DestChannelOpts): Promise<TextChannel | DMChannel> {
+        if (opts.userId) {
+            try {
+                const destUser = await this.client.fetchUser(opts.userId);
+                return destUser.dmChannel ?? (destUser.createDM());
             }
-            return destUser.dmChannel || (destUser.createDM());
+            catch (err) {
+                if (err instanceof DiscordAPIError) {
+                    // DiscordErrorCode.UnknownUser
+                    // DiscordErrorCode.CannotSendMessagesToThisUser (??)
+                    logger.error(`Couldn't create DM for an user, id=${opts.userId}`, err);
+                }
+                else {
+                    throw err;
+                }
+            }
         }
-        else if (rule.guild) {
-            const destGuild = this.client.guilds.get(rule.guild);
+        else if (opts.guildId) {
+            const destGuild = this.client.guilds.get(opts.guildId);
             if (!destGuild) {
-                logger.error(`Guild doesn't exist, rule #${rule.id}`, rule);
+                logger.error(`Guild doesn't exist, id=${opts.guildId}`, opts);
                 return;
             }
 
-            const destGuildChan = destGuild.channels.get(rule.channel);
+            const destGuildChan = destGuild.channels.get(opts.channelId);
             if (!destGuildChan) {
-                logger.error(`Guild chan doesn't exist, rule #${rule.id}`, rule);
+                logger.error(`Guild chan doesn't exist, id=${opts.channelId}`, opts);
                 return;
             }
             if (!(destGuildChan instanceof TextChannel)) {
-                logger.error(`Guild chan incorrect type=${destGuildChan.type}, rule #${rule.id}`, rule);
+                logger.error(`Guild chan incorrect type=${destGuildChan.type}`, opts);
                 return;
             }
+
             return destGuildChan;
         }
         else {
-            logger.error(`Invalid rule #${rule.id}`, rule);
+            throw new Error(`invalid DestChannelOpts`);
+        }
+    }
+
+    protected async postSubscribedLobby(trackedLobby: TrackedGameLobby, rule: DsGameLobbySubscription) {
+        let chan: TextChannel | DMChannel;
+        chan = await this.fetchDestChannel(rule);
+        if (!chan) {
+            logger.warn(`Couldn't fetch the channel, deleting subscription, id=${rule.id}`);
+            await this.conn.getRepository(DsGameLobbySubscription).update(rule.id, { enabled: false });
+            this.trackRules.delete(rule.id);
             return;
         }
+        return this.postTrackedLobby(chan, trackedLobby, rule);
     }
 
     @logIt({
@@ -268,41 +298,33 @@ export class LobbyNotifierTask extends BotTask {
         ],
         level: 'debug',
     })
-    protected async postLobbyMessage(trackedLobby: TrackedGameLobby, rule: DsGameTrackRule) {
+    async postTrackedLobby(chan: TextChannel | DMChannel, trackedLobby: TrackedGameLobby, subscription?: DsGameLobbySubscription) {
         const gameLobMessage = new DsGameLobbyMessage();
         gameLobMessage.lobby = trackedLobby.lobby;
-        gameLobMessage.rule = rule;
-        const lbEmbed = embedGameLobby(trackedLobby.lobby, rule);
+        gameLobMessage.rule = subscription ?? null;
+        const lbEmbed = embedGameLobby(trackedLobby.lobby, subscription);
 
-        let chan: TextChannel | DMChannel;
         try {
-            chan = await this.fetchDestChannel(rule);
-            if (!chan) {
-                logger.info(`Deleting rule #${rule.id}`);
-                await this.conn.getRepository(DsGameTrackRule).update(rule.id, { enabled: false });
-                this.trackRules.delete(rule.id);
-                return;
-            }
             const msg = await chan.send('', { embed: lbEmbed }) as Message;
-            gameLobMessage.message = msg.id;
+            gameLobMessage.messageId = msg.id;
         }
         catch (err) {
             if (err instanceof DiscordAPIError) {
-                if (err.code === DiscordErrorCode.MissingPermissions || err.code === DiscordErrorCode.MissingAccess) {
-                    logger.error(`Failed to send message for lobby #${trackedLobby.lobby.id}, rule #${rule.id}`, err.message);
-                    const tdiff = Date.now() - rule.createdAt.getTime();
+                if (subscription && (err.code === DiscordErrorCode.MissingPermissions || err.code === DiscordErrorCode.MissingAccess)) {
+                    logger.error(`Failed to send message for lobby #${trackedLobby.lobby.id}, rule #${subscription.id}`, err.message);
+                    const tdiff = Date.now() - subscription.createdAt.getTime();
                     if (tdiff >= 1000 * 60 * 10) {
-                        logger.info(`Deleting rule #${rule.id}`);
-                        await this.conn.getRepository(DsGameTrackRule).update(rule.id, { enabled: false });
-                        this.trackRules.delete(rule.id);
+                        logger.info(`Deleting rule #${subscription.id}`);
+                        await this.conn.getRepository(DsGameLobbySubscription).update(subscription.id, { enabled: false });
+                        this.trackRules.delete(subscription.id);
                     }
                     else {
-                        logger.info(`Deleting rule #${rule.id}`);
+                        logger.info(`Deleting rule #${subscription.id}`);
                         return false;
                     }
                 }
                 else {
-                    logger.error(`Failed to send message for lobby #${trackedLobby.lobby.id}, rule #${rule.id}`, err, lbEmbed, rule, trackedLobby.lobby);
+                    logger.error(`Failed to send message for lobby #${trackedLobby.lobby.id}`, err, lbEmbed, subscription, trackedLobby.lobby);
                 }
                 return;
             }
@@ -311,12 +333,19 @@ export class LobbyNotifierTask extends BotTask {
             }
         }
 
-        gameLobMessage.owner = rule.guild ?? rule.user;
-        gameLobMessage.channel = chan.id;
-        const res = await this.conn.getRepository(DsGameLobbyMessage).insert(gameLobMessage);
-        gameLobMessage.id = res.identifiers[0].id;
-
+        if (chan instanceof TextChannel) {
+            gameLobMessage.guildId = chan.guild.id;
+        }
+        else if (chan instanceof DMChannel) {
+            gameLobMessage.userId = chan.recipient.id;
+        }
+        else {
+            throw new Error('wtf');
+        }
+        gameLobMessage.channelId = chan.id;
+        await this.conn.getRepository(DsGameLobbyMessage).insert(gameLobMessage);
         trackedLobby.postedMessages.add({ msg: gameLobMessage, });
+
         return true;
     }
 
@@ -328,18 +357,20 @@ export class LobbyNotifierTask extends BotTask {
     protected async editLobbyMessage(trackedLobby: TrackedGameLobby, lobbyMsg: PostedGameLobby) {
         const lbEmbed = embedGameLobby(trackedLobby.lobby, lobbyMsg.msg.rule);
         try {
-            const chan = await this.fetchDestChannel(lobbyMsg.msg.rule);
+            const chan = await this.fetchDestChannel(lobbyMsg.msg);
             if (!chan) {
                 await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                 return;
             }
-            const msg = await chan.fetchMessage(lobbyMsg.msg.message);
+            const msg = await chan.fetchMessage(lobbyMsg.msg.messageId);
             if (!msg) {
                 await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                 return;
             }
+
             await msg.edit('', { embed: lbEmbed });
             if (
+                lobbyMsg.msg.rule &&
                 (trackedLobby.lobby.status === GameLobbyStatus.Started && lobbyMsg.msg.rule.deleteMessageStarted) ||
                 (trackedLobby.lobby.status === GameLobbyStatus.Abandoned && lobbyMsg.msg.rule.deleteMessageDisbanded) ||
                 (trackedLobby.lobby.status === GameLobbyStatus.Unknown && lobbyMsg.msg.rule.deleteMessageDisbanded)
@@ -373,7 +404,7 @@ export class LobbyNotifierTask extends BotTask {
                     await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                     return;
                 }
-                logger.error(`Failed to update message for lobby #${trackedLobby.lobby.id}, rule #${lobbyMsg.msg.rule.id}`, err, lbEmbed, lobbyMsg.msg.rule);
+                logger.error(`Failed to update message for lobby #${trackedLobby.lobby.id}, msgid=${lobbyMsg.msg.messageId}`, err, lbEmbed, lobbyMsg.msg);
             }
             else {
                 throw err;
@@ -405,7 +436,13 @@ function formatTimeDiff(a: Date, b: Date) {
     return `${(Math.floor(secsDiff / 60)).toFixed(0).padStart(2, '0')}:${Math.floor(secsDiff % 60).toFixed(0).padStart(2, '0')}`;
 }
 
-function embedGameLobby(s2gm: S2GameLobby, rule: DsGameTrackRule): RichEmbedOptions {
+function embedGameLobby(s2gm: S2GameLobby, cfg?: { showLeavers: boolean }): RichEmbedOptions {
+    if (!cfg) {
+        cfg = {
+            showLeavers: false,
+        };
+    }
+
     // battlenet:://starcraft/map/${s2gm.region.id}/${s2gm.mapDocumentVersion.document.bnetId}
     const em: RichEmbedOptions = {
         title: `${s2gm.mapDocumentVersion.document.name}`,
@@ -546,6 +583,7 @@ function embedGameLobby(s2gm: S2GameLobby, rule: DsGameTrackRule): RichEmbedOpti
         if (useRichLayout) {
             for (let currTeam = 1; currTeam <= teamsNumber; currTeam++) {
                 const currTeamSlots = s2gm.getSlots({ teams: [currTeam] }).sort((a, b) => b.slotKindPriority - a.slotKindPriority);
+                if (!currTeamSlots.length) continue;
                 const currTeamOccupied = s2gm.getSlots({ kinds: [S2GameLobbySlotKind.Human, S2GameLobbySlotKind.AI], teams: [currTeam] });
                 const formattedSlots = formatSlotRows(currTeamSlots);
 
@@ -577,8 +615,8 @@ function embedGameLobby(s2gm: S2GameLobby, rule: DsGameTrackRule): RichEmbedOpti
     }
 
     let leftPlayers = s2gm.getLeavers();
-    if (rule.showLeavers || s2gm.status === GameLobbyStatus.Open) {
-        if (!rule.showLeavers) {
+    if (cfg.showLeavers || s2gm.status === GameLobbyStatus.Open) {
+        if (!cfg.showLeavers) {
             leftPlayers = leftPlayers.filter(x => (Date.now() - x.leftAt.getTime()) <= 40000);
         }
         if (leftPlayers.length) {

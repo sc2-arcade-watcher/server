@@ -101,6 +101,14 @@ export abstract class GeneralCommand extends Command {
         this.info = tmpInfo;
     }
 
+    protected get conn() {
+        return this.client.conn;
+    }
+
+    protected get tasks() {
+        return this.client.tasks;
+    }
+
     isUsable(msg?: Message) {
         if (msg && this.info.dmOnly && msg.channel.type !== 'dm') {
             return false;

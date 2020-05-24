@@ -2,7 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, Index, ManyToOne, CreateDateCol
 import { S2Region } from './S2Region';
 
 @Entity()
-export class DsGameTrackRule {
+export class DsGameLobbySubscription {
     @PrimaryGeneratedColumn()
     id: number;
 
@@ -21,19 +21,19 @@ export class DsGameTrackRule {
         type: 'bigint',
         nullable: true,
     })
-    user: string;
+    userId: string;
 
     @Column({
         type: 'bigint',
         nullable: true,
     })
-    guild: string;
+    guildId: string;
 
     @Column({
         type: 'bigint',
         nullable: true,
     })
-    channel: string;
+    channelId: string;
 
     @Column()
     mapName: string;
