@@ -1,5 +1,5 @@
 import * as orm from 'typeorm';
-import { JournalReader, GameRegion, JournalMultiProcessor, JournalEventKind, JournalEventNewLobby, JournalEventCloseLobby, GameLobbyStatus, JournalEventUpdateLobbySnapshot, JournalEventUpdateLobbyList, GameLobbyDesc, JournalEventUpdateLobbySlots } from '../gametracker';
+import { JournalReader, GameRegion, JournalMultiProcessor, JournalEventKind, JournalEventNewLobby, JournalEventCloseLobby, GameLobbyStatus, JournalEventUpdateLobbySnapshot, JournalEventUpdateLobbyList, GameLobbyDesc, JournalEventUpdateLobbySlots, JournalEventBase } from '../gametracker';
 import { JournalFeed } from '../journal/feed';
 import { S2GameLobby } from '../entity/S2GameLobby';
 import { S2Region } from '../entity/S2Region';
@@ -25,7 +25,7 @@ function throwErrIfNotDuplicateEntry(err: Error) {
     throw err;
 }
 
-class DbProc {
+class DataProc {
     protected conn: orm.Connection;
     protected em: orm.EntityManager;
     protected journalProc = new JournalMultiProcessor(this.region);
@@ -87,9 +87,6 @@ class DbProc {
             if (ev.feedCursor.session <= feedPos.storageFile && ev.feedCursor.offset < feedPos.storageOffset) {
                 continue;
             }
-            // else {
-            //     logger.error(`resumed, src=${ev.feedName} cur=${ev.feedCursor.session}+${ev.feedCursor.offset}`);
-            // }
 
             switch (ev.kind) {
                 case JournalEventKind.NewLobby: {
@@ -98,6 +95,7 @@ class DbProc {
                 }
                 case JournalEventKind.CloseLobby: {
                     await this.onCloseLobby(ev);
+                    await this.updateResumingOffset(ev);
                     break;
                 }
                 case JournalEventKind.UpdateLobbySnapshot: {
@@ -113,24 +111,37 @@ class DbProc {
                     break;
                 }
             }
-
-            if (ev.kind === JournalEventKind.CloseLobby) {
-                const cursorResume = this.journalProc.gtracks.get(ev.feedName).cursorResumePointer;
-                if (feedPos.resumingFile < cursorResume.session || feedPos.resumingOffset < cursorResume.offset) {
-                    feedPos.resumingFile = cursorResume.session;
-                    feedPos.resumingOffset = cursorResume.offset;
-                    await this.em.getRepository(SysFeedPosition).update(feedProvider.id, {
-                        resumingFile: cursorResume.session,
-                        resumingOffset: cursorResume.offset,
-                    });
-                }
-            }
         }
         await this.conn.close();
+    }
 
-        // TODO:
-        // const result = await this.em.getRepository(S2GameLobby).insert(s2lobby);
-        // this.lobbiesCache.set(result.identifiers.shift(), s2lobby);
+    protected async updateStorageOffset(ev: JournalEventBase) {
+        const feedProvider = this.feedProviders.get(ev.feedName);
+        const feedPos = feedProvider.position;
+
+        if (feedPos.storageFile < ev.feedCursor.session || feedPos.storageOffset < ev.feedCursor.offset) {
+            feedPos.storageFile = ev.feedCursor.session;
+            feedPos.storageOffset = ev.feedCursor.offset;
+            await this.em.getRepository(SysFeedPosition).update(feedProvider.id, {
+                storageFile: ev.feedCursor.session,
+                storageOffset: ev.feedCursor.offset,
+            });
+        }
+    }
+
+    protected async updateResumingOffset(ev: JournalEventBase) {
+        const feedProvider = this.feedProviders.get(ev.feedName);
+        const feedPos = feedProvider.position;
+
+        const cursorResume = this.journalProc.gtracks.get(ev.feedName).cursorResumePointer;
+        if (feedPos.resumingFile < cursorResume.session || feedPos.resumingOffset < cursorResume.offset) {
+            feedPos.resumingFile = cursorResume.session;
+            feedPos.resumingOffset = cursorResume.offset;
+            await this.em.getRepository(SysFeedPosition).update(feedProvider.id, {
+                resumingFile: cursorResume.session,
+                resumingOffset: cursorResume.offset,
+            });
+        }
     }
 
     protected async getLobby(lobby: GameLobbyDesc) {
@@ -143,18 +154,13 @@ class DbProc {
                 relations: ['slots', 'slots.profile', 'slots.joinInfo'],
             });
             this.lobbiesCache.set(lobby.initInfo.lobbyId, s2lobby);
-            if (!s2lobby.slots) {
-                logger.error(`no slots`);
-            }
-            else {
-                s2lobby.slots.forEach(slot => {
-                    if (!slot.joinInfo) return;
-                    slot.joinInfo.profile = slot.profile;
-                });
-            }
-        }
-        if (!s2lobby.slots) {
-            logger.error(`no slots`);
+
+            // assign profile to corresponding joinInfo on human slots manually
+            // doing it directly from the typeorm could likely result in circular dependency issues
+            s2lobby.slots.forEach(slot => {
+                if (!slot.joinInfo) return;
+                slot.joinInfo.profile = slot.profile;
+            });
         }
         return s2lobby;
     }
@@ -165,7 +171,7 @@ class DbProc {
     }
 
     protected async doUpdateSlots(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc) {
-        if (lobbyData.slotsPreviewUpdatedAt <= s2lobby.slotsUpdatedAt) return;
+        if (!lobbyData.slots || lobbyData.slotsPreviewUpdatedAt <= s2lobby.slotsUpdatedAt) return;
 
         const slotKindMap = {
             [LobbyPvExSlotKind.Computer]: S2GameLobbySlotKind.AI,
@@ -200,7 +206,15 @@ class DbProc {
                     } as S2GameLobbySlot);
                     return s2slot;
                 }).filter(x => x !== void 0);
-                await this.conn.getRepository(S2GameLobbySlot).insert(addedSlots);
+
+                // bulk insert is fucked in current version of typeorm
+                // https://github.com/typeorm/typeorm/issues/5973
+                // https://github.com/typeorm/typeorm/issues/6025
+                // const result = await this.conn.getRepository(S2GameLobbySlot).insert(addedSlots);
+
+                // use multiple quries instead
+                await Promise.all(addedSlots.map(async x => this.conn.getRepository(S2GameLobbySlot).insert(x)));
+
                 s2lobby.slots.push(...addedSlots);
             }
         }
@@ -219,7 +233,8 @@ class DbProc {
             if (!slot.profile) return null;
             return this.fetchOrCreateProfile(slot.profile);
         }));
-        await this.conn.transaction(async trans => {
+
+        await this.conn.transaction(async tsManager => {
             const playerLeaveInfo = new Map<string, S2GameLobbyPlayerJoin>();
 
             const updatedSlots = await Promise.all(lobbyData.slots.map(async (infoSlot, idx) => {
@@ -259,7 +274,7 @@ class DbProc {
                                 s2slot.joinInfo.lobby = s2lobby;
                                 s2slot.joinInfo.profile = newS2profiles[idx];
                                 s2slot.joinInfo.joinedAt = lobbyData.slotsPreviewUpdatedAt;
-                                await trans.getRepository(S2GameLobbyPlayerJoin).insert(s2slot.joinInfo);
+                                await tsManager.getRepository(S2GameLobbyPlayerJoin).insert(s2slot.joinInfo);
                             }
                         }
                     }
@@ -272,23 +287,24 @@ class DbProc {
                         joinInfo: s2slot.joinInfo,
                     };
                     Object.assign(s2slot, changedData);
-                    return trans.getRepository(S2GameLobbySlot).update(s2slot.id, changedData);
+                    return tsManager.getRepository(S2GameLobbySlot).update(s2slot.id, changedData);
                 }
             }));
 
             if (playerLeaveInfo.size) {
-                for (const joinInfo of playerLeaveInfo.values()) {
-                    await trans.getRepository(S2GameLobbyPlayerJoin).update(joinInfo.id, {
-                        leftAt: lobbyData.slotsPreviewUpdatedAt,
-                    });
-                }
+                const pks = Array.from(playerLeaveInfo.values()).map(x => x.id);
+                await tsManager.getRepository(S2GameLobbyPlayerJoin).update(pks, {
+                    leftAt: lobbyData.slotsPreviewUpdatedAt,
+                });
             }
 
             s2lobby.slotsUpdatedAt = lobbyData.slotsPreviewUpdatedAt;
-            await trans.getRepository(S2GameLobby).update(s2lobby.id, {
+            await tsManager.getRepository(S2GameLobby).update(s2lobby.id, {
                 slotsUpdatedAt: lobbyData.slotsPreviewUpdatedAt,
             });
         });
+
+        return true;
     }
 
     async fetchOrCreateProfile(infoProfile: Omit<S2Profile, 'id' | 'region' | 'regionId'> & { regionId: number }) {
@@ -470,8 +486,7 @@ class DbProc {
                     logger.info(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} lobby reopened`, [
                         [s2lobby.createdAt, ev.lobby.createdAt],
                         [s2lobby.closedAt, ev.lobby.closedAt],
-                        [s2lobby.snapshotUpdatedAt, ev.lobby.snapshotUpdatedAt],
-                        [s2lobby.slotsUpdatedAt, ev.lobby.slotsPreviewUpdatedAt],
+                        [s2lobby.snapshotUpdatedAt, ev.lobby.snapshotUpdatedAt, snapshotTimeDiff],
                     ]);
                     await this.updateLobby(s2lobby, {
                         status: GameLobbyStatus.Open,
@@ -486,21 +501,11 @@ class DbProc {
                 }
                 else if (snapshotTimeDiff > 0) {
                     logger.verbose(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} lobby reappeared`, [
-                        [snapshotTimeDiff],
                         [s2lobby.createdAt, ev.lobby.createdAt],
                         [s2lobby.closedAt, ev.lobby.closedAt],
-                        [s2lobby.snapshotUpdatedAt, ev.lobby.snapshotUpdatedAt],
-                        [s2lobby.slotsUpdatedAt, ev.lobby.slotsPreviewUpdatedAt],
+                        [s2lobby.snapshotUpdatedAt, ev.lobby.snapshotUpdatedAt, snapshotTimeDiff],
                     ]);
-                    if (snapshotTimeDiff >= 1000) {
-                        await this.updateLobby(s2lobby, {
-                            snapshotUpdatedAt: ev.lobby.snapshotUpdatedAt,
-                            lobbyTitle: ev.lobby.lobbyName,
-                            hostName: ev.lobby.hostName,
-                            slotsHumansTaken: ev.lobby.slotsHumansTaken,
-                            slotsHumansTotal: ev.lobby.slotsHumansTotal,
-                        });
-                    }
+                    // do not insert anything just yet
                 }
             }
             else {
@@ -527,7 +532,7 @@ class DbProc {
                 });
             }
             else {
-                const closeDiff = ev.lobby.closedAt.getTime() - ev.lobby.closedAt.getTime();
+                const closeDiff = s2lobby.closedAt.getTime() - ev.lobby.closedAt.getTime();
                 if (closeDiff !== 0) {
                     logger.warn(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} attempted to close lobby which has its state already determined`);
                 }
@@ -536,9 +541,7 @@ class DbProc {
             }
         }
 
-        if (ev.lobby.slots) {
-            await this.doUpdateSlots(s2lobby, ev.lobby);
-        }
+        await this.doUpdateSlots(s2lobby, ev.lobby);
         if (
             (ev.lobby.status !== GameLobbyStatus.Started && s2lobby.slots.length)
         ) {
@@ -551,20 +554,14 @@ class DbProc {
                 .execute()
             ;
             await this.em.getRepository(S2GameLobbySlot).createQueryBuilder()
-                .update()
-                .set({
-                    kind: S2GameLobbySlotKind.Open,
-                    joinInfo: null,
-                    name: null,
-                    profile: null,
-                })
+                .delete()
                 .andWhere('lobby = :lobbyId')
                 .setParameter('lobbyId', s2lobby.id)
                 .execute()
             ;
         }
 
-        await this.em.getRepository(S2GameLobby).update(s2lobby.id, {
+        await this.updateLobby(s2lobby, {
             closedAt: ev.lobby.closedAt,
             status: ev.lobby.status,
         });
@@ -574,8 +571,14 @@ class DbProc {
 
     async onUpdateLobbySnapshot(ev: JournalEventUpdateLobbySnapshot) {
         const s2lobby = await this.getLobby(ev.lobby);
-        if (s2lobby.status !== GameLobbyStatus.Open) return;
         if (s2lobby.snapshotUpdatedAt > ev.lobby.snapshotUpdatedAt) return;
+
+        // do not update data from snapshots on *closed* lobbies - it may happen when data feed from one of the runners arrives too late
+        // thus it needs to be processed retroactively to fill eventual gaps in what has been already stored in database
+        // wait till the Close event to determine if provided data actually affects anything
+        if (s2lobby.status !== GameLobbyStatus.Open) {
+            return;
+        }
 
         await this.updateLobby(s2lobby, {
             lobbyTitle: ev.lobby.lobbyName,
@@ -587,21 +590,14 @@ class DbProc {
 
     async onUpdateLobbySlots(ev: JournalEventUpdateLobbySlots) {
         const s2lobby = await this.getLobby(ev.lobby);
-        await this.doUpdateSlots(s2lobby, ev.lobby);
+        const changed = await this.doUpdateSlots(s2lobby, ev.lobby);
+        if (changed) {
+            logger.debug(`slots updated, src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId}`);
+        }
     }
 
     async onUpdateLobbyList(ev: JournalEventUpdateLobbyList) {
-        const feedProvider = this.feedProviders.get(ev.feedName);
-        const feedPos = feedProvider.position;
-
-        if (feedPos.storageFile < ev.feedCursor.session || feedPos.storageOffset < ev.feedCursor.offset) {
-            feedPos.storageFile = ev.feedCursor.session;
-            feedPos.storageOffset = ev.feedCursor.offset;
-            await this.em.getRepository(SysFeedPosition).update(feedProvider.id, {
-                storageFile: ev.feedCursor.session,
-                storageOffset: ev.feedCursor.offset,
-            });
-        }
+        this.updateStorageOffset(ev);
     }
 }
 
@@ -624,7 +620,7 @@ async function run() {
     }
 
     const workers = await Promise.all(activeRegions.map(async region => {
-        const worker = new DbProc(region);
+        const worker = new DataProc(region);
         await worker.open();
         return worker;
     }));
