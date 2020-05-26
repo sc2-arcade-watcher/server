@@ -66,9 +66,9 @@ function parseQuery(query: string): LobbyQueryParams | string {
     }
 
     switch (methodName) {
-        case 'id': {
-            const m = methodParam.match(/^([\d+]\/[\d+]\/[\d+])$/i);
-            if (!m) return `Lobby id must be in the format of \`{regionId}/{bucketId}/{recordId}\``;
+        case 'handle': {
+            const m = methodParam.match(/^(\d+)\/(\d+)\/(\d+)$/i);
+            if (!m) return `Lobby handle must be in the format of \`{regionId}/{bucketId}/{recordId}\``;
             return {
                 method: LobbyQueryMethod.LobbyHandle,
                 lobbyHandle: {
@@ -153,6 +153,7 @@ export class LobbyPublishCommand extends GeneralCommand {
         let qb = this.conn.getCustomRepository(S2GameLobbyRepository)
             .createQueryBuilder('lobby')
             .andWhere('lobby.status = :status', { status: GameLobbyStatus.Open })
+            .limit(5)
         ;
 
         switch (qparams.method) {
@@ -160,7 +161,7 @@ export class LobbyPublishCommand extends GeneralCommand {
                 qb = this.conn.getCustomRepository(S2GameLobbyRepository)
                     .createQueryBuilder('lobby')
                 ;
-                qb.andWhere('', {
+                qb.andWhere('lobby.regionId = :regionId AND lobby.bnetBucketId = :bnetBucketId AND lobby.bnetRecordId = :bnetRecordId', {
                     regionId: qparams.lobbyHandle.regionId,
                     bnetBucketId: qparams.lobbyHandle.bucketId,
                     bnetRecordId: qparams.lobbyHandle.recordId,
@@ -169,7 +170,7 @@ export class LobbyPublishCommand extends GeneralCommand {
             }
 
             case LobbyQueryMethod.DocumentLink: {
-                qb.andWhere('lobby.regionId AND (lobby.mapBnetId = :documentId OR lobby.extModBnetId = :documentId)', {
+                qb.andWhere('lobby.regionId = :regionId AND (lobby.mapBnetId = :documentId OR lobby.extModBnetId = :documentId)', {
                     regionId: qparams.documentLink.regionId,
                     documentId: qparams.documentLink.documentId,
                 });

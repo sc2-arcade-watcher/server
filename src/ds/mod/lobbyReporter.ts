@@ -388,6 +388,7 @@ export class LobbyReporterTask extends BotTask {
         if (!trackedLobby) {
             const lobby = await this.conn.getCustomRepository(S2GameLobbyRepository)
                 .prepareDetailedSelect()
+                .where('lobby.id = :id', { id: lobbyId })
                 .getOne()
             ;
             if (!lobby) return;
