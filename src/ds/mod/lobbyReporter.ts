@@ -208,18 +208,54 @@ export class LobbyReporterTask extends BotTask {
     protected async updateTrackedLobbies() {
         if (!this.trackedLobbies.size) return;
 
-        const freshLobbyInfo = await this.conn.getCustomRepository(S2GameLobbyRepository)
-            .prepareDetailedSelect()
-            .andWhere('lobby.id IN (:trackedLobbies)', { 'trackedLobbies': Array.from(this.trackedLobbies.keys()) })
-            .getMany()
+        // filter to only those which have been already posted
+        // or have a matching subscription which did not yet meet its critera
+        const trackedLobbiesRelevant = Array.from(this.trackedLobbies.values())
+            .filter(x => x.postedMessages.size > 0 || x.candidates.size > 0)
         ;
 
+        // fetch only IDs of lobbies which have newer data
+        const affectedLobIds: number[] = [];
+        const lobbyDataSnapshot = await this.conn.getCustomRepository(S2GameLobbyRepository)
+            .createQueryBuilder('lobby')
+            .select(['lobby.id', 'lobby.status', 'lobby.snapshotUpdatedAt', 'lobby.slotsUpdatedAt'])
+            .andWhere('lobby.id IN (:trackedLobbies)', { 'trackedLobbies': trackedLobbiesRelevant.map(x => x.lobby.id) })
+            .getMany()
+        ;
+        for (const lsnapshot of lobbyDataSnapshot) {
+            const lobby = this.trackedLobbies.get(lsnapshot.id).lobby;
+            if (
+                lobby.status !== lsnapshot.status ||
+                lobby.snapshotUpdatedAt?.getTime() !== lsnapshot.snapshotUpdatedAt?.getTime() ||
+                lobby.slotsUpdatedAt?.getTime() !== lsnapshot.slotsUpdatedAt?.getTime()
+            ) {
+                affectedLobIds.push(lsnapshot.id);
+            }
+        }
+
+        // also include closed lobbies which have't actually changed but require update of a post for other reasons
+        // such as deleting messages after X seconds from when they've been orginally closed
+        const outdatedLobIds = affectedLobIds.concat(
+            trackedLobbiesRelevant.filter(x => x.postedMessages.size > 0 && x.isClosedStatusConcluded()).map(x => x.lobby.id)
+        );
+
+        logger.verbose(`Lobbies: affected count=${affectedLobIds.length}, outdated count=${outdatedLobIds.length}`);
+        if (!outdatedLobIds.length) return;
+
+        const freshLobbyInfo = await this.conn.getCustomRepository(S2GameLobbyRepository)
+            .prepareDetailedSelect()
+            .andWhere('lobby.id IN (:trackedLobbies)', {
+                'trackedLobbies': Array.from(new Set(outdatedLobIds))
+            })
+            .getMany()
+        ;
         let updateCount = 0;
         await Promise.all(freshLobbyInfo.map(async lobbyInfo => {
             const trackedLobby = this.trackedLobbies.get(lobbyInfo.id);
             const needsUpdate = trackedLobby.updateInfo(lobbyInfo);
             if (trackedLobby.postedMessages.size) {
                 if (needsUpdate || trackedLobby.isClosedStatusConcluded()) {
+                    ++updateCount;
                     await this.updateLobbyMessage(trackedLobby);
                 }
                 if (!trackedLobby.postedMessages.size) {
@@ -229,9 +265,7 @@ export class LobbyReporterTask extends BotTask {
             if (lobbyInfo.status !== GameLobbyStatus.Open) {
                 this.trackedLobbies.delete(lobbyInfo.id);
             }
-            ++updateCount;
         }));
-
         logger.verbose(`Updated tracked lobbies count=${updateCount}`);
     }
 
@@ -340,13 +374,52 @@ export class LobbyReporterTask extends BotTask {
             gameLobMessage.userId = chan.recipient.id;
         }
         else {
-            throw new Error('wtf');
+            throw new Error(`unsupported channel type=${(<any>chan).type}`);
         }
         gameLobMessage.channelId = chan.id;
         await this.conn.getRepository(DsGameLobbyMessage).insert(gameLobMessage);
         trackedLobby.postedMessages.add({ msg: gameLobMessage, });
 
         return true;
+    }
+
+    async bindMessageWithLobby(msg: Message, lobbyId: number) {
+        let trackedLobby = this.trackedLobbies.get(lobbyId);
+        if (!trackedLobby) {
+            const lobby = await this.conn.getCustomRepository(S2GameLobbyRepository)
+                .prepareDetailedSelect()
+                .getOne()
+            ;
+            if (!lobby) return;
+
+            trackedLobby = this.trackedLobbies.get(lobbyId);
+            if (!trackedLobby) {
+                trackedLobby = new TrackedGameLobby(lobby);
+                this.trackedLobbies.set(lobby.id, trackedLobby);
+            }
+        }
+
+        const chan = msg.channel;
+        const gameLobMessage = new DsGameLobbyMessage();
+        gameLobMessage.messageId = msg.id;
+        gameLobMessage.lobby = trackedLobby.lobby;
+        if (chan instanceof TextChannel) {
+            gameLobMessage.guildId = chan.guild.id;
+        }
+        else if (chan instanceof DMChannel) {
+            gameLobMessage.userId = chan.recipient.id;
+        }
+        else {
+            throw new Error(`unsupported channel type=${chan.type}`);
+        }
+        gameLobMessage.channelId = chan.id;
+        await this.conn.getRepository(DsGameLobbyMessage).insert(gameLobMessage);
+
+        const lobbyMsg: PostedGameLobby = { msg: gameLobMessage };
+        trackedLobby.postedMessages.add(lobbyMsg);
+        await this.editLobbyMessage(trackedLobby, lobbyMsg);
+
+        return trackedLobby;
     }
 
     protected async releaseLobbyMessage(trackedLobby: TrackedGameLobby, lobbyMsg: PostedGameLobby) {
@@ -505,7 +578,14 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: { showLeavers: boolean }): Rich
         inline: true,
     });
 
-    if (s2gm.mapVariantMode.trim().length) {
+    if (s2gm.extModDocumentVersion) {
+        em.fields.push({
+            name: `Extension mod`,
+            value: `${s2gm.extModDocumentVersion.document.name}`,
+            inline: true,
+        });
+    }
+    else if (s2gm.mapVariantMode.trim().length) {
         em.fields.push({
             name: `Variant`,
             value: `${s2gm.mapVariantMode}`,
@@ -520,8 +600,6 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: { showLeavers: boolean }): Rich
             inline: false,
         });
     }
-
-    if (!s2gm.slots.length) return em;
 
     const teamsNumber = (new Set(s2gm.slots.map(x => x.team))).size;
     const activeSlots = s2gm.slots.filter(x => x.kind !== S2GameLobbySlotKind.Open).sort((a, b) => b.slotKindPriority - a.slotKindPriority);
@@ -588,7 +666,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: { showLeavers: boolean }): Rich
                 const formattedSlots = formatSlotRows(currTeamSlots);
 
                 if (!em.fields.find(x => x.name === 'Title')) {
-                    em.fields.find(x => x.name === 'Variant').inline = false;
+                    em.fields.find(x => x.name === 'Variant' || x.name === 'Extension mod').inline = false;
                 }
                 em.fields.push({
                     // name: `Team ${currTeam} [${currTeamOccupied.length}/${currTeamSlots.length}]`,

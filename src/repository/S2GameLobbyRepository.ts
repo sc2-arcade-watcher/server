@@ -15,6 +15,10 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
             .innerJoinAndSelect('lobby.mapDocumentVersion', 'mapDocVer')
             .innerJoinAndSelect('mapDocVer.document', 'mapDoc')
 
+            // ext mod info
+            .leftJoinAndSelect('lobby.extModDocumentVersion', 'extModDocVer')
+            .leftJoinAndSelect('extModDocVer.document', 'extModDoc')
+
             // slots
             .leftJoinAndSelect('lobby.slots', 'slot')
             .leftJoinAndSelect('slot.profile', 'profile')
