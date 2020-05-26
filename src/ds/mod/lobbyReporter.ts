@@ -135,10 +135,6 @@ export class LobbyReporterTask extends BotTask {
         this.running = false;
     }
 
-    postLobby(lobby: S2GameLobby) {
-        // this.postLobbyMessage
-    }
-
     @logIt({
         level: 'verbose',
     })
@@ -444,10 +440,11 @@ export class LobbyReporterTask extends BotTask {
 
             await msg.edit('', { embed: lbEmbed });
             if (
-                lobbyMsg.msg.rule &&
-                (trackedLobby.lobby.status === GameLobbyStatus.Started && lobbyMsg.msg.rule.deleteMessageStarted) ||
-                (trackedLobby.lobby.status === GameLobbyStatus.Abandoned && lobbyMsg.msg.rule.deleteMessageDisbanded) ||
-                (trackedLobby.lobby.status === GameLobbyStatus.Unknown && lobbyMsg.msg.rule.deleteMessageDisbanded)
+                lobbyMsg.msg.rule && (
+                    (trackedLobby.lobby.status === GameLobbyStatus.Started && lobbyMsg.msg.rule.deleteMessageStarted) ||
+                    (trackedLobby.lobby.status === GameLobbyStatus.Abandoned && lobbyMsg.msg.rule.deleteMessageDisbanded) ||
+                    (trackedLobby.lobby.status === GameLobbyStatus.Unknown && lobbyMsg.msg.rule.deleteMessageDisbanded)
+                )
             ) {
                 if (trackedLobby.isClosedStatusConcluded()) {
                     try {
@@ -510,25 +507,40 @@ function formatTimeDiff(a: Date, b: Date) {
     return `${(Math.floor(secsDiff / 60)).toFixed(0).padStart(2, '0')}:${Math.floor(secsDiff % 60).toFixed(0).padStart(2, '0')}`;
 }
 
-function embedGameLobby(s2gm: S2GameLobby, cfg?: { showLeavers: boolean }): RichEmbedOptions {
-    if (!cfg) {
-        cfg = {
-            showLeavers: false,
-        };
-    }
+interface LobbyEmbedOptions {
+    showLeavers: boolean;
+    showTimestamps: boolean;
+    showThumbnail: boolean;
+}
 
-    // battlenet:://starcraft/map/${s2gm.region.id}/${s2gm.mapDocumentVersion.document.bnetId}
+function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): RichEmbedOptions {
+    if (!cfg) cfg = {};
+    cfg = Object.assign<Partial<LobbyEmbedOptions>, LobbyEmbedOptions>(cfg, {
+        showLeavers: false,
+        showTimestamps: false,
+        showThumbnail: true,
+    });
+
     const em: RichEmbedOptions = {
-        title: `${s2gm.mapDocumentVersion.document.name}`,
+        // author: {
+        //     name: `Show details`,
+        //     icon_url: 'https://i.imgur.com/icMQQKh.png',
+        //     url: `https://sc2arcade.talv.space/lobby/${s2gm.regionId}/${s2gm.bnetBucketId}/${s2gm.bnetRecordId}`,
+        // },
+        title: `:link: ${s2gm.mapDocumentVersion.document.name}`,
+        url: `https://sc2arcade.talv.space/lobby/${s2gm.regionId}/${s2gm.bnetBucketId}/${s2gm.bnetRecordId}`,
         fields: [],
-        thumbnail: {
-            url: `http://sc2arcade.talv.space/bnet/${s2gm.mapDocumentVersion.iconHash}.jpg`,
-        },
         timestamp: s2gm.createdAt,
         footer: {
-            text: `${s2gm.region.code}#${s2gm.bnetRecordId}`,
+            text: `v${s2gm.mapMajorVersion}.${s2gm.mapMinorVersion}`,
         },
     };
+
+    if (cfg.showThumbnail) {
+        em.thumbnail = {
+            url: `http://sc2arcade.talv.space/bnet/${s2gm.mapDocumentVersion.iconHash}.jpg`,
+        };
+    }
 
     switch (s2gm.region.id) {
         case GameRegion.US: {
@@ -569,28 +581,28 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: { showLeavers: boolean }): Rich
         }
     }
     statusm.push(` __** ${s2gm.status.toLocaleUpperCase()} **__`);
-    if (s2gm.status !== GameLobbyStatus.Open) {
+    if (s2gm.status !== GameLobbyStatus.Open && cfg.showTimestamps) {
         statusm.push(` \`${formatTimeDiff(s2gm.closedAt, s2gm.createdAt)}\``);
     }
 
     em.fields.push({
         name: `Status`,
         value: statusm.join(''),
-        inline: true,
+        inline: false,
     });
 
     if (s2gm.extModDocumentVersion) {
         em.fields.push({
             name: `Extension mod`,
             value: `${s2gm.extModDocumentVersion.document.name}`,
-            inline: true,
+            inline: false,
         });
     }
     else if (s2gm.mapVariantMode.trim().length) {
         em.fields.push({
             name: `Variant`,
             value: `${s2gm.mapVariantMode}`,
-            inline: true,
+            inline: false,
         });
     }
 
@@ -610,6 +622,8 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: { showLeavers: boolean }): Rich
         const ps: string[] = [];
         let i = 1;
         for (const slot of slotsList) {
+            if (s2gm.status !== GameLobbyStatus.Open && slot.kind === S2GameLobbySlotKind.Open) continue;
+
             const wparts: string[] = [];
             wparts.push(`\`${i.toString().padStart(slotsList.length.toString().length, '0')})`);
 
@@ -623,28 +637,31 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: { showLeavers: boolean }): Rich
             if (slot.kind === S2GameLobbySlotKind.Human) {
                 let fullname = slot.profile ? `${slot.profile.name}#${slot.profile.discriminator}` : slot.name;
 
-                wparts.push(` ${formatTimeDiff(slot.joinInfo?.joinedAt ?? s2gm.slotsUpdatedAt, s2gm.createdAt)}\``);
+                if (cfg.showTimestamps) {
+                    wparts.push(` ${formatTimeDiff(slot.joinInfo?.joinedAt ?? s2gm.slotsUpdatedAt, s2gm.createdAt)}`);
+                }
+                wparts.push('` ');
 
-                // force monospace font on KR to fit more characters in the same line
-                if (s2gm.regionId === 3) {
-                    fullname = `\`${fullname}\``;
-                    wparts.push(` ${fullname === s2gm.hostName ? `__${fullname}__` : `${fullname}`} `);
+                if (slot.name === s2gm.hostName) {
+                    fullname = `__${fullname}__`;
                 }
-                else {
-                    wparts.push(` ${fullname === s2gm.hostName ? `__**${fullname}**__` : `**${fullname}**`}`);
-                }
+                wparts.push(fullname);
             }
             else if (slot.kind === S2GameLobbySlotKind.AI) {
-                wparts.push(`  AI  \``);
+                wparts.push(`  AI  `);
+                wparts.push('`');
             }
             else if (slot.kind === S2GameLobbySlotKind.Open) {
-                wparts.push(` OPEN \``);
+                wparts.push(` OPEN `);
+                wparts.push('`');
             }
             ps.push(wparts.join(''));
             ++i;
         }
         return ps;
     }
+
+    const teamFields: { name: string, value: string, inline?: boolean }[] = [];
 
     if ((s2gm.status === GameLobbyStatus.Open || s2gm.status === GameLobbyStatus.Started) && activeSlots.length) {
         let teamSizes: number[] = [];
@@ -666,18 +683,11 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: { showLeavers: boolean }): Rich
                 const currTeamOccupied = s2gm.getSlots({ kinds: [S2GameLobbySlotKind.Human, S2GameLobbySlotKind.AI], teams: [currTeam] });
                 const formattedSlots = formatSlotRows(currTeamSlots);
 
-                if (!em.fields.find(x => x.name === 'Title')) {
-                    em.fields.find(x => x.name === 'Variant' || x.name === 'Extension mod').inline = false;
-                }
-                em.fields.push({
-                    // name: `Team ${currTeam} [${currTeamOccupied.length}/${currTeamSlots.length}]`,
+                teamFields.push({
                     name: `Team ${currTeam}`,
                     value: formattedSlots.join('\n'),
                     inline: true,
                 });
-                if ((currTeam % 2) === 0 && teamsNumber > currTeam) {
-                    em.fields.push({ name: `\u200B`, value: `\u200B`, inline: false, });
-                }
             }
         }
         else {
@@ -686,10 +696,32 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: { showLeavers: boolean }): Rich
                 includeTeamNumber: teamsNumber > 1 && Math.max(...teamSizes) > 1,
             });
             em.fields.push({
-                name: `Players [${occupiedSlots.length}/${s2gm.slots.length}]`,
+                name: `Players` + (s2gm.status === GameLobbyStatus.Open ? ` [${occupiedSlots.length}/${s2gm.slots.length}]` : ''),
                 value: formattedSlots.join('\n'),
                 inline: false,
             });
+        }
+    }
+
+    if (teamFields.length > 0) {
+        em.fields[em.fields.length - 1].inline = false;
+
+        let rowCount = 0;
+        const columnLimit = 3;
+        while (teamFields.length) {
+            ++rowCount;
+            const sectionTeamFields = teamFields.splice(0, columnLimit);
+
+            if (rowCount > 1) {
+                for (let i = 0; i < columnLimit - teamFields.length; i++) {
+                    sectionTeamFields.push({ name: `\u200B`, value: `\u200B`, inline: true });
+                }
+            }
+
+            em.fields.push(...sectionTeamFields);
+            if (teamFields.length) {
+                em.fields.push({ name: `\u200B`, value: `\u200B`, inline: false });
+            }
         }
     }
 
