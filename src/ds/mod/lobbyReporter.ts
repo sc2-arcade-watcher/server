@@ -152,23 +152,47 @@ export class LobbyReporterTask extends BotTask {
             const trackedLobby = new TrackedGameLobby(s2gm);
             this.trackedLobbies.set(s2gm.id, trackedLobby);
 
-            for (const rule of this.trackRules.values()) {
-                if (
-                    (
-                        (rule.isMapNameRegex && s2gm.mapDocumentVersion.document.name.match(new RegExp(rule.mapName, 'iu'))) ||
-                        (rule.isMapNamePartial && s2gm.mapDocumentVersion.document.name.toLowerCase().indexOf(rule.mapName.toLowerCase()) !== -1) ||
-                        (!rule.isMapNameRegex && !rule.isMapNamePartial && s2gm.mapDocumentVersion.document.name.toLowerCase() === rule.mapName.toLowerCase())
-                    ) &&
-                    (!rule.variant || rule.variant === s2gm.mapVariantMode) &&
-                    (!rule.region || rule.region.id === s2gm.region.id)
-                ) {
-                    trackedLobby.candidates.add(rule);
-                }
+            for (const sub of this.trackRules.values()) {
+                this.testSubscription(sub, s2gm.id);
             }
+        }
+    }
 
-            if (trackedLobby.candidates.size > 0) {
-                logger.info(`New lobby ${s2gm.region.code}#${s2gm.bnetRecordId} for "${s2gm.mapDocumentVersion.document.name}". Matching rules=${trackedLobby.candidates.size}`);
+    public testSubscription(sub: DsGameLobbySubscription, lobbyId?: number) {
+        if (!lobbyId) {
+            for (const trackedLobby of this.trackedLobbies.values()) {
+                this.testSubscription(sub, trackedLobby.lobby.id);
             }
+            return;
+        }
+
+        const trackedLobby = this.trackedLobbies.get(lobbyId);
+        const s2gm = trackedLobby.lobby;
+
+        if (
+            (
+                (
+                    s2gm.extModBnetId &&
+                    (
+                        (sub.isMapNameRegex && s2gm.extModDocumentVersion.document.name.match(new RegExp(sub.mapName, 'iu'))) ||
+                        (sub.isMapNamePartial && s2gm.extModDocumentVersion.document.name.toLowerCase().indexOf(sub.mapName.toLowerCase()) !== -1) ||
+                        (!sub.isMapNameRegex && !sub.isMapNamePartial && s2gm.extModDocumentVersion.document.name.toLowerCase() === sub.mapName.toLowerCase())
+                    )
+                ) ||
+                (
+                    (sub.isMapNameRegex && s2gm.mapDocumentVersion.document.name.match(new RegExp(sub.mapName, 'iu'))) ||
+                    (sub.isMapNamePartial && s2gm.mapDocumentVersion.document.name.toLowerCase().indexOf(sub.mapName.toLowerCase()) !== -1) ||
+                    (!sub.isMapNameRegex && !sub.isMapNamePartial && s2gm.mapDocumentVersion.document.name.toLowerCase() === sub.mapName.toLowerCase())
+                )
+            ) &&
+            (!sub.variant || sub.variant === s2gm.mapVariantMode) &&
+            (!sub.region || sub.region.id === s2gm.region.id)
+        ) {
+            trackedLobby.candidates.add(sub);
+        }
+
+        if (trackedLobby.candidates.size > 0) {
+            logger.info(`New lobby ${s2gm.region.code}#${s2gm.bnetRecordId} for "${s2gm.mapDocumentVersion.document.name}". Matching rules=${trackedLobby.candidates.size}`);
         }
     }
 
@@ -442,8 +466,8 @@ export class LobbyReporterTask extends BotTask {
             if (
                 lobbyMsg.msg.rule && (
                     (trackedLobby.lobby.status === GameLobbyStatus.Started && lobbyMsg.msg.rule.deleteMessageStarted) ||
-                    (trackedLobby.lobby.status === GameLobbyStatus.Abandoned && lobbyMsg.msg.rule.deleteMessageDisbanded) ||
-                    (trackedLobby.lobby.status === GameLobbyStatus.Unknown && lobbyMsg.msg.rule.deleteMessageDisbanded)
+                    (trackedLobby.lobby.status === GameLobbyStatus.Abandoned && lobbyMsg.msg.rule.deleteMessageAbandoned) ||
+                    (trackedLobby.lobby.status === GameLobbyStatus.Unknown && lobbyMsg.msg.rule.deleteMessageAbandoned)
                 )
             ) {
                 if (trackedLobby.isClosedStatusConcluded()) {
@@ -527,7 +551,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
         //     icon_url: 'https://i.imgur.com/icMQQKh.png',
         //     url: `https://sc2arcade.talv.space/lobby/${s2gm.regionId}/${s2gm.bnetBucketId}/${s2gm.bnetRecordId}`,
         // },
-        title: `:link: ${s2gm.mapDocumentVersion.document.name}`,
+        title: `${s2gm.mapDocumentVersion.document.name}`,
         url: `https://sc2arcade.talv.space/lobby/${s2gm.regionId}/${s2gm.bnetBucketId}/${s2gm.bnetRecordId}`,
         fields: [],
         timestamp: s2gm.createdAt,

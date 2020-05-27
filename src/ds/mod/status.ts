@@ -12,7 +12,6 @@ export class StatusTask extends BotTask {
     async unload() {
     }
 
-    @logIt()
     protected async update() {
         this.running = true;
         while (await this.waitUntilReady()) {
@@ -29,6 +28,7 @@ export class StatusTask extends BotTask {
         this.running = false;
     }
 
+    @logIt()
     protected async showOpenLobbyCount() {
         await this.waitUntilReady();
 

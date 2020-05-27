@@ -63,14 +63,14 @@ export class DsGameLobbySubscription {
     @Column({
         type: 'smallint',
         unsigned: true,
-        nullable: true,
+        default: 0,
     })
     timeDelay: number;
 
     @Column({
         type: 'tinyint',
         unsigned: true,
-        nullable: true,
+        default: 0,
     })
     humanSlotsMin: number;
 
@@ -87,5 +87,5 @@ export class DsGameLobbySubscription {
     @Column({
         default: false,
     })
-    deleteMessageDisbanded: boolean;
+    deleteMessageAbandoned: boolean;
 }

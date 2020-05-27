@@ -75,9 +75,9 @@ export class DsBot extends CommandoClient {
         this.registry.registerDefaultTypes();
         this.registry.registerDefaultGroups();
         this.registry.registerGroups([
-            // ['admin', 'Admin'],
+            ['admin', 'Admin'],
             ['general', 'General'],
-            ['notifications', 'Notifications'],
+            ['subscriptions', 'Subscriptions'],
         ]);
         this.registry.registerDefaultCommands({
             help: true,

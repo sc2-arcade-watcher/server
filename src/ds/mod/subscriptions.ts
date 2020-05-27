@@ -1,5 +1,5 @@
 import * as orm from 'typeorm';
-import { User, TextChannel, RichEmbedOptions, DMChannel } from 'discord.js';
+import { User, TextChannel, RichEmbedOptions, DMChannel, GroupDMChannel } from 'discord.js';
 import { DsBot } from '../../bin/dsbot';
 import { BotTask, DiscordErrorCode, GeneralCommand, formatObjectAsMessage, ExtendedCommandInfo } from '../dscommon';
 import { GameRegion } from '../../gametracker';
@@ -10,7 +10,7 @@ import { S2Region } from '../../entity/S2Region';
 import { stripIndents } from 'common-tags';
 
 
-interface NotificationSubscribeArgs {
+interface SubscriptionArgs {
     targetChannel?: TextChannel | DMChannel;
     mapName: string;
     isMapNameExact: boolean;
@@ -20,32 +20,134 @@ interface NotificationSubscribeArgs {
     humanSlotsMin: number;
     showLeavers: boolean;
     deleteMessageStarted: boolean;
-    deleteMessageDisbanded: boolean;
+    deleteMessageAbandoned: boolean;
 }
 
-class NotificationNewCommand extends GeneralCommand {
+abstract class AbstractSubscriptionCommand extends GeneralCommand {
+    protected get lreporter() {
+        return this.client.tasks.lreporter;
+    }
+
+    protected getChannelSubscription(channel: TextChannel | DMChannel | GroupDMChannel, id: number) {
+        const sub = this.lreporter.trackRules.get(id);
+        if (!sub) {
+            return;
+        }
+
+        if (channel instanceof TextChannel) {
+            const chan = channel;
+            if (sub.guildId !== chan.guild.id) {
+                return;
+            }
+        }
+        else if (channel instanceof DMChannel) {
+            const chan = channel;
+            if (sub.userId !== chan.recipient.id) {
+                return;
+            }
+        }
+        else {
+            throw new FriendlyError('Unsupported channel type');
+        }
+
+        return sub;
+    }
+}
+
+class SubscriptionNewCommand extends AbstractSubscriptionCommand {
     constructor(client: DsBot, info: ExtendedCommandInfo) {
         info = Object.assign(<ExtendedCommandInfo>{
-            name: 'gn.new',
-            description: 'Add new notification for game lobby',
+            name: 'sub.new',
+            description: 'Create new subscription for game lobby.',
             guildOnly: true,
+            group: 'subscriptions',
             userPermissions: ['MANAGE_GUILD'],
             examples: [
-                'gn.new #channel "MAPNAME GOES HERE"',
-                'gn.new #channel "MAPNAME GOES HERE" Y ANY ANY 0 0 1 N N',
+                'sub.new "Ice Baneling Escape" #channel',
+                'sub.new "Scion Custom Races (Mod)" #channel',
             ],
             args: [
                 {
-                    key: 'targetChannel',
-                    type: 'channel',
-                    prompt: 'Designate channel on which to post notifications',
-                },
-                {
                     key: 'mapName',
                     type: 'string',
-                    prompt: 'Provide name of the map (or substring)',
+                    prompt: 'Provide full name of the map or an extension mod',
                     min: 3,
                     max: 64,
+                },
+                {
+                    key: 'targetChannel',
+                    type: 'channel',
+                    prompt: 'Specify a text channel where the reported lobbies should be posted',
+                },
+            ],
+        }, info);
+        if (info.dmOnly) {
+            info.args = info.args.filter(x => x.key !== 'targetChannel');
+        }
+        super(client, info);
+    }
+
+    public async exec(msg: CommandMessage, args: SubscriptionArgs) {
+        const sub = new DsGameLobbySubscription();
+        if (msg.channel instanceof TextChannel) {
+            const chan = msg.channel;
+            sub.guildId = chan.guild.id;
+            if (args.targetChannel) {
+                sub.channelId = args.targetChannel.id;
+            }
+            else {
+                sub.channelId = msg.channel.id;
+            }
+        }
+        else if (msg.channel instanceof DMChannel) {
+            const chan = msg.channel;
+            sub.userId = chan.recipient.id;
+        }
+        else {
+            throw new FriendlyError('Unsupported channel type');
+        }
+
+        sub.mapName = args.mapName;
+        await this.client.conn.getRepository(DsGameLobbySubscription).save(sub);
+        this.lreporter.trackRules.set(sub.id, sub);
+        this.lreporter.testSubscription(sub);
+
+        return msg.reply(stripIndents`
+            Success! Subscription has been setup, assigned ID: \`${sub.id}\`.
+            From now on you'll be reported about game lobbies which match the configuration.
+            To customize its parameters use \`.sub.config ${sub.id}\`.
+        `);
+    }
+}
+
+class SubscriptionNewDmCommand extends SubscriptionNewCommand {
+    constructor(client: DsBot) {
+        const info: ExtendedCommandInfo = {
+            name: 'sub.new.dm',
+            guildOnly: false,
+            dmOnly: true,
+            examples: [
+                'sub.new.dm "Ice Baneling Escape"',
+                'sub.new.dm "Scion Custom Races (Mod)"',
+            ],
+        };
+        super(client, info);
+        this.description += ' (via DM)';
+    }
+}
+
+class SubscriptionConfigCommand extends AbstractSubscriptionCommand {
+    constructor(client: DsBot) {
+        super(client, {
+            name: 'sub.config',
+            description: 'Configure existing subscription.',
+            group: 'subscriptions',
+            userPermissions: ['MANAGE_GUILD'],
+            args: [
+                {
+                    key: 'id',
+                    type: 'integer',
+                    prompt: 'Provie identifier of a subscription',
                 },
                 {
                     key: 'isMapNameExact',
@@ -55,7 +157,7 @@ class NotificationNewCommand extends GeneralCommand {
                 {
                     key: 'region',
                     type: 'string',
-                    prompt: 'Designate game region [US/EU/KR/ANY]',
+                    prompt: 'Designate game region [`US` | `EU` | `KR` | `ANY`]',
                     validate: (val: string): boolean => {
                         val = val.toUpperCase();
                         if (val === 'ANY') return true;
@@ -71,7 +173,7 @@ class NotificationNewCommand extends GeneralCommand {
                 {
                     key: 'variant',
                     type: 'string',
-                    prompt: 'Name of game variant [Use `ANY` to ignore this requirement]',
+                    prompt: 'Name of game variant [`ANY` to ignore this requirement]',
                     max: 64,
                     parse: (val: string) => {
                         if (val.trim().toUpperCase() === 'ANY') {
@@ -81,104 +183,74 @@ class NotificationNewCommand extends GeneralCommand {
                     },
                 },
                 {
+                    key: 'deleteMessageStarted',
+                    type: 'boolean',
+                    prompt: 'Should the message be deleted once game has started? [`YES` | `NO`]',
+                },
+                {
+                    key: 'deleteMessageAbandoned',
+                    type: 'boolean',
+                    prompt: 'Should the message be deleted if lobby is abandoned? [`YES` | `NO`]',
+                },
+                {
                     key: 'timeDelay',
                     type: 'integer',
-                    prompt: 'For how long should game lobby be open before posting notification (in seconds)? [Use \`0\` to ignore this requirement]',
+                    prompt: 'For how long should game lobby be open before posting (in seconds)?',
                     min: 0,
                     max: 3600,
+                    default: 0,
                 },
                 {
                     key: 'humanSlotsMin',
                     type: 'integer',
-                    prompt: 'How many players must join the lobby before posting notification? [Use \`0\` to ignore this requirement]',
+                    prompt: 'How many players must join the lobby before posting?',
                     min: 0,
                     max: 16,
+                    default: 0,
                 },
                 {
                     key: 'showLeavers',
                     type: 'boolean',
-                    prompt: 'Show players who left the lobby in addition to active ones? [Yes/No]',
-                },
-                {
-                    key: 'deleteMessageStarted',
-                    type: 'boolean',
-                    prompt: 'Should the message be deleted once game has started? [Yes/No]',
-                },
-                {
-                    key: 'deleteMessageDisbanded',
-                    type: 'boolean',
-                    prompt: 'Should the message be deleted if lobby is disbanded? [Yes/No]',
+                    prompt: 'Show complete list of players who left the lobby in addition to active ones? [`YES` | `NO`]',
+                    default: false,
                 },
             ],
-        }, info);
-        if (info.dmOnly) {
-            info.args = info.args.splice(1);
-        }
-        super(client, info);
+        });
     }
 
-    public async exec(msg: CommandMessage, args: NotificationSubscribeArgs) {
-        const rule = new DsGameLobbySubscription();
-        if (msg.channel instanceof TextChannel) {
-            const chan = msg.channel;
-            const rcount = await this.client.conn.getRepository(DsGameLobbySubscription).count({ guildId: chan.guild.id, enabled: true });
-            if (chan.guild.memberCount <= (5 * rcount) && !this.client.isOwner(msg.author)) {
-                return msg.reply(`Exceeded curent limit - one subscription per 5 members of the guild. (Limit might be lifted in the future).`);
-            }
-            rule.guildId = chan.guild.id;
-            rule.channelId = args.targetChannel.id;
+    public async exec(msg: CommandMessage, args: { id: number } & SubscriptionArgs) {
+        const sub = this.getChannelSubscription(msg.channel, args.id);
+        if (!sub) {
+            return msg.reply('Incorrect ID');
         }
-        else if (msg.channel instanceof DMChannel) {
-            const chan = msg.channel;
-            const rcount = await this.client.conn.getRepository(DsGameLobbySubscription).count({ userId: chan.recipient.id, enabled: true });
-            if (10 <= rcount && !this.client.isOwner(msg.author)) {
-                return msg.reply(`Exceeded curent limit - 10 subscriptions per user. (Limit might be lifted in the future).`);
-            }
-            rule.userId = chan.recipient.id;
+
+        sub.isMapNamePartial = !args.isMapNameExact;
+        if (args.region) {
+            sub.region = await this.client.conn.getRepository(S2Region).findOneOrFail({ code: args.region });
         }
         else {
-            throw new FriendlyError('Unsupported channel type');
+            sub.region = null;
         }
+        sub.variant = args.variant;
+        sub.timeDelay = args.timeDelay;
+        sub.humanSlotsMin = args.humanSlotsMin;
+        sub.showLeavers = args.showLeavers;
+        sub.deleteMessageStarted = args.deleteMessageStarted;
+        sub.deleteMessageAbandoned = args.deleteMessageAbandoned;
+        await this.client.conn.getRepository(DsGameLobbySubscription).save(sub);
+        this.lreporter.trackRules.set(sub.id, sub);
 
-        rule.mapName = args.mapName;
-        rule.isMapNamePartial = !args.isMapNameExact;
-        if (args.region) {
-            rule.region = await this.client.conn.getRepository(S2Region).findOneOrFail({ code: args.region });
-        }
-        rule.variant = args.variant;
-        rule.timeDelay = args.timeDelay || null;
-        rule.humanSlotsMin = args.humanSlotsMin || null;
-        rule.showLeavers = args.showLeavers;
-        rule.deleteMessageStarted = args.deleteMessageStarted;
-        rule.deleteMessageDisbanded = args.deleteMessageDisbanded;
-        await this.client.conn.getRepository(DsGameLobbySubscription).save(rule);
-        this.client.tasks.lreporter.trackRules.set(rule.id, rule);
-
-        return msg.reply(stripIndents`
-            Success! Subscription has been setup, assigned ID: \`${rule.id}\`.
-            From now on you'll be reported about **new** game lobbies which match the configuration.
-            To verify its parameters use \`gn.list\`.
-        `);
+        await this.client.conn.getRepository(DsGameLobbySubscription).update(args.id, { enabled: false });
+        return msg.reply('Subscription reconfigured. You can use `.sub.list` to verify its parameters.');
     }
 }
 
-class NotificationNewDmCommand extends NotificationNewCommand {
-    constructor(client: DsBot) {
-        const info: ExtendedCommandInfo = {
-            name: 'gn.newdm',
-            guildOnly: false,
-            dmOnly: true,
-        };
-        super(client, info);
-        this.description += ' (via DM)';
-    }
-}
-
-class NotificationDeleteCommand extends GeneralCommand {
+class SubscriptionDeleteCommand extends AbstractSubscriptionCommand {
     constructor(client: DsBot) {
         super(client, {
-            name: 'gn.del',
+            name: 'sub.del',
             description: 'Remove existing subscription.',
+            group: 'subscriptions',
             userPermissions: ['MANAGE_GUILD'],
             args: [
                 {
@@ -191,38 +263,22 @@ class NotificationDeleteCommand extends GeneralCommand {
     }
 
     public async exec(msg: CommandMessage, args: { id: number }) {
-        const subscription = this.client.tasks.lreporter.trackRules.get(args.id);
-        if (!subscription) {
+        const sub = this.getChannelSubscription(msg.channel, args.id);
+        if (!sub) {
             return msg.reply('Incorrect ID');
         }
-
-        if (msg.channel instanceof TextChannel) {
-            const chan = msg.channel;
-            if (subscription.guildId !== chan.guild.id) {
-                return msg.reply('Incorrect ID');
-            }
-        }
-        else if (msg.channel instanceof DMChannel) {
-            const chan = msg.channel;
-            if (subscription.userId !== chan.recipient.id) {
-                return msg.reply('Incorrect ID');
-            }
-        }
-        else {
-            throw new FriendlyError('Unsupported channel type');
-        }
-
-        this.client.tasks.lreporter.trackRules.delete(args.id);
+        this.lreporter.trackRules.delete(args.id);
         await this.client.conn.getRepository(DsGameLobbySubscription).update(args.id, { enabled: false });
-        return msg.reply('Done');
+        return msg.reply('Subscription removed.');
     }
 }
 
-class NotificationListCommand extends GeneralCommand {
+class SubscriptionListCommand extends AbstractSubscriptionCommand {
     constructor(client: DsBot) {
         super(client, {
-            name: 'gn.list',
+            name: 'sub.list',
             description: 'List your existing subscriptions.',
+            group: 'subscriptions',
             userPermissions: ['MANAGE_GUILD'],
         });
     }
@@ -232,13 +288,13 @@ class NotificationListCommand extends GeneralCommand {
 
         if (msg.channel instanceof TextChannel) {
             const chan = msg.channel;
-            rules = Array.from(this.client.tasks.lreporter.trackRules.values()).filter(x => {
+            rules = Array.from(this.lreporter.trackRules.values()).filter(x => {
                 return x.guildId === chan.guild.id;
             });
         }
         else if (msg.channel instanceof DMChannel) {
             const chan = msg.channel;
-            rules = Array.from(this.client.tasks.lreporter.trackRules.values()).filter(x => {
+            rules = Array.from(this.lreporter.trackRules.values()).filter(x => {
                 return x.userId === chan.recipient.id;
             });
         }
@@ -257,19 +313,19 @@ class NotificationListCommand extends GeneralCommand {
 
         for (const rsub of rules) {
             rembed.fields.push({
-                name: `Sub ID: **${rsub.id}**`,
+                name: `Subscription ID: **${rsub.id}**`,
                 value: formatObjectAsMessage({
                     'Created at': rsub.createdAt.toUTCString(),
                     'Channel': (<TextChannel>this.client.channels.get(rsub.channelId))?.name,
-                    'Map name': rsub.mapName,
-                    'Partial match of map name': rsub.isMapNamePartial,
+                    'Name of the map/mod': rsub.mapName,
+                    'Partial match of the name': rsub.isMapNamePartial,
                     'Region': rsub?.region?.code ?? 'ANY',
                     'Map variant': rsub?.variant ?? 'ANY',
-                    'Delay of a notification': Number(rsub.timeDelay),
+                    'Delay before posting (in seconds)': Number(rsub.timeDelay),
                     'Minimum number of human slots': Number(rsub.humanSlotsMin),
                     'Show players who left the lobby': rsub.showLeavers,
                     'Delete message after start': rsub.deleteMessageStarted,
-                    'Delete message if disbanded': rsub.deleteMessageDisbanded,
+                    'Delete message if abandoned': rsub.deleteMessageAbandoned,
                 }),
                 inline: false,
             });
@@ -279,28 +335,30 @@ class NotificationListCommand extends GeneralCommand {
     }
 }
 
-class NotificationReloadCommand extends GeneralCommand {
+class SubscriptionReloadCommand extends AbstractSubscriptionCommand {
     constructor(client: DsBot) {
         super(client, {
-            name: 'gn.reload',
+            name: 'sub.reload',
+            group: 'admin',
             ownerOnly: true,
         });
     }
 
     public async exec(msg: CommandMessage) {
-        await this.client.tasks.lreporter.reloadSubscriptions();
-        return msg.reply(`Done. Active subscriptions count: ${this.client.tasks.lreporter.trackRules.size}.`);
+        await this.lreporter.reloadSubscriptions();
+        return msg.reply(`Done. Active subscriptions count: ${this.lreporter.trackRules.size}.`);
     }
 }
 
 export class SubscriptionsTask extends BotTask {
     async load() {
         this.client.registry.registerCommands([
-            NotificationNewCommand,
-            NotificationNewDmCommand,
-            NotificationDeleteCommand,
-            NotificationListCommand,
-            NotificationReloadCommand,
+            SubscriptionNewCommand,
+            SubscriptionNewDmCommand,
+            SubscriptionConfigCommand,
+            SubscriptionDeleteCommand,
+            SubscriptionListCommand,
+            SubscriptionReloadCommand,
         ]);
     }
 }
