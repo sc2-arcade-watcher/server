@@ -141,7 +141,7 @@ export class JournalFeed {
             }, 3000);
             this.rs = this.tailProc.stdout as fs.ReadStream;
         }
-        this.rs.on('readable', () => { logger.verbose(`readstream: readable fname=${this.currFilename} length=${this.rs.readableLength}`); });
+        // this.rs.on('readable', () => { logger.verbose(`readstream: readable fname=${this.currFilename} length=${this.rs.readableLength}`); });
         this.rs.on('end', () => { logger.verbose(`readstream: end fname=${this.currFilename} length=${this.rs.readableLength}`); });
         this.rs.on('error', (err) => { throw err; });
         this.rs.on('close', () => { logger.verbose(`readstream: close fname=${this.currFilename}`); });
@@ -174,9 +174,9 @@ export class JournalFeed {
             this.chunkPos = chunkEnd + 1;
             this.cursor.offset += Buffer.byteLength(line) + 2;
 
-            if (this.tailProc && line.startsWith('QUIT')) {
-                this.closeCurrentStream();
-            }
+            // if (this.tailProc && line.startsWith('QUIT')) {
+            //     this.closeCurrentStream();
+            // }
 
             if (this.dataTimeout) {
                 this.dataTimeout.refresh();
@@ -234,13 +234,14 @@ export class JournalFeed {
             }
         }
 
+        let readTimeoutCounter = 0;
         while (1) {
             if (!this.rs) {
                 await this.refreshFileList();
 
                 const fSize = (await fs.stat(this.currFilename)).size;
                 if (!this.isCurrSessionLast()) {
-                    if (fSize <= this.cursor.offset) {
+                    if (fSize < this.cursor.offset) {
                         throw new Error(
                             `offset past the filesize, src=${this.name} cursor=${this.currCursor} size=${fSize}`
                         );
@@ -264,7 +265,7 @@ export class JournalFeed {
             if (this.rs.readable && !this.rs.readableLength) {
                 if (this.waitingForData) { return; }
                 try {
-                    logger.debug(`waiting for readable on ${this.name}`);
+                    // logger.debug(`waiting for readable on ${this.name}`);
                     await new Promise((resolve, reject) => {
                         let tm: NodeJS.Timer;
                         const tmprs = this.rs;
@@ -280,10 +281,14 @@ export class JournalFeed {
                     });
                 }
                 catch (e) {
+                    if (this.closed) {
+                        return;
+                    }
+
                     const fSize = (await fs.stat(this.currFilename)).size;
                     if (this.tailProc && fSize === this.cursor.offset) {
                         this.waitingForData = true;
-                        logger.warn(`nothing to read: src=${this.name} cursor=${this.currCursor} fsize=${fSize}`);
+                        logger.debug(`nothing to read: src=${this.name} cursor=${this.currCursor} fsize=${fSize}`);
                         return;
                     }
                     else if (!this.tailProc && fSize === this.cursor.offset) {
@@ -292,17 +297,20 @@ export class JournalFeed {
                         this.cursor.offset = 0;
                         continue;
                     }
-                    else if (this.closed) {
-                        return;
-                    }
                     else {
-                        throw new Error('wtf aa');
+                        ++readTimeoutCounter;
+                        logger.error(`Feed read timeout, c=${readTimeoutCounter} src=${this.name} cursor=${this.currCursor} fsize=${fSize} tailProc=${Boolean(this.tailProc)}`);
+                        if (readTimeoutCounter > 10) {
+                            throw new Error(`Feed read attempts exceeded, src=${this.name} cursor=${this.currCursor}`);
+                        }
+                        continue;
                     }
                 }
             }
 
             const tmp = this.rs.read();
             if (tmp instanceof Buffer) {
+                readTimeoutCounter = 0;
                 this.chunkBuff = tmp;
                 this.chunkPos = 0;
                 this.waitingForData = false;
@@ -311,19 +319,34 @@ export class JournalFeed {
             else if (!tmp) {
                 logger.info(`waiting for end: src=${this.name} cursor=${this.currCursor}`);
                 if (this.rs.readable) {
-                    await new Promise((resolve, reject) => {
-                        let tm: NodeJS.Timer;
-                        const ronce = () => {
-                            clearTimeout(tm);
-                            resolve();
-                        };
-                        const tmprs = this.rs;
-                        tm = setTimeout(() => {
-                            tmprs.off('end', ronce);
-                            reject(`stream end timeout`);
-                        }, timeout);
-                        tmprs.once('end', ronce);
-                    });
+                    try {
+                        await new Promise((resolve, reject) => {
+                            let tm: NodeJS.Timer;
+                            const ronce = () => {
+                                clearTimeout(tm);
+                                resolve();
+                            };
+                            const tmprs = this.rs;
+                            tm = setTimeout(() => {
+                                tmprs.off('end', ronce);
+                                reject();
+                            }, timeout);
+                            tmprs.once('end', ronce);
+                        });
+                    }
+                    catch (err) {
+                        ++readTimeoutCounter;
+                        logger.error(`Feed end timeout, src=${this.name} cursor=${this.currCursor}`, {
+                            readable: this.rs.readable,
+                            readableLength: this.rs.readableLength,
+                            bytesRead: this.rs.bytesRead,
+                            destroyed: this.rs.destroyed,
+                        });
+                        if (readTimeoutCounter > 10) {
+                            throw new Error(`Feed end timeout attempts exceeded, src=${this.name} cursor=${this.currCursor}`);
+                        }
+                        continue;
+                    }
                 }
                 this.closeCurrentStream();
 
