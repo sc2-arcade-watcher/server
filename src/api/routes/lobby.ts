@@ -26,9 +26,9 @@ export const lobbyRouter = fp(async (server, opts, next) => {
 
                 - It's possible to have a human slot without \`profile\` linked (in which case it'll be \`null\`). It very rarely happens but you need to take it into account.
 
-                - Maximum amount of slots is 16. But only 15 can be occupied by either human or an AI. There's at least one map on the Battle.net with 16 slots open, which shouldn't be possible, as SC2 is limited to 15 players. But the slot will still appears as open.
+                - Maximum amount of slots is 16. But only 15 can be occupied by either human or an AI. There's at least one map on the Battle.net with 16 slots open, which shouldn't be possible, as SC2 is limited to 15 players. But the slot still appears as open.
 
-                - Property \`slotsUpdatedAt\` indicates when the \`slots\` data has changed the last time - not when it was "checked" by the sc2 bot last time. Thus if no player join or leave it will stay remain the same.
+                - Property \`slotsUpdatedAt\` indicates when the \`slots\` data has changed the last time - not when it was "checked" by the sc2 bot last time. Thus if no player join or leave it will remain the same.
 
                 - Sometimes lobby might be flagged as started and then re-appear as open again, and it's not a bug. I believe it happens when status of the lobby becomes locked on the Battle.net - when its starting counter goes down to 3 (?). Then if player forcefully leaves, the game won't start and lobby will again appear on the list as \`open\`
 
@@ -36,12 +36,21 @@ export const lobbyRouter = fp(async (server, opts, next) => {
             `,
         },
     }, async (request, reply) => {
-        const result = await server.conn.getRepository(S2GameLobby)
+        const qb = server.conn.getRepository(S2GameLobby)
             .createQueryBuilder('lobby')
             .select([
                 'lobby.regionId',
                 'lobby.bnetBucketId',
                 'lobby.bnetRecordId',
+                'lobby.mapBnetId',
+                'lobby.mapMajorVersion',
+                'lobby.mapMinorVersion',
+                'lobby.extModBnetId',
+                'lobby.extModMajorVersion',
+                'lobby.extModMinorVersion',
+                'lobby.multiModBnetId',
+                'lobby.multiModMajorVersion',
+                'lobby.multiModMinorVersion',
                 'lobby.createdAt',
                 'lobby.closedAt',
                 'lobby.status',
@@ -70,6 +79,19 @@ export const lobbyRouter = fp(async (server, opts, next) => {
                 'profile.name',
                 'profile.discriminator',
             ])
+        ;
+        qb.leftJoin('lobby.joinHistory', 'joinHistory');
+        qb.leftJoin('joinHistory.profile', 'joinHistoryProfile');
+        qb.addSelect([
+            'joinHistory.joinedAt',
+            'joinHistory.leftAt',
+            'joinHistoryProfile.regionId',
+            'joinHistoryProfile.realmId',
+            'joinHistoryProfile.profileId',
+            'joinHistoryProfile.name',
+            'joinHistoryProfile.discriminator',
+        ]);
+        const result = await qb
             .andWhere('lobby.status = :status OR lobby.closedAt >= FROM_UNIXTIME(UNIX_TIMESTAMP()-20)', { status: GameLobbyStatus.Open })
             .addOrderBy('lobby.createdAt', 'ASC')
             .addOrderBy('slot.slotNumber', 'ASC')
@@ -105,6 +127,7 @@ export const lobbyRouter = fp(async (server, opts, next) => {
             .innerJoinAndSelect('mapDocVer.document', 'mapDoc')
             .innerJoinAndSelect('mapDoc.category', 'mapCategory')
             .leftJoinAndSelect('lobby.slots', 'slot')
+            .leftJoinAndSelect('slot.joinInfo', 'joinInfo')
             .andWhere('slot.kind = :kind', { kind: S2GameLobbySlotKind.Human })
             .andWhere('lobby.status = :status OR lobby.closedAt >= FROM_UNIXTIME(UNIX_TIMESTAMP()-20)', { status: GameLobbyStatus.Open })
             .addOrderBy('lobby.createdAt', 'ASC')
@@ -113,6 +136,9 @@ export const lobbyRouter = fp(async (server, opts, next) => {
         ;
 
         result.map(s2lobby => {
+            if (s2lobby.status === GameLobbyStatus.Abandoned) {
+                (<any>s2lobby).status = 'disbanded';
+            }
             (<any>s2lobby).mapVariantCategory = s2lobby.mapDocumentVersion.document.category.name;
             (<any>s2lobby).players = s2lobby.slots.map(s2slot => {
                 if (s2slot.kind !== S2GameLobbySlotKind.Human) return;
@@ -188,28 +214,28 @@ export const lobbyRouter = fp(async (server, opts, next) => {
                         type: 'number',
                     },
                 },
-                querystring: {
-                    type: 'object',
-                    properties: {
-                        orderDirection: {
-                            type: 'string',
-                            enum: [
-                                'asc',
-                                'desc',
-                            ],
-                            default: 'desc',
-                        },
-                        status: {
-                            type: 'string',
-                            enum: [
-                                'any',
-                                'open',
-                                'started',
-                                'abandoned',
-                                'unknown',
-                            ],
-                            default: 'any',
-                        },
+            },
+            querystring: {
+                type: 'object',
+                properties: {
+                    orderDirection: {
+                        type: 'string',
+                        enum: [
+                            'asc',
+                            'desc',
+                        ],
+                        default: 'desc',
+                    },
+                    status: {
+                        type: 'string',
+                        enum: [
+                            'any',
+                            'open',
+                            'started',
+                            'abandoned',
+                            'unknown',
+                        ],
+                        default: 'any',
                     },
                 },
             },
@@ -231,7 +257,7 @@ export const lobbyRouter = fp(async (server, opts, next) => {
             .andWhere('lobby.regionId = :regionId', { regionId: request.params.regionId })
             .andWhere('lobby.mapBnetId = :bnetId', { bnetId: request.params.mapId })
         ;
-        if (request.query.status) {
+        if (request.query.status && request.query.status !== 'any') {
             qb.andWhere('lobby.status = :status', { status: request.query.status });
         }
         else {

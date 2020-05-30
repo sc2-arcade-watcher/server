@@ -136,7 +136,7 @@ server.register(fastifyOAS, <fastifyOAS.FastifyOASOptions>{
         },
         servers: [
             {
-                url: process.env.ENV === 'dev' ? `http://localhost:${webapiPort}` : `http://sc2arcade.talv.space:${webapiPort}/api`,
+                url: process.env.ENV === 'dev' ? `http://localhost:${webapiPort}` : `http://sc2arcade.talv.space/api`,
                 description: process.env.ENV ?? ''
             },
         ],
@@ -198,7 +198,7 @@ server.get('/maps/:regionId', {
     return reply.type('application/json').code(200).sendWithPagination({ count: count, page: stripEntityIds(result) });
 });
 
-server.get('/maps/:region/:mapId', {
+server.get('/maps/:regionId/:mapId', {
     schema: {
         tags: ['Maps'],
         summary: 'Details about specific map',
@@ -218,10 +218,11 @@ server.get('/maps/:region/:mapId', {
 }, async (request, reply) => {
     const result = await server.conn.getRepository(S2Document)
         .createQueryBuilder('mapDoc')
+        .innerJoinAndSelect('mapDoc.category', 'category')
         .innerJoinAndMapOne('mapDoc.currentVersion', 'mapDoc.docVersions', 'currentVersion', 'currentVersion.document = mapDoc.id')
         .andWhere('(currentVersion.majorVersion = mapDoc.currentMajorVersion AND currentVersion.minorVersion = mapDoc.currentMinorVersion)')
         .innerJoinAndSelect('mapDoc.docVersions', 'mapDocVer')
-        .andWhere('mapDoc.region = :region', { region: request.params.region })
+        .andWhere('mapDoc.regionId = :regionId', { regionId: request.params.regionId })
         .andWhere('mapDoc.bnetId = :bnetId', { bnetId: request.params.mapId })
         .addOrderBy('mapDocVer.majorVersion', 'DESC')
         .addOrderBy('mapDocVer.minorVersion', 'DESC')

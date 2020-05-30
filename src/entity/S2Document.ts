@@ -56,6 +56,9 @@ export class S2Document {
     })
     category: S2MapCategory;
 
+    @Column()
+    categoryId: number;
+
     @OneToMany(type => S2DocumentVersion, documentVersion => documentVersion.document, {
         cascade: false,
     })
