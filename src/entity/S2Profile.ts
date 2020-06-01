@@ -7,6 +7,12 @@ export class S2Profile {
     @PrimaryGeneratedColumn()
     id: number;
 
+    @Column({
+        nullable: true,
+    })
+    @Index()
+    updatedAt: Date;
+
     @ManyToOne(type => S2Region, {
         nullable: false,
         eager: false,

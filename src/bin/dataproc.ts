@@ -231,7 +231,7 @@ class DataProc {
 
         const newS2profiles = await Promise.all(lobbyData.slots.map(slot => {
             if (!slot.profile) return null;
-            return this.fetchOrCreateProfile(slot.profile);
+            return this.fetchOrCreateProfile(slot.profile, lobbyData.slotsPreviewUpdatedAt);
         }));
 
         await this.conn.transaction(async tsManager => {
@@ -307,7 +307,7 @@ class DataProc {
         return true;
     }
 
-    async fetchOrCreateProfile(infoProfile: Omit<S2Profile, 'id' | 'region' | 'regionId'> & { regionId: number }) {
+    async fetchOrCreateProfile(infoProfile: Pick<S2Profile, 'regionId' | 'realmId' | 'profileId' | 'name' | 'discriminator'>, updatedAt: Date) {
         const profKey = `${infoProfile.realmId}-${infoProfile.profileId}`;
         let s2profile = this.profilesCache.get(profKey);
         if (!s2profile) {
@@ -320,11 +320,27 @@ class DataProc {
             });
             if (!s2profile) {
                 s2profile = new S2Profile();
+                s2profile.updatedAt = updatedAt;
                 Object.assign(s2profile, infoProfile);
                 await this.conn.getRepository(S2Profile).insert(s2profile);
             }
+            this.profilesCache.set(profKey, s2profile);
         }
-        this.profilesCache.set(profKey, s2profile);
+
+        if (
+            (s2profile.name !== infoProfile.name || s2profile.discriminator !== infoProfile.discriminator) &&
+            (s2profile.updatedAt === null || s2profile.updatedAt < updatedAt)
+        ) {
+            logger.verbose(`Updating profile name from ${s2profile.name}#${s2profile.discriminator} to ${infoProfile.name}#${infoProfile.discriminator}`);
+            const updateData: Partial<S2Profile> = {
+                name: infoProfile.name,
+                discriminator: infoProfile.discriminator,
+                updatedAt: updatedAt,
+            };
+            Object.assign(s2profile, updateData);
+            await this.conn.getRepository(S2Profile).update(s2profile, updateData);
+        }
+
         return s2profile;
     }
 

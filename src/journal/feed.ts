@@ -127,16 +127,8 @@ export class JournalFeed {
                     this.dataTimeout.refresh();
                 }
                 else {
-                    logger.warn('tailProc timeout, new file detected');
-                    // this.closeCurrentStream();
-                    if (this.dataTimeout) {
-                        clearInterval(this.dataTimeout);
-                        this.dataTimeout = void 0;
-                    }
-                    if (this.tailProc) {
-                        this.tailProc.kill('SIGTERM');
-                        this.tailProc = void 0;
-                    }
+                    logger.warn(`tailProc timeout, src=${this.name} cursor=${this.currCursor}, new file detected`);
+                    this.closeCurrentStream();
                 }
             }, 3000);
             this.rs = this.tailProc.stdout as fs.ReadStream;
@@ -288,7 +280,7 @@ export class JournalFeed {
                     const fSize = (await fs.stat(this.currFilename)).size;
                     if (this.tailProc && fSize === this.cursor.offset) {
                         this.waitingForData = true;
-                        logger.debug(`nothing to read: src=${this.name} cursor=${this.currCursor} fsize=${fSize}`);
+                        // logger.debug(`nothing to read: src=${this.name} cursor=${this.currCursor} fsize=${fSize}`);
                         return;
                     }
                     else if (!this.tailProc && fSize === this.cursor.offset) {
