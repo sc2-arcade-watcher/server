@@ -177,7 +177,7 @@ export abstract class BotTask {
     async unload() {}
 }
 
-export function formatObjectAsMessage(inp: {[k: string]: any}) {
+export function formatObjectAsMessage(inp: {[k: string]: any}, escape: boolean = true) {
     const longestKey = Math.max(...Object.keys(inp).map(x => x.length));
     const out: string[] = [];
     for (const [key, val] of Object.entries(inp)) {
@@ -191,7 +191,12 @@ export function formatObjectAsMessage(inp: {[k: string]: any}) {
             x = String(val);
         }
         // out.push(`${key.padStart(longestKey)} = ${x}`);
-        out.push(`${key} = \`${x}\``);
+        if (escape) {
+            out.push(`${key} = \`${x}\``);
+        }
+        else {
+            out.push(`${key} = ${x}`);
+        }
     }
     return out.join('\n');
 }

@@ -3,6 +3,7 @@ import { S2GameLobby } from '../../entity/S2GameLobby';
 import { logger, logIt } from '../../logger';
 import { sleep, sleepUnless } from '../../helpers';
 import { GameLobbyStatus } from '../../gametracker';
+import { S2GameLobbySlotKind } from '../../entity/S2GameLobbySlot';
 
 export class StatusTask extends BotTask {
     async load() {
@@ -15,15 +16,10 @@ export class StatusTask extends BotTask {
     protected async update() {
         this.running = true;
         while (await this.waitUntilReady()) {
-            for (let i = 0; i < 2 && !this.client.doShutdown; ++i) {
-                await this.showOpenLobbyCount();
-                await sleepUnless(10000, () => !this.client.doShutdown);
-            }
-            // FIXME:
-            // for (let i = 0; i < 1 && !this.client.doShutdown; ++i) {
-            //     await this.showNumberOfRecentGames();
-            //     await sleepUnless(20000, () => !this.client.doShutdown);
-            // }
+            await this.showOpenLobbyCount();
+            await sleepUnless(8000, () => !this.client.doShutdown);
+            await this.showNumberOfRecentGames();
+            await sleepUnless(8000, () => !this.client.doShutdown);
         }
         this.running = false;
     }
@@ -57,6 +53,7 @@ export class StatusTask extends BotTask {
         await this.client.user.setActivity([
             `Open lobbies:\n  US:${result.lobbyCountUS} EU:${result.lobbyCountEU} KR:${result.lobbyCountKR}`,
             `Awaiting players:\n  US:${result.playerCountUS} EU:${result.playerCountEU} KR:${result.playerCountKR}`,
+            `Send .help command to learn about the bot.`,
         ].join('\n'), { type: 'WATCHING' });
     }
 
@@ -70,11 +67,13 @@ export class StatusTask extends BotTask {
         const result: rType = await this.conn.getRepository(S2GameLobby)
             .createQueryBuilder('lobby')
             .select([])
-            .leftJoin('lobby.players', 'player', 'player.lobby = lobby.id AND player.leftAt IS NULL')
+            .leftJoin('lobby.slots', 'slot')
             .addSelect('COUNT(DISTINCT(lobby.id))', 'totalGames')
-            .addSelect('COUNT(DISTINCT(player.name))', 'totalPlayers')
+            .addSelect('COUNT(DISTINCT(slot.profile_id))', 'totalPlayers')
             .andWhere('status = :status', { status: GameLobbyStatus.Started })
-            .andWhere('created_at >= FROM_UNIXTIME(UNIX_TIMESTAMP()-3600*1)')
+            .andWhere('closed_at >= FROM_UNIXTIME(UNIX_TIMESTAMP()-3600*1)')
+            .andWhere('slot.kind = :kind', { kind: S2GameLobbySlotKind.Human })
+            .cache(60000)
             .getRawOne()
         ;
 

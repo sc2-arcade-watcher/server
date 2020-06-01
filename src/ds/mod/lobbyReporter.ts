@@ -45,7 +45,7 @@ class TrackedGameLobby {
     isClosedStatusConcluded() {
         if (this.lobby.status === GameLobbyStatus.Open) return false;
         const tdiff = Date.now() - this.lobby.closedAt.getTime();
-        return tdiff > 30000;
+        return tdiff > 20000;
     }
 }
 
@@ -189,10 +189,7 @@ export class LobbyReporterTask extends BotTask {
             (!sub.region || sub.region.id === s2gm.region.id)
         ) {
             trackedLobby.candidates.add(sub);
-        }
-
-        if (trackedLobby.candidates.size > 0) {
-            logger.info(`New lobby ${s2gm.region.code}#${s2gm.bnetRecordId} for "${s2gm.mapDocumentVersion.document.name}". Matching rules=${trackedLobby.candidates.size}`);
+            logger.info(`New lobby ${s2gm.region.code}#${s2gm.bnetRecordId} for "${s2gm.mapDocumentVersion.document.name}". subId=${sub.id}`);
         }
     }
 
@@ -228,11 +225,20 @@ export class LobbyReporterTask extends BotTask {
     protected async updateTrackedLobbies() {
         if (!this.trackedLobbies.size) return;
 
-        // filter to only those which have been already posted
-        // or have a matching subscription which did not yet meet its critera
+        // filter to those which meet at least one condition:
+        // - have been already posted
+        // - have a matching subscription which did not yet meet its critera
+        // - have not been checked within the last 5 min
+        const tnow = Date.now();
         const trackedLobbiesRelevant = Array.from(this.trackedLobbies.values())
-            .filter(x => x.postedMessages.size > 0 || x.candidates.size > 0)
+            .filter(x => (
+                x.postedMessages.size > 0 ||
+                x.candidates.size > 0 ||
+                (tnow - x.lobby.snapshotUpdatedAt.getTime()) > (1000 * 60 * 5)
+            ))
         ;
+
+        if (!trackedLobbiesRelevant.length) return;
 
         // fetch only IDs of lobbies which have newer data
         const affectedLobIds: number[] = [];
@@ -243,7 +249,18 @@ export class LobbyReporterTask extends BotTask {
             .getMany()
         ;
         for (const lsnapshot of lobbyDataSnapshot) {
-            const lobby = this.trackedLobbies.get(lsnapshot.id).lobby;
+            const trackedLobby = this.trackedLobbies.get(lsnapshot.id);
+
+            // remove closed lobbies if they haven't been posted - there's no message to update
+            if (
+                lsnapshot.status !== GameLobbyStatus.Open &&
+                trackedLobby.postedMessages.size === 0
+            ) {
+                this.trackedLobbies.delete(lsnapshot.id);
+                continue;
+            }
+
+            const lobby = trackedLobby.lobby;
             if (
                 lobby.status !== lsnapshot.status ||
                 lobby.snapshotUpdatedAt?.getTime() !== lsnapshot.snapshotUpdatedAt?.getTime() ||
@@ -256,7 +273,7 @@ export class LobbyReporterTask extends BotTask {
         // also include closed lobbies which have't actually changed but require update of a post for other reasons
         // such as deleting messages after X seconds from when they've been orginally closed
         const outdatedLobIds = affectedLobIds.concat(
-            trackedLobbiesRelevant.filter(x => x.postedMessages.size > 0 && x.isClosedStatusConcluded()).map(x => x.lobby.id)
+            trackedLobbiesRelevant.filter(x => x.isClosedStatusConcluded()).map(x => x.lobby.id)
         );
 
         logger.verbose(`Lobbies: affected count=${affectedLobIds.length}, outdated count=${outdatedLobIds.length}`);
@@ -272,6 +289,7 @@ export class LobbyReporterTask extends BotTask {
         let updateCount = 0;
         await Promise.all(freshLobbyInfo.map(async lobbyInfo => {
             const trackedLobby = this.trackedLobbies.get(lobbyInfo.id);
+            if (!trackedLobby) return;
             const needsUpdate = trackedLobby.updateInfo(lobbyInfo);
             if (trackedLobby.postedMessages.size) {
                 if (needsUpdate || trackedLobby.isClosedStatusConcluded()) {
@@ -282,11 +300,11 @@ export class LobbyReporterTask extends BotTask {
                     logger.debug(`Stopped tracking ${lobbyInfo.region.code}#${lobbyInfo.bnetRecordId} candidates=${trackedLobby.candidates.size}`);
                 }
             }
-            if (lobbyInfo.status !== GameLobbyStatus.Open) {
+            if (trackedLobby.isClosedStatusConcluded() && !trackedLobby.postedMessages.size) {
                 this.trackedLobbies.delete(lobbyInfo.id);
             }
         }));
-        logger.verbose(`Updated tracked lobbies count=${updateCount}`);
+        logger.verbose(`Updated tracked lobbies count=${updateCount} (total=${this.trackedLobbies.size})`);
     }
 
     protected async fetchDestChannel(opts: DestChannelOpts): Promise<TextChannel | DMChannel> {
@@ -365,15 +383,14 @@ export class LobbyReporterTask extends BotTask {
         catch (err) {
             if (err instanceof DiscordAPIError) {
                 if (subscription && (err.code === DiscordErrorCode.MissingPermissions || err.code === DiscordErrorCode.MissingAccess)) {
-                    logger.error(`Failed to send message for lobby #${trackedLobby.lobby.id}, rule #${subscription.id}`, err.message);
+                    logger.error(`Failed to send message for lobby #${trackedLobby.lobby.id}, sub #${subscription.id}`, err.message);
                     const tdiff = Date.now() - subscription.createdAt.getTime();
                     if (tdiff >= 1000 * 60 * 10) {
-                        logger.info(`Deleting rule #${subscription.id}`);
+                        logger.warn(`Deleting subscription #${subscription.id}`);
                         await this.conn.getRepository(DsGameLobbySubscription).update(subscription.id, { enabled: false });
                         this.trackRules.delete(subscription.id);
                     }
                     else {
-                        logger.info(`Deleting rule #${subscription.id}`);
                         return false;
                     }
                 }
@@ -443,11 +460,14 @@ export class LobbyReporterTask extends BotTask {
         return trackedLobby;
     }
 
+    @logIt()
     protected async releaseLobbyMessage(trackedLobby: TrackedGameLobby, lobbyMsg: PostedGameLobby) {
+        logger.debug(`released lobby msg id=${lobbyMsg.msg.messageId}`);
         await this.conn.getRepository(DsGameLobbyMessage).update(lobbyMsg.msg.id, { updatedAt: new Date(), completed: true });
         trackedLobby.postedMessages.delete(lobbyMsg);
     }
 
+    @logIt()
     protected async editLobbyMessage(trackedLobby: TrackedGameLobby, lobbyMsg: PostedGameLobby) {
         const lbEmbed = embedGameLobby(trackedLobby.lobby, lobbyMsg.msg.rule);
         try {
@@ -462,7 +482,6 @@ export class LobbyReporterTask extends BotTask {
                 return;
             }
 
-            await msg.edit('', { embed: lbEmbed });
             if (
                 lobbyMsg.msg.rule && (
                     (trackedLobby.lobby.status === GameLobbyStatus.Started && lobbyMsg.msg.rule.deleteMessageStarted) ||
@@ -479,7 +498,6 @@ export class LobbyReporterTask extends BotTask {
                         if (err instanceof DiscordAPIError) {
                             if (err.code === DiscordErrorCode.UnknownMessage) {
                                 await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
-                                return;
                             }
                             logger.error(`Failed to delete`, err);
                         }
@@ -488,8 +506,14 @@ export class LobbyReporterTask extends BotTask {
                         }
                     }
                 }
+                else {
+                    await msg.edit('', { embed: lbEmbed });
+                }
+                return;
             }
-            else if (trackedLobby.lobby.status !== GameLobbyStatus.Open) {
+
+            await msg.edit('', { embed: lbEmbed });
+            if (trackedLobby.lobby.status !== GameLobbyStatus.Open) {
                 await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
             }
         }
@@ -539,11 +563,11 @@ interface LobbyEmbedOptions {
 
 function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): RichEmbedOptions {
     if (!cfg) cfg = {};
-    cfg = Object.assign<Partial<LobbyEmbedOptions>, LobbyEmbedOptions>(cfg, {
+    cfg = Object.assign<LobbyEmbedOptions, Partial<LobbyEmbedOptions>>({
         showLeavers: false,
         showTimestamps: false,
         showThumbnail: true,
-    });
+    }, cfg);
 
     const em: RichEmbedOptions = {
         // author: {
@@ -605,7 +629,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
         }
     }
     statusm.push(` __** ${s2gm.status.toLocaleUpperCase()} **__`);
-    if (s2gm.status !== GameLobbyStatus.Open && cfg.showTimestamps) {
+    if (s2gm.status !== GameLobbyStatus.Open && (cfg.showTimestamps || 1)) {
         statusm.push(` \`${formatTimeDiff(s2gm.closedAt, s2gm.createdAt)}\``);
     }
 
@@ -661,7 +685,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
             if (slot.kind === S2GameLobbySlotKind.Human) {
                 let fullname = slot.profile ? `${slot.profile.name}#${slot.profile.discriminator}` : slot.name;
 
-                if (cfg.showTimestamps) {
+                if (cfg.showTimestamps || !opts.includeTeamNumber) {
                     wparts.push(` ${formatTimeDiff(slot.joinInfo?.joinedAt ?? s2gm.slotsUpdatedAt, s2gm.createdAt)}`);
                 }
                 wparts.push('` ');
@@ -682,6 +706,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
             ps.push(wparts.join(''));
             ++i;
         }
+        if (!ps.length) return ['-'];
         return ps;
     }
 
@@ -731,15 +756,16 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
         em.fields[em.fields.length - 1].inline = false;
 
         let rowCount = 0;
-        const columnLimit = 3;
+        let columnLimit = 2;
+        if ((teamFields.length % 3) === 0) {
+            columnLimit = 3;
+        }
         while (teamFields.length) {
             ++rowCount;
             const sectionTeamFields = teamFields.splice(0, columnLimit);
 
-            if (rowCount > 1) {
-                for (let i = 0; i < columnLimit - teamFields.length; i++) {
-                    sectionTeamFields.push({ name: `\u200B`, value: `\u200B`, inline: true });
-                }
+            while (sectionTeamFields.length < columnLimit && rowCount > 1) {
+                sectionTeamFields.push({ name: `\u200B`, value: `\u200B`, inline: true });
             }
 
             em.fields.push(...sectionTeamFields);
@@ -749,8 +775,16 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
         }
     }
 
+    if (!s2gm.slots.length) {
+        em.fields.push({
+            name: 'Host',
+            value: s2gm.hostName,
+            inline: false,
+        });
+    }
+
     let leftPlayers = s2gm.getLeavers();
-    if (cfg.showLeavers || s2gm.status === GameLobbyStatus.Open) {
+    if (cfg.showLeavers || s2gm.status !== GameLobbyStatus.Started) {
         if (!cfg.showLeavers) {
             leftPlayers = leftPlayers.filter(x => (Date.now() - x.leftAt.getTime()) <= 40000);
         }
@@ -769,7 +803,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
             }
 
             em.fields.push({
-                name: `Seen players [${leftPlayers.length}]`,
+                name: `Recently left`,
                 value: ps.join('\n'),
                 inline: false,
             });

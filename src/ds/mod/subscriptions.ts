@@ -59,6 +59,7 @@ class SubscriptionNewCommand extends AbstractSubscriptionCommand {
         info = Object.assign(<ExtendedCommandInfo>{
             name: 'sub.new',
             description: 'Create new subscription for game lobby.',
+            details: 'https://i.imgur.com/yVjsHOF.png',
             guildOnly: true,
             group: 'subscriptions',
             userPermissions: ['MANAGE_GUILD'],
@@ -193,6 +194,12 @@ class SubscriptionConfigCommand extends AbstractSubscriptionCommand {
                     prompt: 'Should the message be deleted if lobby is abandoned? [`YES` | `NO`]',
                 },
                 {
+                    key: 'showLeavers',
+                    type: 'boolean',
+                    prompt: 'Show complete list of players who left the lobby in addition to active ones? [`YES` | `NO`]',
+                    default: false,
+                },
+                {
                     key: 'timeDelay',
                     type: 'integer',
                     prompt: 'For how long should game lobby be open before posting (in seconds)?',
@@ -207,12 +214,6 @@ class SubscriptionConfigCommand extends AbstractSubscriptionCommand {
                     min: 0,
                     max: 16,
                     default: 0,
-                },
-                {
-                    key: 'showLeavers',
-                    type: 'boolean',
-                    prompt: 'Show complete list of players who left the lobby in addition to active ones? [`YES` | `NO`]',
-                    default: false,
                 },
             ],
         });
@@ -240,7 +241,6 @@ class SubscriptionConfigCommand extends AbstractSubscriptionCommand {
         await this.client.conn.getRepository(DsGameLobbySubscription).save(sub);
         this.lreporter.trackRules.set(sub.id, sub);
 
-        await this.client.conn.getRepository(DsGameLobbySubscription).update(args.id, { enabled: false });
         return msg.reply('Subscription reconfigured. You can use `.sub.list` to verify its parameters.');
     }
 }
@@ -278,6 +278,7 @@ class SubscriptionListCommand extends AbstractSubscriptionCommand {
         super(client, {
             name: 'sub.list',
             description: 'List your existing subscriptions.',
+            details: `Notice: If your subscriptions disappear shortly after initial setup, it likely means bot doesn't have the permissions to send messages in the specified channel.`,
             group: 'subscriptions',
             userPermissions: ['MANAGE_GUILD'],
         });
@@ -314,19 +315,22 @@ class SubscriptionListCommand extends AbstractSubscriptionCommand {
         for (const rsub of rules) {
             rembed.fields.push({
                 name: `Subscription ID: **${rsub.id}**`,
-                value: formatObjectAsMessage({
-                    'Created at': rsub.createdAt.toUTCString(),
-                    'Channel': (<TextChannel>this.client.channels.get(rsub.channelId))?.name,
-                    'Name of the map/mod': rsub.mapName,
-                    'Partial match of the name': rsub.isMapNamePartial,
-                    'Region': rsub?.region?.code ?? 'ANY',
-                    'Map variant': rsub?.variant ?? 'ANY',
-                    'Delay before posting (in seconds)': Number(rsub.timeDelay),
-                    'Minimum number of human slots': Number(rsub.humanSlotsMin),
-                    'Show players who left the lobby': rsub.showLeavers,
-                    'Delete message after start': rsub.deleteMessageStarted,
-                    'Delete message if abandoned': rsub.deleteMessageAbandoned,
-                }),
+                value: [
+                    formatObjectAsMessage({
+                        'Channel': `<#${rsub.channelId}>`,
+                    }, false),
+                    formatObjectAsMessage({
+                        'Name of the map/mod': rsub.mapName,
+                        'Partial match of the name': rsub.isMapNamePartial,
+                        'Region': rsub?.region?.code ?? 'ANY',
+                        'Map variant': rsub?.variant ?? 'ANY',
+                        'Delay before posting (in seconds)': Number(rsub.timeDelay),
+                        'Minimum number of human slots': Number(rsub.humanSlotsMin),
+                        'Show players who left the lobby': rsub.showLeavers,
+                        'Delete message after start': rsub.deleteMessageStarted,
+                        'Delete message if abandoned': rsub.deleteMessageAbandoned,
+                    })
+                ].join('\n'),
                 inline: false,
             });
         }

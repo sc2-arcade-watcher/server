@@ -55,6 +55,28 @@ function parseQuery(query: string): LobbyQueryParams | string {
         };
     }
 
+    const m = query.split('#').filter(x => x.length).map(x => x.trim());
+    if (m.length === 1) {
+        return {
+            method: LobbyQueryMethod.PlayerName,
+            playerName: m[0],
+        };
+    }
+    else if (m.length === 2) {
+        return {
+            method: LobbyQueryMethod.PlayerBattletag,
+            playerBattletag: {
+                name: m[0],
+                discriminator: Number(m[1]) | 0,
+            },
+        };
+    }
+    else {
+        return 'Player name must be in the format `Username` or `Username#1234`.';
+    }
+
+    //
+
     const matches = query.trim().match(/^\s*(\w+)\s+(.*)$/);
     if (!matches) {
         return 'Invalid query';
@@ -125,27 +147,38 @@ export class LobbyPublishCommand extends GeneralCommand {
     constructor(client: DsBot) {
         super(client, {
             name: 'lobby',
-            description: '',
+            description: 'Post information about the currently open lobby that matches your username or Battle.net link of the map (if provided).',
+            details: 'https://i.imgur.com/Alwc77z.png',
             guildOnly: true,
             argsType: 'single',
             throttling: {
-                usages: 5,
+                usages: 4,
                 duration: 60,
             },
             examples: [
                 '`.lobby battlenet:://starcraft/map/2/202155`',
-                '`.lobby map Ice Baneling Escape - Cold Voyage`',
-                '`.lobby mod Scion Custom Races (Mod)`',
-                '`.lobby player Username`',
-                '`.lobby player Username#1234`',
+                '`.lobby MyUsername`',
+                '`.lobby ||||||||||||#1234`',
             ],
         });
     }
 
     public async exec(msg: CommandMessage, args: string) {
-        const qparams = parseQuery(args);
-        if (typeof qparams === 'string') {
-            return msg.reply(qparams);
+        let qparams: LobbyQueryParams;
+        if (args.length) {
+            const tmp = parseQuery(args);
+            if (typeof qparams === 'string') {
+                return msg.reply(qparams);
+            }
+            else {
+                qparams = tmp as LobbyQueryParams;
+            }
+        }
+        else {
+            qparams = {
+                method: LobbyQueryMethod.PlayerName,
+                playerName: msg.author.username,
+            };
         }
 
         const tmpMessage = await msg.channel.send(`Looking for it, hold on.. if the lobby was just made public, it might take few seconds before it'll appear.`) as Message;

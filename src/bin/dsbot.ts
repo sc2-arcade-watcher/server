@@ -5,12 +5,13 @@ import { setupFileLogger, logger } from '../logger';
 import { CommandoClient, CommandoClientOptions, FriendlyError, SQLiteProvider } from 'discord.js-commando';
 import { BotTask } from '../ds/dscommon';
 import { LobbyReporterTask } from '../ds/mod/lobbyReporter';
-import { InviteCommand } from '../ds/cmd/invite';
+import { InviteCommand, ApiCommand } from '../ds/cmd/general';
 import { StatusTask } from '../ds/mod/status';
 import { DMChannel } from 'discord.js';
 import { sleep, execAsync } from '../helpers';
 import { SubscriptionsTask } from '../ds/mod/subscriptions';
 import { LobbyPublishCommand } from '../ds/cmd/lobbyPublish';
+import { HelpCommand } from '../ds/cmd/help';
 
 export class DsBot extends CommandoClient {
     conn: orm.Connection;
@@ -30,8 +31,8 @@ export class DsBot extends CommandoClient {
             unknownCommandResponse: false,
             nonCommandEditable: true,
             // commandEditableDuration: 300,
-            messageCacheMaxSize: 100,
-            messageCacheLifetime: 3600,
+            messageCacheMaxSize: 50,
+            messageCacheLifetime: 60 * 30,
             messageSweepInterval: 600,
             disabledEvents: ['TYPING_START', 'VOICE_SERVER_UPDATE', 'VOICE_STATE_UPDATE']
         } as CommandoClientOptions, options);
@@ -80,13 +81,15 @@ export class DsBot extends CommandoClient {
             ['subscriptions', 'Subscriptions'],
         ]);
         this.registry.registerDefaultCommands({
-            help: true,
+            help: false,
             prefix: true,
             ping: true,
             eval_: false,
             commandState: false,
         });
+        this.registry.registerCommand(HelpCommand);
         this.registry.registerCommand(InviteCommand);
+        this.registry.registerCommand(ApiCommand);
         this.registry.registerCommand(LobbyPublishCommand);
     }
 
