@@ -55,7 +55,7 @@ export class JournalFeed {
         this.closeCurrentStream();
     }
 
-    protected closeCurrentStream() {
+    protected closeCurrentStream(destroyReadStream: boolean = true) {
         if (this.dataTimeout) {
             clearInterval(this.dataTimeout);
             this.dataTimeout = void 0;
@@ -69,7 +69,7 @@ export class JournalFeed {
         //     (<fs.ReadStream>this.rs).close();
         // }
         if (this.rs)  {
-            if (!this.rs.destroyed) {
+            if (!this.rs.destroyed && destroyReadStream) {
                 this.rs.destroy();
             }
             this.rs = void 0;
@@ -128,15 +128,18 @@ export class JournalFeed {
                 }
                 else {
                     logger.warn(`tailProc timeout, src=${this.name} cursor=${this.currCursor}, new file detected`);
-                    this.closeCurrentStream();
+                    this.closeCurrentStream(false);
+                    this.cursor.session = this.sessionFileList[this.sessionFileList.findIndex(v => v === this.cursor.session) + 1];
+                    this.cursor.offset = 0;
                 }
             }, 3000);
             this.rs = this.tailProc.stdout as fs.ReadStream;
         }
-        // this.rs.on('readable', () => { logger.verbose(`readstream: readable fname=${this.currFilename} length=${this.rs.readableLength}`); });
-        this.rs.on('end', () => { logger.verbose(`readstream: end fname=${this.currFilename} length=${this.rs.readableLength}`); });
+        const tmpCurrFilename = this.currFilename;
+        // this.rs.on('readable', () => { logger.verbose(`readstream: readable fname=${tmpCurrFilename} length=${this.rs.readableLength}`); });
+        this.rs.on('end', () => { logger.verbose(`readstream: end fname=${tmpCurrFilename} length=${this.rs?.readableLength}`); });
         this.rs.on('error', (err) => { throw err; });
-        this.rs.on('close', () => { logger.verbose(`readstream: close fname=${this.currFilename}`); });
+        this.rs.on('close', () => { logger.verbose(`readstream: close fname=${tmpCurrFilename}`); });
     }
 
     protected readlineFromBuff() {
@@ -233,7 +236,7 @@ export class JournalFeed {
 
                 const fSize = (await fs.stat(this.currFilename)).size;
                 if (!this.isCurrSessionLast()) {
-                    if (fSize < this.cursor.offset) {
+                    if (fSize <= this.cursor.offset) {
                         throw new Error(
                             `offset past the filesize, src=${this.name} cursor=${this.currCursor} size=${fSize}`
                         );
