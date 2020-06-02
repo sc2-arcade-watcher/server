@@ -55,6 +55,7 @@ export interface TrackedLobbyCreate extends DataLobbyCreate {
 export interface TrackedLobbyRemove extends DataLobbyRemove {
     removedAt: Date;
     seenLastAt: Date;
+    orphan: boolean;
 }
 
 interface TrackedLobbyHeadUpdate extends DataLobbyUpdate {
@@ -262,7 +263,7 @@ export class JournalReader {
         else if (this.isNewSession) {
             const orphans = Array.from(this.openLobbies.keys()).filter(x => !this.sessLobbies.has(x));
             for (const lobbyId of orphans) {
-                this.handleLobbyOrphan(lobbyId, ev);
+                this.doRemoveLobby(lobbyId, this.dateFromEvent(this.recentListEntry), true);
             }
             this.isNewSession = false;
             this.sessLbls = this.prevCursorPos.session;
@@ -306,11 +307,7 @@ export class JournalReader {
         this.doRemoveLobby(ev.lobbyId, this.dateFromEvent(this.recentListEntry));
     }
 
-    protected handleLobbyOrphan(lobbyId: number, ev: SignalLobbyList) {
-        this.doRemoveLobby(lobbyId, this.dateFromEvent(this.recentListEntry));
-    }
-
-    protected doRemoveLobby(lobbyId: number, removedAt: Date) {
+    protected doRemoveLobby(lobbyId: number, removedAt: Date, orphan: boolean = false) {
         const gm = this.openLobbies.get(lobbyId);
 
         if (this.recentPreviewRequests.has(lobbyId)) {
@@ -323,6 +320,7 @@ export class JournalReader {
         this._onLobbyRemove.emit({
             lobbyId,
             removedAt,
+            orphan,
             seenLastAt: this.dateFromEvent(this.prevCompleteListEntry)
         });
     }
@@ -696,6 +694,7 @@ function gameLobbySlotsFromBasicPreview(preview: DataLobbyPreview) {
 }
 
 export class GameLobbyDesc {
+    trackedBy = new Set<JournalReader>();
     initInfo: DataLobbyCreate & { bucketId: number };
     status: GameLobbyStatus = GameLobbyStatus.Open;
 
@@ -911,24 +910,34 @@ export class JournalMultiProcessor {
                 slotsHumansTaken: tlob.slotsHumansTaken,
                 slotsHumansTotal: tlob.slotsHumansTotal,
             });
+            lobState.trackedBy.add(jreader);
             if (!changed) return;
             this.pushEvent<JournalEventUpdateLobbySnapshot>(jreader, {
                 kind: JournalEventKind.UpdateLobbySnapshot,
                 lobby: lobState,
             });
-            return;
         }
-        lobState = new GameLobbyDesc(tlob);
-        this.gameLobbies.set(tlob.lobbyId, lobState);
-        this.pushEvent<JournalEventNewLobby>(jreader, {
-            kind: JournalEventKind.NewLobby,
-            lobby: lobState,
-        });
+        else {
+            lobState = new GameLobbyDesc(tlob);
+            lobState.trackedBy.add(jreader);
+            this.gameLobbies.set(tlob.lobbyId, lobState);
+            this.pushEvent<JournalEventNewLobby>(jreader, {
+                kind: JournalEventKind.NewLobby,
+                lobby: lobState,
+            });
+        }
     }
 
     protected handleLobbyRemove(jreader: JournalReader, tlob: TrackedLobbyRemove) {
         const lobState = this.gameLobbies.get(tlob.lobbyId);
         if (!lobState) return;
+
+        lobState.trackedBy.delete(jreader);
+        if (tlob.orphan && lobState.trackedBy.size > 0) {
+            const trackedByList = Array.from(lobState.trackedBy.values());
+            logger.warn(`lobby ${lobState.initInfo.lobbyId} orphaned by ${jreader.jfeed.name} still tracked by ${trackedByList.map(x => x.jfeed.name).join(', ')}`);
+            return;
+        }
 
         lobState.close(tlob);
         this.gameLobbies.delete(tlob.lobbyId);
