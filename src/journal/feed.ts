@@ -91,6 +91,8 @@ export class JournalFeed {
     }
 
     protected async setupReadstream() {
+        const sessName = this.cursor.session;
+
         if (!this.isCurrSessionLast()) {
             this.rs = fs.createReadStream(this.currFilename, {
                 encoding: null,
@@ -98,48 +100,64 @@ export class JournalFeed {
             });
         }
         else {
-            this.tailProc = spawn('tail', [
+            const tmpTailProc = spawn('tail', [
                 `--bytes=+${this.cursor.offset + 1}`,
                 `--sleep-interval=0.01`,
                 `-f`, this.currFilename,
             ], {
                 stdio: ['pipe', 'pipe', 'pipe'],
             });
-            this.tailProc.stderr.on('data', buff => {
+
+            tmpTailProc.stderr.on('data', buff => {
                 if (!(buff instanceof Buffer)) {
                     throw new Error(`tailProc stderr not buff: ${buff}`);
                 }
-                logger.warn(`tailProc err: ${buff.toString('utf8').trimRight()}`);
+                logger.warn(`tailProc err: src=${this.name} sname=${sessName} pid=${tmpTailProc.pid} buff=${buff.toString('utf8').trimRight()}`);
                 this.closeCurrentStream();
                 this.clearBuffers();
             });
-            this.tailProc.on('exit', (code, signal) => {
-                logger.verbose(`tailProc exit: src=${this.name} cursor=${this.currCursor} code=${code} signal=${signal}`);
-                if (this.dataTimeout) {
-                    clearInterval(this.dataTimeout);
-                    this.dataTimeout = void 0;
-                }
-            });
-            this.dataTimeout = setInterval(async () => {
+
+            const tmpDataTimeout = setInterval(async () => {
+                logger.debug(`tailProc dataTimeout src=${this.name} sname=${sessName} chunkBuffLen=${this.chunkBuff?.length} readableLen=${this.rs.readableLength} waitingForData=${this.waitingForData}`);
                 if (this.chunkBuff || this.rs.readableLength) return;
                 await this.refreshFileList();
-                if (this.isCurrSessionLast()) {
-                    this.dataTimeout.refresh();
-                }
-                else {
-                    logger.warn(`tailProc timeout, src=${this.name} cursor=${this.currCursor}, new file detected`);
+                if (!this.isCurrSessionLast()) {
+                    logger.warn(`tailProc timeout, src=${this.name} sname=${sessName} pid=${tmpTailProc.pid}, new file detected`);
                     this.closeCurrentStream(false);
                     this.cursor.session = this.sessionFileList[this.sessionFileList.findIndex(v => v === this.cursor.session) + 1];
                     this.cursor.offset = 0;
                 }
             }, 3000);
-            this.rs = this.tailProc.stdout as fs.ReadStream;
+            this.dataTimeout = tmpDataTimeout;
+
+            tmpTailProc.on('exit', (code, signal) => {
+                logger.verbose(`tailProc exit: src=${this.name} sname=${sessName} pid=${tmpTailProc.pid} code=${code} signal=${signal}`);
+                if (!tmpDataTimeout) return;
+
+                // by the time this event fires there might be new tailProc instance open
+                // clear reference only if they match
+                if (this.dataTimeout === tmpDataTimeout) {
+                    logger.debug(`clearInterval dataTimeout`);
+                    this.dataTimeout = void 0;
+                }
+
+                clearInterval(tmpDataTimeout);
+            });
+
+            this.tailProc = tmpTailProc;
+            this.rs = tmpTailProc.stdout as fs.ReadStream;
         }
-        const tmpCurrFilename = this.currFilename;
-        // this.rs.on('readable', () => { logger.verbose(`readstream: readable fname=${tmpCurrFilename} length=${this.rs.readableLength}`); });
-        this.rs.on('end', () => { logger.verbose(`readstream: end fname=${tmpCurrFilename} length=${this.rs?.readableLength}`); });
-        this.rs.on('error', (err) => { throw err; });
-        this.rs.on('close', () => { logger.verbose(`readstream: close fname=${tmpCurrFilename}`); });
+
+        // this.rs.on('readable', () => { logger.verbose(`readstream: src=${this.name} readable sname=${sessName}`); });
+        this.rs.on('end', () => {
+            logger.verbose(`readstream: end src=${this.name} sname=${sessName}`);
+        });
+        this.rs.on('close', () => {
+            logger.verbose(`readstream: close src=${this.name} sname=${sessName}`);
+        });
+        this.rs.on('error', (err) => {
+            throw err;
+        });
     }
 
     protected readlineFromBuff() {
@@ -168,10 +186,6 @@ export class JournalFeed {
             line = line.substr(0, line.length - 1);
             this.chunkPos = chunkEnd + 1;
             this.cursor.offset += Buffer.byteLength(line) + 2;
-
-            // if (this.tailProc && line.startsWith('QUIT')) {
-            //     this.closeCurrentStream();
-            // }
 
             if (this.dataTimeout) {
                 this.dataTimeout.refresh();
@@ -245,6 +259,7 @@ export class JournalFeed {
 
                 logger.info(`opening src=${this.name} cursor=${this.currCursor}`);
                 await this.setupReadstream();
+                this.waitingForData = false;
             }
 
             if (this.chunkBuff) {
@@ -283,10 +298,11 @@ export class JournalFeed {
                     const fSize = (await fs.stat(this.currFilename)).size;
                     if (this.tailProc && fSize === this.cursor.offset) {
                         this.waitingForData = true;
-                        // logger.debug(`nothing to read: src=${this.name} cursor=${this.currCursor} fsize=${fSize}`);
+                        logger.debug(`nothing to read: src=${this.name} cursor=${this.currCursor} fsize=${fSize}`);
                         return;
                     }
                     else if (!this.tailProc && fSize === this.cursor.offset) {
+                        logger.debug(`reached EOF: src=${this.name} cursor=${this.currCursor} fsize=${fSize}`);
                         this.closeCurrentStream();
                         this.cursor.session = this.sessionFileList[this.sessionFileList.findIndex(v => v === this.cursor.session) + 1];
                         this.cursor.offset = 0;

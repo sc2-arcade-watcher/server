@@ -608,7 +608,7 @@ class DataProc {
         const s2lobby = await this.getLobby(ev.lobby);
         const changed = await this.doUpdateSlots(s2lobby, ev.lobby);
         if (changed) {
-            logger.debug(`slots updated, src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId}`);
+            logger.info(`slots updated, src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId}`);
         }
     }
 
