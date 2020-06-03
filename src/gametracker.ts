@@ -563,7 +563,7 @@ export class JournalReader {
         for (const [key, item] of this.recentPreviewRequests) {
             if ((ev.$timestamp - item.reqEntry.$timestamp) > 25) {
                 if (item.extendedPreview) {
-                    throw new Error(`wtf1 lobid=${item.lobbyId}`);
+                    throw new Error(`wtf1 lobid=${item.lobbyId} ts=${item.reqEntry.$timestamp}`);
                 }
                 if (item.basicPreview) {
                     this.forwardPreview(key);
@@ -580,12 +580,14 @@ export class JournalReader {
         for (const [key, item] of this.recentPreviewRequests) {
             if (this.recentPreviewRequests.size <= 5) break;
             if (item.basicPreview) {
-                throw new Error(`wtf3 lobid=${item.lobbyId}`);
+                this.forwardPreview(key);
             }
-            if (item.extendedPreview) {
-                throw new Error(`wtf4 lobid=${item.lobbyId}`);
+            else if (item.extendedPreview) {
+                logger.warn(`removed pending LBPR with incomplete response, lobid=${item.lobbyId} ts=${item.reqEntry.$timestamp}`, {
+                    extendedPreview: item.extendedPreview,
+                    basicPreview: item.basicPreview,
+                });
             }
-            logger.verbose(`removed pending LBPR without a match, lobid=${item.lobbyId} ts=${item.reqEntry.$timestamp}`);
             this.recentPreviewRequests.delete(key);
         }
         for (const item of this.recentExPvResponses) {
