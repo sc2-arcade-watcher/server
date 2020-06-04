@@ -3,6 +3,7 @@ import * as http from 'http';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as WebSocket from 'ws';
+import * as dotenv from 'dotenv';
 import { logger, logIt, setupFileLogger } from '../logger';
 import { Socket } from 'net';
 import { execAsync, sleep } from '../helpers';
@@ -145,6 +146,7 @@ export class LbsServer {
         await this.lbStorage.load();
         this.wss = new WebSocket.Server({
             port: 8089,
+            verifyClient: this.verifyClient.bind(this),
         });
 
         this.wss.on('listening', async function() {
@@ -171,6 +173,28 @@ export class LbsServer {
         }, 30000).unref();
     }
 
+    protected verifyClient(info: { origin: string; secure: boolean; req: http.IncomingMessage }) {
+        logger.verbose(`verifying connection from ${info.req.connection.remoteAddress} rport=${info.req.connection.remotePort}`);
+        const reBearer = /^Bearer (.+)$/;
+        if (!info.req.headers.authorization) {
+            logger.verbose(`no authorization header`);
+            return false;
+        }
+
+        const matches = info.req.headers.authorization.match(reBearer);
+        if (!matches) {
+            logger.verbose(`no bearer token provided`);
+            return false;
+        }
+
+        if (matches[1] !== process.env.DPROC_AUTH_TOKEN) {
+            logger.verbose(`provided invalid token: "${matches[1]}"`);
+            return false;
+        }
+
+        return true;
+    }
+
     @logIt({ profiling: false })
     close() {
         logger.verbose('Closing websocket..');
@@ -185,9 +209,14 @@ export class LbsServer {
 
         logger.info(`New connection from ip=${request.connection.remoteAddress} rport=${request.connection.remotePort}`);
 
+        ws.on('upgrade', this.onUpgrade.bind(this, ws));
         ws.on('message', this.onConnMessage.bind(this, ws));
         ws.on('close', this.onConnClose.bind(this, ws));
         ws.on('pong', this.onConnPong.bind(this, ws));
+    }
+
+    @logIt()
+    protected async onUpgrade(ws: WebSocket, request: http.IncomingMessage) {
     }
 
     protected async onConnMessage(ws: WebSocket, message: WebSocket.Data) {
@@ -312,6 +341,7 @@ export class LbsServer {
 
 process.on('unhandledRejection', e => { throw e; });
 (async function () {
+    dotenv.config();
     setupFileLogger('datahost');
     const lserv = new LbsServer();
 
