@@ -170,7 +170,7 @@ class DataProc {
         await this.em.getRepository(S2GameLobby).update(s2lobby.id, updateData);
     }
 
-    protected async doUpdateSlots(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc) {
+    protected async doUpdateSlots(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc, ev: JournalEventBase) {
         if (!lobbyData.slots || lobbyData.slotsPreviewUpdatedAt <= s2lobby.slotsUpdatedAt) return;
 
         const slotKindMap = {
@@ -181,15 +181,20 @@ class DataProc {
 
         if (s2lobby.slots.length !== lobbyData.slots.length) {
             if (s2lobby.slots.length > 0) {
-                logger.warn(`updated available slots ${this.s2region.code}#${s2lobby.bnetRecordId} prevSlotCount=${s2lobby.slots.length} newSlotCount=${lobbyData.slots.length}`);
+                logger.warn(`updated available slots ${this.s2region.code}#${s2lobby.bnetRecordId} prevSlotCount=${s2lobby.slots.length} newSlotCount=${lobbyData.slots.length}`, s2lobby.slots, lobbyData.slots, ev);
             }
             if (s2lobby.slots.length > lobbyData.slots.length) {
-                const removedSlots = s2lobby.slots.splice(lobbyData.slots.length).filter((s2slot, idx) => {
-                    if (s2slot.joinInfo) {
-                        throw new Error('FIXME');
-                    }
-                    return true;
-                });
+                const removedSlots = s2lobby.slots.splice(lobbyData.slots.length);
+                const removedOccupiedSlots = removedSlots.filter(s2slot => s2slot.joinInfo);
+                if (removedOccupiedSlots.length) {
+                    logger.warn(`occupied slots have been removed?!`, ev, removedOccupiedSlots);
+                    await this.conn.getRepository(S2GameLobbyPlayerJoin).update(
+                        removedOccupiedSlots.map(s2slot => s2slot.joinInfo.id),
+                        {
+                            leftAt: lobbyData.slotsPreviewUpdatedAt,
+                        }
+                    );
+                }
                 await this.conn.getRepository(S2GameLobbySlot).delete(removedSlots.map(x => x.id));
             }
             else {
@@ -557,7 +562,7 @@ class DataProc {
             }
         }
 
-        await this.doUpdateSlots(s2lobby, ev.lobby);
+        await this.doUpdateSlots(s2lobby, ev.lobby, ev);
         if (
             (ev.lobby.status !== GameLobbyStatus.Started && s2lobby.slots.length)
         ) {
@@ -606,7 +611,7 @@ class DataProc {
 
     async onUpdateLobbySlots(ev: JournalEventUpdateLobbySlots) {
         const s2lobby = await this.getLobby(ev.lobby);
-        const changed = await this.doUpdateSlots(s2lobby, ev.lobby);
+        const changed = await this.doUpdateSlots(s2lobby, ev.lobby, ev);
         if (changed) {
             logger.info(`slots updated, src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId}`);
         }
