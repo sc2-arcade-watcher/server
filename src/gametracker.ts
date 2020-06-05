@@ -855,7 +855,7 @@ export interface JournalEventBase {
     feedCursor: JournalFeedCursor;
 }
 
-interface JournalEventOptionalBase {
+export interface JournalEventOptionalBase {
     feedName?: string;
     feedCursor?: JournalFeedCursor;
 }

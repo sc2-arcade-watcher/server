@@ -9,6 +9,7 @@ import * as fastifyRateLimit from 'fastify-rate-limit';
 import * as fastifyPagination from 'fastify-pagination';
 import * as limitOffsetPaginationStrategy from 'fastify-pagination/dist/strategies/limit-offset';
 import * as fastifyOAS from 'fastify-oas';
+import * as fastifyCors from 'fastify-cors';
 import { setupFileLogger, logger } from '../logger';
 import { S2DocumentVersion } from '../entity/S2DocumentVersion';
 import { BattleDepot, NestedHashDir, convertImage } from '../depot';
@@ -48,10 +49,8 @@ function stripEntityIds(data: any) {
     return data;
 }
 
-server.register(fp(async (server, opts, next) => {
+server.register(fp(async (server, opts) => {
     server.decorate('conn', await orm.createConnection());
-
-    next();
 }));
 
 server.addHook('onClose', async (instance, done) => {
@@ -82,7 +81,13 @@ server.register(fastifyRateLimit, {
     timeWindow: 1000 * 60 * 5,
 });
 
-server.register(<any>fastifyPagination, {
+// @ts-ignore
+server.register(fastifyCors, {
+    origin: process.env.ENV === 'dev' ? '*' : `http://sc2arcade.talv.space/api`,
+});
+
+// @ts-ignore
+server.register(fastifyPagination, {
     strategy: limitOffsetPaginationStrategy({
         defaultLimit: 50,
         maximumLimit: 500,
