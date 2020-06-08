@@ -37,6 +37,8 @@ class DataProc {
     protected lobbiesCache = new Map<number, S2GameLobby>();
     protected profilesCache = new Map<string, S2Profile>();
 
+    protected lobbiesReopenCandidates = new Set();
+
     constructor(public readonly region: GameRegion) {
     }
 
@@ -502,31 +504,14 @@ class DataProc {
         catch (err) {
             if (isErrDuplicateEntry(err)) {
                 s2lobby = await this.getLobby(ev.lobby);
-                const snapshotTimeDiff = ev.lobby.snapshotUpdatedAt.getTime() - s2lobby.snapshotUpdatedAt.getTime();
-                if (s2lobby.closedAt && s2lobby.closedAt < ev.lobby.createdAt) {
-                    logger.info(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} lobby reopened`, [
-                        [s2lobby.createdAt, ev.lobby.createdAt],
-                        [s2lobby.closedAt, ev.lobby.closedAt],
-                        [s2lobby.snapshotUpdatedAt, ev.lobby.snapshotUpdatedAt, snapshotTimeDiff],
-                    ]);
-                    await this.updateLobby(s2lobby, {
-                        status: GameLobbyStatus.Open,
-                        closedAt: null,
-
-                        snapshotUpdatedAt: ev.lobby.snapshotUpdatedAt,
-                        lobbyTitle: ev.lobby.lobbyName,
-                        hostName: ev.lobby.hostName,
-                        slotsHumansTaken: ev.lobby.slotsHumansTaken,
-                        slotsHumansTotal: ev.lobby.slotsHumansTotal,
-                    });
-                }
-                else if (snapshotTimeDiff > 0) {
+                if (s2lobby.status !== GameLobbyStatus.Open) {
+                    const snapshotTimeDiff = ev.lobby.snapshotUpdatedAt.getTime() - s2lobby.snapshotUpdatedAt.getTime();
+                    this.lobbiesReopenCandidates.add(s2lobby.id);
                     logger.verbose(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} lobby reappeared`, [
                         [s2lobby.createdAt, ev.lobby.createdAt],
                         [s2lobby.closedAt, ev.lobby.closedAt],
                         [s2lobby.snapshotUpdatedAt, ev.lobby.snapshotUpdatedAt, snapshotTimeDiff],
                     ]);
-                    // do not insert anything just yet
                 }
             }
             else {
@@ -538,6 +523,14 @@ class DataProc {
     async onCloseLobby(ev: JournalEventCloseLobby) {
         const s2lobby = await this.getLobby(ev.lobby);
 
+        // discard candidate and exit without altering any data
+        if (this.lobbiesReopenCandidates.has(s2lobby.id)) {
+            this.lobbiesReopenCandidates.delete(s2lobby.id);
+            this.lobbiesCache.delete(s2lobby.id);
+            return;
+        }
+
+        // verify if anything has changed in a closed lobby which has reappeared
         if (s2lobby.status !== GameLobbyStatus.Open) {
             if (s2lobby.status === GameLobbyStatus.Unknown && ev.lobby.status !== GameLobbyStatus.Unknown) {
                 logger.warn(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} reopening lobby with status=${s2lobby.status}`);
@@ -555,7 +548,7 @@ class DataProc {
             else {
                 const closeDiff = s2lobby.closedAt.getTime() - ev.lobby.closedAt.getTime();
                 if (closeDiff !== 0) {
-                    logger.warn(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} attempted to close lobby which has its state already determined`);
+                    logger.verbose(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} attempted to close lobby which has its state already determined`);
                 }
                 this.lobbiesCache.delete(ev.lobby.initInfo.lobbyId);
                 return;
@@ -614,6 +607,21 @@ class DataProc {
         const changed = await this.doUpdateSlots(s2lobby, ev.lobby, ev);
         if (changed) {
             logger.info(`slots updated, src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId}`);
+
+            if (this.lobbiesReopenCandidates.has(s2lobby.id)) {
+                logger.info(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} lobby reopened`);
+                await this.updateLobby(s2lobby, {
+                    status: GameLobbyStatus.Open,
+                    closedAt: null,
+
+                    snapshotUpdatedAt: ev.lobby.snapshotUpdatedAt,
+                    lobbyTitle: ev.lobby.lobbyName,
+                    hostName: ev.lobby.hostName,
+                    slotsHumansTaken: ev.lobby.slotsHumansTaken,
+                    slotsHumansTotal: ev.lobby.slotsHumansTotal,
+                });
+                this.lobbiesReopenCandidates.delete(s2lobby.id);
+            }
         }
     }
 
