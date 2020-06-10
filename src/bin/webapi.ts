@@ -218,14 +218,18 @@ server.get('/maps/:regionId/:mapId', {
 }, async (request, reply) => {
     const result = await server.conn.getRepository(S2Document)
         .createQueryBuilder('mapDoc')
-        .innerJoinAndSelect('mapDoc.category', 'category')
+        .leftJoinAndSelect('mapDoc.category', 'category')
         .innerJoinAndMapOne('mapDoc.currentVersion', 'mapDoc.docVersions', 'currentVersion', 'currentVersion.document = mapDoc.id')
         .andWhere('(currentVersion.majorVersion = mapDoc.currentMajorVersion AND currentVersion.minorVersion = mapDoc.currentMinorVersion)')
-        .innerJoinAndSelect('mapDoc.docVersions', 'mapDocVer')
         .andWhere('mapDoc.regionId = :regionId', { regionId: request.params.regionId })
         .andWhere('mapDoc.bnetId = :bnetId', { bnetId: request.params.mapId })
+
+        // TODO: remove
+        .innerJoinAndSelect('mapDoc.docVersions', 'mapDocVer')
         .addOrderBy('mapDocVer.majorVersion', 'DESC')
         .addOrderBy('mapDocVer.minorVersion', 'DESC')
+        //
+
         .getOne()
     ;
 
