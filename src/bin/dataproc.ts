@@ -475,12 +475,12 @@ class DataProc {
             mapMinorVersion: info.mapMinorVersion,
 
             extModBnetId: info.extModHandle[0] !== 0 ? info.extModHandle[0] : null,
-            extModMajorVersion: info.extModMajorVersion !== 0 ? info.extModMajorVersion : null,
-            extModMinorVersion: info.extModMinorVersion !== 0 ? info.extModMinorVersion : null,
+            extModMajorVersion: info.extModHandle[0] !== 0 ? info.extModMajorVersion : null,
+            extModMinorVersion: info.extModHandle[0] !== 0 ? info.extModMinorVersion : null,
 
             multiModBnetId: info.multiModHandle[0] !== 0 ? info.multiModHandle[0] : null,
-            multiModMajorVersion: info.multiModMajorVersion !== 0 ? info.multiModMajorVersion : null,
-            multiModMinorVersion: info.multiModMinorVersion !== 0 ? info.multiModMinorVersion : null,
+            multiModMajorVersion: info.multiModHandle[0] !== 0 ? info.multiModMajorVersion : null,
+            multiModMinorVersion: info.multiModHandle[0] !== 0 ? info.multiModMinorVersion : null,
 
             mapDocumentVersion: mapDocVer as any,
             extModDocumentVersion: extModDocVer as any,
