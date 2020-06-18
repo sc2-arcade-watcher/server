@@ -331,6 +331,7 @@ export class JournalReader {
 
         gm.updatedAt = this.dateFromEvent(this.recentListEntry);
         gm.lobbyName = ev.lobbyName;
+        gm.accountThatSetName = ev.accountThatSetName;
         gm.hostName = ev.hostName;
         gm.slotsHumansTaken = ev.slotsHumansTaken;
         gm.slotsHumansTotal = ev.slotsHumansTotal;
@@ -339,6 +340,7 @@ export class JournalReader {
             updatedAt: this.dateFromEvent(this.recentListEntry),
             lobbyId: ev.lobbyId,
             lobbyName: ev.lobbyName,
+            accountThatSetName: ev.accountThatSetName,
             hostName: ev.hostName,
             slotsHumansTaken: ev.slotsHumansTaken,
             slotsHumansTotal: ev.slotsHumansTotal,
@@ -706,6 +708,7 @@ export class GameLobbyDesc {
     slotTakenSnapshotUpdatedAt: Date;
 
     lobbyName: string;
+    accountThatSetName: number;
     hostName: string;
     slotsHumansTaken: number;
     slotsHumansTotal: number;
@@ -724,6 +727,7 @@ export class GameLobbyDesc {
         this.snapshotUpdatedAt = lobbyData.createdAt;
 
         this.lobbyName = this.initInfo.lobbyName;
+        this.accountThatSetName = this.initInfo.accountThatSetName;
         this.hostName = this.initInfo.hostName;
         this.slotsHumansTaken = this.initInfo.slotsHumansTaken;
         this.slotsHumansTotal = this.initInfo.slotsHumansTotal;
@@ -742,6 +746,7 @@ export class GameLobbyDesc {
         if (snapshot.updatedAt > this.snapshotUpdatedAt) {
             this.hostName = snapshot.hostName;
             this.lobbyName = snapshot.lobbyName;
+            this.accountThatSetName = this.initInfo.accountThatSetName;
             this.snapshotUpdatedAt = snapshot.updatedAt;
 
             if (this.slotsHumansTaken !== snapshot.slotsHumansTaken || this.slotsHumansTotal !== snapshot.slotsHumansTotal) {
@@ -909,6 +914,7 @@ export class JournalMultiProcessor {
                 updatedAt: tlob.createdAt,
                 hostName: tlob.hostName,
                 lobbyName: tlob.lobbyName,
+                accountThatSetName: tlob.accountThatSetName,
                 slotsHumansTaken: tlob.slotsHumansTaken,
                 slotsHumansTotal: tlob.slotsHumansTotal,
             });

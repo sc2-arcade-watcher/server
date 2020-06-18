@@ -63,6 +63,7 @@ export interface DataLobbyCreate {
     multiModHandle: number[];
     mapVariantIndex: number;
     lobbyName: string;
+    accountThatSetName: number;
     hostName: string;
     slotsHumansTaken: number;
     slotsHumansTotal: number;
@@ -94,6 +95,7 @@ export interface SignalLobbyRemove extends SignalBase, DataLobbyRemove {
 export interface DataLobbyUpdate {
     lobbyId: number;
     lobbyName: string;
+    accountThatSetName: number;
     hostName: string;
     slotsHumansTaken: number;
     slotsHumansTotal: number;
@@ -271,6 +273,12 @@ export class JournalDecoder {
         ed.mapVariantIndex = Number(popFirst(args));
 
         ed.lobbyName = myunescape(popFirst(args)).trim();
+        if (version >= 2) {
+            ed.accountThatSetName = Number(popFirst(args));
+        }
+        else {
+            ed.accountThatSetName = 0;
+        }
         ed.hostName = popFirst(args);
         ed.slotsHumansTaken = Number(popFirst(args));
         ed.slotsHumansTotal = Number(popFirst(args));
@@ -304,6 +312,12 @@ export class JournalDecoder {
         const ed = {} as DataLobbyUpdate;
         ed.lobbyId = Number(popFirst(args));
         ed.lobbyName = myunescape(popFirst(args)).trim();
+        if (version >= 2) {
+            ed.accountThatSetName = Number(popFirst(args));
+        }
+        else {
+            ed.accountThatSetName = 0;
+        }
         ed.hostName = popFirst(args);
         ed.slotsHumansTaken = Number(popFirst(args));
         ed.slotsHumansTotal = Number(popFirst(args));
