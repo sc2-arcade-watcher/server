@@ -8,8 +8,9 @@ module.exports = {
     "password": process.env.SQL_PASS,
     "database": process.env.SQL_DATABASE,
     "charset": "utf8mb4",
+    "timezone": "+00:00",
     "synchronize": false,
-    "logging": false,
+    "logging": Boolean(process.env.SQL_LOGGING || false),
     "namingStrategy": new (require('typeorm-naming-strategies').SnakeNamingStrategy)(),
     "entities": [
         "out/src/entity/**/*.js"

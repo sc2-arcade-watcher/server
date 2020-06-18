@@ -12,14 +12,12 @@ import * as fastifyOAS from 'fastify-oas';
 import * as fastifyCors from 'fastify-cors';
 import { setupFileLogger, logger } from '../logger';
 import { S2DocumentVersion } from '../entity/S2DocumentVersion';
-import { BattleDepot, NestedHashDir, convertImage } from '../depot';
 import { S2Document } from '../entity/S2Document';
 import * as http from 'http';
 import * as https from 'https';
 import * as http2 from 'http2';
 import { execAsync } from '../helpers';
 import { stripIndents } from 'common-tags';
-import { lobbyRouter } from '../api/routes/lobby';
 
 dotenv.config();
 setupFileLogger('webapi');
@@ -29,9 +27,6 @@ const server = fastify({
     trustProxy: ['127.0.0.1'],
 });
 const webapiPort = Number(process.env.WEBAPI_PORT ?? 8090);
-
-const bnDepot = new BattleDepot('data/depot');
-const pubBnetDir = new NestedHashDir('data/bnet');
 
 function stripEntityIds(data: any) {
     // TODO: remove
@@ -166,115 +161,16 @@ server.register(fastifyOAS, <fastifyOAS.FastifyOASOptions>{
     }
 });
 
-server.register(lobbyRouter);
+server.register(require('../api/routes/lobby/openGames').default);
+server.register(require('../api/routes/lobby/active').default);
+server.register(require('../api/routes/lobby/details').default);
+server.register(require('../api/routes/lobby/mapHistory').default);
+server.register(require('../api/routes/lobby/playerHistory').default);
 
-server.get('/maps/:regionId', {
-    schema: {
-        tags: ['Maps'],
-        summary: 'List of maps',
-        params: {
-            type: 'object',
-            required: ['regionId'],
-            properties: {
-                regionId: {
-                    type: 'number',
-                },
-            }
-        },
-    },
-}, async (request, reply) => {
-    const { limit, offset } = request.parsePagination();
-
-    const [ result, count ] = await server.conn.getRepository(S2Document)
-        .createQueryBuilder('mapDoc')
-        .leftJoinAndMapOne(
-            'mapDoc.currentVersion',
-            S2DocumentVersion,
-            'currentVersion',
-            'currentVersion.document = mapDoc.id AND currentVersion.majorVersion = mapDoc.currentMajorVersion AND currentVersion.minorVersion = mapDoc.currentMinorVersion'
-        )
-        .andWhere('mapDoc.regionId = :regionId', { regionId: request.params.regionId })
-        .take(limit)
-        .skip(offset)
-        .getManyAndCount()
-    ;
-
-    reply.header('Cache-control', 'public, s-maxage=60');
-    return reply.type('application/json').code(200).sendWithPagination({ count: count, page: stripEntityIds(result) });
-});
-
-server.get('/maps/:regionId/:mapId', {
-    schema: {
-        tags: ['Maps'],
-        summary: 'Details about specific map',
-        params: {
-            type: 'object',
-            required: ['regionId', 'mapId'],
-            properties: {
-                regionId: {
-                    type: 'number',
-                },
-                mapId: {
-                    type: 'number',
-                },
-            },
-        },
-    },
-}, async (request, reply) => {
-    const result = await server.conn.getRepository(S2Document)
-        .createQueryBuilder('mapDoc')
-        .leftJoinAndSelect('mapDoc.category', 'category')
-        .innerJoinAndMapOne('mapDoc.currentVersion', 'mapDoc.docVersions', 'currentVersion', 'currentVersion.document = mapDoc.id')
-        .andWhere('(currentVersion.majorVersion = mapDoc.currentMajorVersion AND currentVersion.minorVersion = mapDoc.currentMinorVersion)')
-        .andWhere('mapDoc.regionId = :regionId', { regionId: request.params.regionId })
-        .andWhere('mapDoc.bnetId = :bnetId', { bnetId: request.params.mapId })
-
-        // TODO: remove
-        .innerJoinAndSelect('mapDoc.docVersions', 'mapDocVer')
-        .addOrderBy('mapDocVer.majorVersion', 'DESC')
-        .addOrderBy('mapDocVer.minorVersion', 'DESC')
-        //
-
-        .getOne()
-    ;
-
-    if (!result) {
-        return reply.type('application/json').code(404).send();
-    }
-
-    reply.header('Cache-control', 'public, s-maxage=60');
-    return reply.type('application/json').code(200).send(stripEntityIds(result));
-});
-
-server.get('/bnet/:hash(^\\w+).jpg', {
-    // schema: {
-    //     tags: ['Battle.net depot'],
-    // },
-}, async (request, reply) => {
-    const jpgPath = pubBnetDir.pathTo(`${request.params.hash}.jpg`);
-    if (!(await fs.pathExists(jpgPath))) {
-        try {
-            const docResult = await server.conn.getRepository(S2DocumentVersion)
-                .createQueryBuilder('docVer')
-                .innerJoinAndSelect('docVer.document', 'doc')
-                .innerJoinAndSelect('doc.region', 'region')
-                .andWhere('docVer.iconHash = :hash', { hash: request.params.hash })
-                .getOne()
-            ;
-            if (!docResult) {
-                return reply.callNotFound();
-            }
-
-            const s2mvPath = await bnDepot.getPathOrRetrieve(docResult.document.region.code, `${request.params.hash}.s2mv`);
-            await convertImage(s2mvPath, jpgPath, ['-format', 'jpg', '-quality', '85', '-strip']);
-        }
-        catch (err) {
-            logger.error(err);
-            return reply.code(503);
-        }
-    }
-    return reply.sendFile(jpgPath, path.resolve('.'));
-});
+server.register(require('../api/routes/maps/list').default);
+server.register(require('../api/routes/maps/details').default);
+server.register(require('../api/routes/maps/stats').default);
+server.register(require('../api/routes/depot').default);
 
 process.on('unhandledRejection', e => { throw e; });
 (async function() {

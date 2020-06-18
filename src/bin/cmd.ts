@@ -1,4 +1,6 @@
+import * as orm from 'typeorm';
 import { BattleDepot, convertImage, NestedHashDir } from '../depot';
+import { buildStatsForPeriod } from '../task/statsBuilder';
 
 async function populateBnetDepot() {
     const bnDepot = new BattleDepot('data/depot');
@@ -9,7 +11,13 @@ async function populateBnetDepot() {
     await convertImage(s2mvPath, jpgPath, ['-format', 'jpg', '-quality', '85', '-strip']);
 }
 
+
 process.on('unhandledRejection', e => { throw e; });
 (async function () {
-    await populateBnetDepot();
+    // await populateBnetDepot();
+
+    const conn = await orm.createConnection();
+    await buildStatsForPeriod(conn, 1);
+    await buildStatsForPeriod(conn, 7);
+    await conn.close();
 })();
