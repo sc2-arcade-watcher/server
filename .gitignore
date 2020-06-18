@@ -5,7 +5,6 @@
 /data/
 /tmp/
 /tests/
-/etc/
 sync*.sh
 .env*
 !.env-example

@@ -1,0 +1,22 @@
+[Unit]
+Description=starc Data Host
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=notify
+NotifyAccess=all
+WorkingDirectory=/home/sc2arcade/server
+Environment="LOG_LEVEL=ERROR"
+ExecStart=/usr/bin/node /home/sc2arcade/server/out/src/bin/datahost.js
+KillMode=process
+Restart=on-failure
+RestartPreventExitStatus=255
+User=sc2arcade
+TimeoutSec=20
+FinalKillSignal=SIGQUIT
+
+[Install]
+WantedBy=multi-user.target

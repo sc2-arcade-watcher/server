@@ -1,0 +1,24 @@
+[Unit]
+Description=starc WebAPI
+Wants=network-online.target
+Requires=mariadb.service
+After=network-online.target mariadb.service
+PartOf=mariadb.service
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=notify
+NotifyAccess=all
+WorkingDirectory=/home/sc2arcade/server
+Environment="LOG_LEVEL=ERROR"
+ExecStart=/usr/bin/node /home/sc2arcade/server/out/src/bin/webapi.js
+KillMode=process
+Restart=on-failure
+RestartPreventExitStatus=255
+User=sc2arcade
+TimeoutSec=20
+FinalKillSignal=SIGQUIT
+
+[Install]
+WantedBy=multi-user.target
