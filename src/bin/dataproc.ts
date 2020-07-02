@@ -1,5 +1,5 @@
 import * as orm from 'typeorm';
-import { JournalReader, GameRegion, JournalMultiProcessor, JournalEventKind, JournalEventNewLobby, JournalEventCloseLobby, GameLobbyStatus, JournalEventUpdateLobbySnapshot, JournalEventUpdateLobbyList, GameLobbyDesc, JournalEventUpdateLobbySlots, JournalEventBase } from '../gametracker';
+import { JournalReader, GameRegion, JournalMultiProcessor, JournalEventKind, JournalEventNewLobby, JournalEventCloseLobby, GameLobbyStatus, JournalEventUpdateLobbySnapshot, JournalEventUpdateLobbyList, GameLobbyDesc, JournalEventUpdateLobbySlots, JournalEventBase, toPlayerHandle } from '../gametracker';
 import { JournalFeed } from '../journal/feed';
 import { S2GameLobby } from '../entity/S2GameLobby';
 import { S2Region } from '../entity/S2Region';
@@ -338,14 +338,19 @@ class DataProc {
             (s2profile.name !== infoProfile.name || s2profile.discriminator !== infoProfile.discriminator) &&
             (s2profile.updatedAt === null || s2profile.updatedAt < updatedAt)
         ) {
-            logger.verbose(`Updating profile name from ${s2profile.name}#${s2profile.discriminator} to ${infoProfile.name}#${infoProfile.discriminator}`);
+            logger.verbose([
+                `Updating profile #${s2profile.id}`,
+                ` ${s2profile.name}#${s2profile.discriminator} (${toPlayerHandle(s2profile)})`,
+                ` =>`,
+                ` ${infoProfile.name}#${infoProfile.discriminator} (${toPlayerHandle(infoProfile)})`,
+            ].join(''));
             const updateData: Partial<S2Profile> = {
                 name: infoProfile.name,
                 discriminator: infoProfile.discriminator,
                 updatedAt: updatedAt,
             };
             Object.assign(s2profile, updateData);
-            await this.conn.getRepository(S2Profile).update(s2profile, updateData);
+            await this.conn.getRepository(S2Profile).update(s2profile.id, updateData);
         }
 
         return s2profile;
