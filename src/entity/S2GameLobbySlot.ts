@@ -10,8 +10,6 @@ export enum S2GameLobbySlotKind {
 }
 
 @Entity()
-@Unique('lobby_slot', ['lobby', 'slotNumber'])
-@Index('lobby_player', ['lobby', 'profile'])
 export class S2GameLobbySlot {
     @PrimaryGeneratedColumn()
     id: number;

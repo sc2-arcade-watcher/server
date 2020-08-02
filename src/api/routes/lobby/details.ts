@@ -23,16 +23,22 @@ export default fp(async (server, opts, next) => {
             },
         },
     }, async (request, reply) => {
-        const result = await server.conn.getCustomRepository(S2GameLobbyRepository)
-            .prepareDetailedSelect()
+        const lobbyRepo = server.conn.getCustomRepository(S2GameLobbyRepository);
+        const qb = lobbyRepo
+            .createQueryBuilder('lobby')
             .andWhere('lobby.regionId = :regionId AND lobby.bnetBucketId = :bnetBucketId AND lobby.bnetRecordId = :bnetRecordId', {
                 regionId: request.params.regionId,
                 bnetBucketId: request.params.bnetBucketId,
                 bnetRecordId: request.params.bnetRecordId,
             })
-            .getOne()
         ;
 
+        lobbyRepo.addMapInfo(qb);
+        lobbyRepo.addSlots(qb);
+        lobbyRepo.addSlotsJoinInfo(qb);
+        lobbyRepo.addJoinHistory(qb);
+
+        const result = await qb.getOne();
         if (!result) {
             return reply.type('application/json').code(404).send();
         }

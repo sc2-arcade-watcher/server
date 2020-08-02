@@ -3,7 +3,6 @@ import { S2GameLobby } from './S2GameLobby';
 import { S2Profile } from './S2Profile';
 
 @Entity()
-@Index('lobby_player', ['lobby', 'profile'])
 export class S2GameLobbyPlayerJoin {
     @PrimaryGeneratedColumn()
     id: number;
