@@ -27,7 +27,7 @@ export default fp(async (server, opts, next) => {
             .leftJoinAndSelect('lobby.slots', 'slot')
             .leftJoinAndSelect('slot.joinInfo', 'joinInfo')
             .andWhere('slot.kind = :kind', { kind: S2GameLobbySlotKind.Human })
-            .andWhere('lobby.status = :status OR lobby.closedAt >= FROM_UNIXTIME(UNIX_TIMESTAMP()-20)', { status: GameLobbyStatus.Open })
+            .andWhere('lobby.status = :status OR lobby.closedAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 20 SECOND)', { status: GameLobbyStatus.Open })
             .addOrderBy('lobby.createdAt', 'ASC')
             .addOrderBy('slot.slotNumber', 'ASC')
             .getMany()

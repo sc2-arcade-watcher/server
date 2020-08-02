@@ -81,7 +81,7 @@ export default fp(async (server, opts, next) => {
         }
 
         if (request.query.recentlyClosedThreshold) {
-            qb.andWhere('lobby.status = :status OR lobby.closedAt >= FROM_UNIXTIME(UNIX_TIMESTAMP() - :threshold)', {
+            qb.andWhere('lobby.status = :status OR lobby.closedAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL :threshold SECOND)', {
                 status: GameLobbyStatus.Open,
                 threshold: request.query.recentlyClosedThreshold
             });

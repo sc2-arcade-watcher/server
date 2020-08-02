@@ -71,7 +71,7 @@ export class StatusTask extends BotTask {
             .addSelect('COUNT(DISTINCT(lobby.id))', 'totalGames')
             .addSelect('COUNT(DISTINCT(slot.profile_id))', 'totalPlayers')
             .andWhere('status = :status', { status: GameLobbyStatus.Started })
-            .andWhere('closed_at >= FROM_UNIXTIME(UNIX_TIMESTAMP()-3600*1)')
+            .andWhere('closed_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 HOUR)')
             .andWhere('slot.kind = :kind', { kind: S2GameLobbySlotKind.Human })
             .cache(60000)
             .getRawOne()

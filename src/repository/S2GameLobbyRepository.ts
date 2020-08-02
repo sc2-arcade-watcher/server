@@ -109,12 +109,4 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
         ;
         return qb;
     }
-
-    async getActive() {
-        return this
-            .prepareDetailedSelect()
-            .andWhere('lobby.status = :status OR lobby.closedAt >= FROM_UNIXTIME(UNIX_TIMESTAMP()-20)', { status: GameLobbyStatus.Open })
-            .getMany()
-        ;
-    }
 }

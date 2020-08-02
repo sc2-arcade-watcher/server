@@ -84,7 +84,7 @@ export class LobbyReporterTask extends BotTask {
         return;
         if (!await this.waitUntilReady()) return;
         const res = await this.conn.getRepository(DsGameLobbyMessage).delete([
-            'updated_at < FROM_UNIXTIME(UNIX_TIMESTAMP()-3600*24)',
+            'updated_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)',
             'completed = true',
         ]);
         return res.affected;
