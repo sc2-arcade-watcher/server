@@ -149,13 +149,20 @@ class DataProc {
     protected async getLobby(lobby: GameLobbyDesc) {
         let s2lobby = this.lobbiesCache.get(lobby.initInfo.lobbyId);
         if (!s2lobby) {
-            s2lobby = await this.em.getRepository(S2GameLobby).findOneOrFail({
-                bnetBucketId: lobby.initInfo.bucketId,
-                bnetRecordId: lobby.initInfo.lobbyId,
-            }, {
-                relations: ['slots', 'slots.profile', 'slots.joinInfo'],
-            });
-            this.lobbiesCache.set(lobby.initInfo.lobbyId, s2lobby);
+            s2lobby = await this.em.getRepository(S2GameLobby)
+                .createQueryBuilder('lobby')
+                .leftJoinAndSelect('lobby.region', 'region')
+                .leftJoinAndSelect('lobby.slots', 'slots')
+                .leftJoinAndSelect('slots.profile', 'profile')
+                .leftJoinAndSelect('slots.joinInfo', 'joinInfo')
+                .andWhere('lobby.regionId = :regionId AND lobby.bnetBucketId = :bnetBucketId AND lobby.bnetRecordId = :bnetRecordId', {
+                    regionId: this.s2region.id,
+                    bnetBucketId: lobby.initInfo.bucketId,
+                    bnetRecordId: lobby.initInfo.lobbyId,
+                })
+                .addOrderBy('slots.slotNumber', 'ASC')
+                .getOne()
+            ;
 
             // assign profile to corresponding joinInfo on human slots manually
             // doing it directly from the typeorm could likely result in circular dependency issues
@@ -163,6 +170,8 @@ class DataProc {
                 if (!slot.joinInfo) return;
                 slot.joinInfo.profile = slot.profile;
             });
+
+            this.lobbiesCache.set(lobby.initInfo.lobbyId, s2lobby);
         }
         return s2lobby;
     }
@@ -247,8 +256,8 @@ class DataProc {
             const updatedSlots = await Promise.all(lobbyData.slots.map(async (infoSlot, idx) => {
                 const s2slot = s2lobby.slots[idx];
                 if (idx !== (s2slot.slotNumber - 1)) {
-                    logger.error('wtf2', idx, s2slot.slotNumber, s2slot, infoSlot, s2lobby, lobbyData);
-                    throw new Error('wtf2');
+                    logger.error('slotNumber missmatch - not in order?', idx, s2slot.slotNumber, s2slot, infoSlot, s2lobby, lobbyData);
+                    throw new Error('slotNumber missmatch - not in order?');
                 }
                 const newS2SlotKind = slotKindMap[infoSlot.kind];
                 if (newS2SlotKind !== s2slot.kind || infoSlot.name !== s2slot.name || infoSlot.team !== s2slot.team) {
