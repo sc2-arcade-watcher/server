@@ -1,6 +1,7 @@
 import * as orm from 'typeorm';
 import { BattleDepot, convertImage, NestedHashDir } from '../depot';
 import { buildStatsForPeriod } from '../task/statsBuilder';
+import { S2StatsPeriodKind } from '../entity/S2StatsPeriod';
 
 async function populateBnetDepot() {
     const bnDepot = new BattleDepot('data/depot');
@@ -17,7 +18,8 @@ process.on('unhandledRejection', e => { throw e; });
     // await populateBnetDepot();
 
     const conn = await orm.createConnection();
-    await buildStatsForPeriod(conn, 1);
-    await buildStatsForPeriod(conn, 7);
+    await buildStatsForPeriod(conn, S2StatsPeriodKind.Daily);
+    await buildStatsForPeriod(conn, S2StatsPeriodKind.Weekly);
+    await buildStatsForPeriod(conn, S2StatsPeriodKind.Monthly);
     await conn.close();
 })();

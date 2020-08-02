@@ -1,10 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneToMany } from 'typeorm';
-import { S2Document } from './S2Document';
+import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { S2StatsPeriod } from './S2StatsPeriod';
+import { S2Region } from './S2Region';
 
 @Entity()
-@Unique('period_map_idx', ['period', 'document'])
-export class S2StatsPeriodMap {
+@Unique('period_region_idx', ['period', 'region'])
+export class S2StatsPeriodRegion {
     @PrimaryGeneratedColumn()
     id: number;
 
@@ -16,13 +16,19 @@ export class S2StatsPeriodMap {
     @Index()
     period: S2StatsPeriod;
 
-    @ManyToOne(type => S2Document, {
+    @ManyToOne(type => S2Region, {
         nullable: false,
         onDelete: 'CASCADE',
         onUpdate: 'CASCADE',
     })
     @Index()
-    document: S2Document;
+    region: S2Region;
+
+    @Column({
+        unsigned: true,
+        type: 'tinyint',
+    })
+    regionId: number;
 
     @Column({
         default: 0,
@@ -48,13 +54,4 @@ export class S2StatsPeriodMap {
         nullable: true,
     })
     participantsUniqueTotal: number;
-
-    @Column({
-        type: 'decimal',
-        precision: 8,
-        scale: 2,
-        default: 0,
-        unsigned: true,
-    })
-    pendingTimeAverage: number;
 }

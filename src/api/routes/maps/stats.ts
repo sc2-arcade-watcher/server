@@ -2,7 +2,7 @@ import * as fp from 'fastify-plugin';
 import { S2GameLobby } from '../../../entity/S2GameLobby';
 import { S2GameLobbySlotKind } from '../../../entity/S2GameLobbySlot';
 import { S2StatsPeriodMap } from '../../../entity/S2StatsPeriodMap';
-import { S2StatsPeriod } from '../../../entity/S2StatsPeriod';
+import { S2StatsPeriod, S2StatsPeriodKind } from '../../../entity/S2StatsPeriod';
 
 export default fp(async (server, opts, next) => {
     server.get('/maps/:regionId/:mapId/stats', {
@@ -21,17 +21,33 @@ export default fp(async (server, opts, next) => {
                     },
                 },
             },
+            querystring: {
+                type: 'object',
+                properties: {
+                    kind: {
+                        type: 'string',
+                        enum: Object.values(S2StatsPeriodKind),
+                        default: S2StatsPeriodKind.Weekly,
+                    },
+                },
+            },
         },
     }, async (request, reply) => {
         const statPeriods = await server.conn.getRepository(S2StatsPeriod)
             .createQueryBuilder('stPer')
             .select([])
             .addSelect('stPer.id', 'statId')
-            .addSelect('CAST(DATE_ADD(stPer.dateFrom, INTERVAL (stPer.length - 1) DAY) AS CHAR)', 'date')
-            .andWhere('stPer.length = :length', { length: 7 })
+            .addSelect('CAST(stPer.dateFrom AS CHAR)', 'date')
+            .andWhere('stPer.kind = :kind', { kind: request.query.kind })
+            .andWhere('stPer.completed = 1')
             .addOrderBy('stPer.dateFrom', 'ASC')
             .getRawMany()
         ;
+
+        if (!statPeriods.length) {
+            return reply.type('application/json').code(200).send({});
+        }
+
         const tmpResult = await server.conn.getRepository(S2StatsPeriodMap)
             .createQueryBuilder('stMap')
             .select([])

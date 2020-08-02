@@ -1,32 +1,49 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, OneToMany } from 'typeorm';
 import { S2StatsPeriodMap } from './S2StatsPeriodMap';
+import { S2StatsPeriodRegion } from './S2StatsPeriodRegion';
+
+export enum S2StatsPeriodKind {
+    Daily = 'daily',
+    Weekly = 'weekly',
+    Monthly = 'monthly',
+}
 
 @Entity()
-@Unique('length_from', ['length', 'dateFrom'])
+@Unique('kind_date_from_idx', ['kind', 'dateFrom'])
 export class S2StatsPeriod {
     @PrimaryGeneratedColumn()
     id: number;
 
     @Column({
-        type: 'tinyint',
-        unsigned: true,
+        type: 'enum',
+        nullable: false,
+        enum: S2StatsPeriodKind,
     })
-    @Index()
-    length: number;
+    kind: S2StatsPeriodKind;
 
     @Column({
         type: 'date',
     })
     dateFrom: Date;
 
-    @OneToMany(type => S2StatsPeriodMap, statPeriodMap => statPeriodMap.period, {
-        cascade: false,
+    @Column({
+        type: 'date',
     })
-    mapStats: S2StatsPeriodMap[];
+    dateTo: Date;
 
     @Column({
         type: 'boolean',
         default: false,
     })
     completed: boolean;
+
+    @OneToMany(type => S2StatsPeriodMap, statPeriodMap => statPeriodMap.period, {
+        cascade: false,
+    })
+    mapStats: S2StatsPeriodMap[];
+
+    @OneToMany(type => S2StatsPeriodRegion, statPeriodRegion => statPeriodRegion.period, {
+        cascade: false,
+    })
+    regionStats: S2StatsPeriodRegion[];
 }

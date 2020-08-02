@@ -170,6 +170,9 @@ server.register(require('../api/routes/lobby/playerHistory').default);
 server.register(require('../api/routes/maps/list').default);
 server.register(require('../api/routes/maps/details').default);
 server.register(require('../api/routes/maps/stats').default);
+
+server.register(require('../api/routes/stats/regionStats').default);
+
 server.register(require('../api/routes/depot').default);
 
 process.on('unhandledRejection', e => { throw e; });
