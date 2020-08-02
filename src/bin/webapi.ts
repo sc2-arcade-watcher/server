@@ -76,9 +76,8 @@ server.register(fastifyRateLimit, {
     timeWindow: 1000 * 60 * 5,
 });
 
-// @ts-ignore
 server.register(fastifyCors, {
-    origin: process.env.ENV === 'dev' ? '*' : `http://sc2arcade.talv.space/api`,
+    origin: process.env.ENV === 'dev' ? '*' : `https://sc2arcade.talv.space`,
 });
 
 // @ts-ignore
