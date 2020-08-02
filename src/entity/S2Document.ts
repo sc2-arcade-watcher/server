@@ -78,5 +78,12 @@ export class S2Document {
     })
     currentMinorVersion: number;
 
+    @Column({
+        type: 'varchar',
+        length: 64,
+        nullable: true,
+    })
+    iconHash: string;
+
     currentVersion?: S2DocumentVersion;
 }

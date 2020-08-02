@@ -32,12 +32,6 @@ export default fp(async (server, opts, next) => {
 
         const qb = server.conn.getRepository(S2Document)
             .createQueryBuilder('mapDoc')
-            .innerJoinAndMapOne(
-                'mapDoc.currentVersion',
-                S2DocumentVersion,
-                'currentVersion',
-                'currentVersion.document = mapDoc.id AND currentVersion.majorVersion = mapDoc.currentMajorVersion AND currentVersion.minorVersion = mapDoc.currentMinorVersion'
-            )
             .take(limit)
             .skip(offset)
         ;

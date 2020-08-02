@@ -434,6 +434,7 @@ class DataProc {
                 type: S2DocumentType.Map,
                 isArcade: info.isArcade,
                 name: info.mapName,
+                iconHash: info.mapIcon.substr(0, 64),
             } as S2Document,
             {
                 iconHash: info.mapIcon.substr(0, 64),
