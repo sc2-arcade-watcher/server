@@ -4,7 +4,7 @@ Wants=network-online.target
 Requires=mariadb.service
 After=network-online.target mariadb.service
 PartOf=mariadb.service
-StartLimitIntervalSec=600
+StartLimitIntervalSec=300
 StartLimitBurst=5
 
 [Service]
@@ -18,6 +18,7 @@ Restart=on-failure
 RestartPreventExitStatus=255
 User=sc2arcade
 TimeoutSec=10
+RestartSec=500ms
 FinalKillSignal=SIGQUIT
 
 [Install]

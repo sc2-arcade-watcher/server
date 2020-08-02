@@ -2,7 +2,7 @@
 Description=starc Data Host
 Wants=network-online.target
 After=network-online.target
-StartLimitIntervalSec=600
+StartLimitIntervalSec=300
 StartLimitBurst=5
 
 [Service]
@@ -16,6 +16,7 @@ Restart=on-failure
 RestartPreventExitStatus=255
 User=sc2arcade
 TimeoutSec=20
+RestartSec=500ms
 FinalKillSignal=SIGQUIT
 
 [Install]
