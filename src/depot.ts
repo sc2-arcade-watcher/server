@@ -67,7 +67,7 @@ export async function convertImage(src: string, dst: string, options: string[] =
     ]);
     const identifyResult = await spawnWaitExit(identifyProc, { captureStdout: true });
     if (identifyResult.rcode !== 0) {
-        logger.error(`Failed to identify image "${src}" rcode=${identifyResult.rcode}`);
+        logger.warn(`Failed to identify image "${src}" rcode=${identifyResult.rcode}`);
     }
     else {
         srcFormat = identifyResult.stdout.toLowerCase();
