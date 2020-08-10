@@ -23,7 +23,6 @@ export default fp(async (server, opts, next) => {
             .innerJoinAndSelect('lobby.region', 'region')
             .innerJoinAndSelect('lobby.mapDocumentVersion', 'mapDocVer')
             .innerJoinAndSelect('mapDocVer.document', 'mapDoc')
-            .innerJoinAndSelect('mapDoc.category', 'mapCategory')
             .leftJoinAndSelect('lobby.slots', 'slot')
             .leftJoinAndSelect('slot.joinInfo', 'joinInfo')
             .andWhere('slot.kind = :kind', { kind: S2GameLobbySlotKind.Human })
@@ -37,7 +36,7 @@ export default fp(async (server, opts, next) => {
             if (s2lobby.status === GameLobbyStatus.Abandoned) {
                 (<any>s2lobby).status = 'disbanded';
             }
-            (<any>s2lobby).mapVariantCategory = s2lobby.mapDocumentVersion.document.category.name;
+            (<any>s2lobby).mapVariantCategory = 'Other';
             (<any>s2lobby).players = s2lobby.slots.map(s2slot => {
                 if (s2slot.kind !== S2GameLobbySlotKind.Human) return;
                 return {

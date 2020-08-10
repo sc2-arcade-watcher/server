@@ -1,7 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToOne, ManyToOne, Index, Unique, OneToMany } from 'typeorm';
 import { S2DocumentVersion } from './S2DocumentVersion';
 import { S2Region } from './S2Region';
-import { S2MapCategory } from './S2MapCategory';
 
 export enum S2DocumentType {
     Map = 'map',
@@ -11,7 +10,6 @@ export enum S2DocumentType {
 
 @Entity()
 @Unique('region_bnet_id', ['region', 'bnetId'])
-@Index('region_doc_type', ['region', 'type'])
 export class S2Document {
     @PrimaryGeneratedColumn()
     id: number;
@@ -49,14 +47,9 @@ export class S2Document {
     @Index('doc_name')
     name: string;
 
-    @ManyToOne(type => S2MapCategory, {
+    @Column({
         nullable: true,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
     })
-    category: S2MapCategory;
-
-    @Column()
     categoryId: number;
 
     @OneToMany(type => S2DocumentVersion, documentVersion => documentVersion.document, {

@@ -87,15 +87,18 @@ export const execAsync = util.promisify(childProc.exec);
 
 export interface SpawnWaitOptions {
     captureStdout?: boolean;
+    captureStderr?: boolean;
 }
 
 export interface SpawnWaitResult {
     rcode: number;
     stdout?: string;
+    stderr?: string;
 }
 
 export function spawnWaitExit<T extends childProc.ChildProcess>(proc: T, opts: SpawnWaitOptions = {}): Promise<SpawnWaitResult> {
     const stdout: string[] = [];
+    const stderr: string[] = [];
 
     if (opts.captureStdout) {
         proc.stdout.on('data', buff => {
@@ -104,12 +107,20 @@ export function spawnWaitExit<T extends childProc.ChildProcess>(proc: T, opts: S
             }
         });
     }
+    if (opts.captureStderr) {
+        proc.stderr.on('data', buff => {
+            if (buff instanceof Buffer) {
+                stderr.push(buff.toString('utf8'));
+            }
+        });
+    }
 
     return new Promise((resolve, reject) => {
         proc.once('exit', (code, signal) => {
             resolve({
                 rcode: code,
-                stdout: stdout.join('')
+                stdout: opts.captureStdout ? stdout.join('') : void 0,
+                stderr: opts.captureStderr ? stderr.join('') : void 0,
             });
         });
     });

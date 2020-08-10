@@ -1,7 +1,9 @@
 import * as orm from 'typeorm';
+import * as program from 'commander';
 import { BattleDepot, convertImage, NestedHashDir } from '../depot';
 import { buildStatsForPeriod } from '../task/statsBuilder';
 import { S2StatsPeriodKind } from '../entity/S2StatsPeriod';
+import { MapResolver, applyMapLocalization } from '../task/mapResolver';
 
 async function populateBnetDepot() {
     const bnDepot = new BattleDepot('data/depot');
@@ -13,13 +15,37 @@ async function populateBnetDepot() {
 }
 
 
-process.on('unhandledRejection', e => { throw e; });
-(async function () {
-    // await populateBnetDepot();
+async function statsGenerate() {
+    await populateBnetDepot();
 
     const conn = await orm.createConnection();
     await buildStatsForPeriod(conn, S2StatsPeriodKind.Daily);
     await buildStatsForPeriod(conn, S2StatsPeriodKind.Weekly);
     await buildStatsForPeriod(conn, S2StatsPeriodKind.Monthly);
     await conn.close();
-})();
+}
+
+program.command('depot-test')
+    .action(populateBnetDepot)
+;
+
+program.command('stats')
+    .action(statsGenerate)
+;
+
+program.command('map-header <region> <hash>')
+    .action(async (region: string, hash: string) => {
+        const conn = await orm.createConnection();
+        const mpresolver = new MapResolver(conn);
+
+        const mapHeader = await mpresolver.getMapHeader(region, hash);
+        const mapLocalization = await mpresolver.getMapLocalization(region, mapHeader.localeTable[0].stringTable[0].hash);
+        const mapLocalized = applyMapLocalization(mapHeader, mapLocalization);
+        console.log(mapLocalized);
+
+        await conn.close();
+    })
+;
+
+process.on('unhandledRejection', e => { throw e; });
+program.parse(process.argv);

@@ -1,7 +1,9 @@
 import * as util from 'util';
 import * as path from 'path';
 import * as fs from 'fs-extra';
+import * as os from 'os';
 import { spawn } from 'child_process';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { execAsync, spawnWaitExit, SpawnWaitResult } from './helpers';
 import { logger } from './logger';
 
@@ -25,6 +27,10 @@ export class NestedHashDir {
     }
 }
 
+function getDepotURL(region: string, filename?: string) {
+    return `http://${region.toLowerCase()}.depot.battle.net:1119/${filename ?? ''}`;
+}
+
 export class BattleDepot {
     readonly ndir: NestedHashDir;
 
@@ -37,7 +43,7 @@ export class BattleDepot {
         const wgetProc = spawn('wget', [
             '-q',
             '-O', targetFilename,
-            `http://${region.toLowerCase()}.depot.battle.net:1119/${filename}`,
+            getDepotURL(region, filename),
         ]);
         const result = await spawnWaitExit(wgetProc);
         if (result.rcode !== 0) {
@@ -45,11 +51,17 @@ export class BattleDepot {
         }
     }
 
+    async retrieveHead(region: string, filename: string) {
+        return axios.head(getDepotURL(region, filename));
+    }
+
     async getPathOrRetrieve(region: string, filename: string) {
         const targetFilename = this.ndir.pathTo(filename);
 
         if (!(await fs.pathExists(targetFilename))) {
-            await this.download(region, filename, targetFilename);
+            const tmpFilename = path.join(os.tmpdir(), `${filename}.${Math.floor(Math.random() * 0x7FFFFFFF).toString(16)}`)
+            await this.download(region, filename, tmpFilename);
+            await fs.move(tmpFilename, targetFilename, { overwrite: true });
         }
 
         return targetFilename;

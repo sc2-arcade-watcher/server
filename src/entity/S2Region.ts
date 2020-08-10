@@ -1,4 +1,5 @@
-import { Entity, PrimaryColumn, Column, Index } from 'typeorm';
+import { Entity, PrimaryColumn, Column, Index, OneToOne } from 'typeorm';
+import { S2RegionMapProgress } from './S2RegionMapProgress';
 
 @Entity()
 export class S2Region {
@@ -21,4 +22,8 @@ export class S2Region {
         length: 32
     })
     name: string;
+
+    @OneToOne(type => S2RegionMapProgress, mapProgress => mapProgress.region, {
+    })
+    mapProgress: S2RegionMapProgress;
 }

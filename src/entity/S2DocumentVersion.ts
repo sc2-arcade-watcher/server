@@ -10,8 +10,8 @@ export class S2DocumentVersion {
     @ManyToOne(type => S2Document, document => document.docVersions, {
         nullable: false,
         eager: true,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
     })
     @Index()
     document: S2Document;

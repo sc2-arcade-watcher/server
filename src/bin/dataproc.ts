@@ -381,19 +381,6 @@ class DataProc {
                 s2doc.region = this.s2region;
                 s2doc.currentMajorVersion = infoDocVer.majorVersion;
                 s2doc.currentMinorVersion = infoDocVer.minorVersion;
-                if (opts.categoryName) {
-                    let s2category = await this.em.getRepository(S2MapCategory).findOne({
-                        where: {
-                            name: opts.categoryName,
-                        },
-                    });
-                    if (!s2category) {
-                        s2category = new S2MapCategory();
-                        s2category.name = opts.categoryName;
-                        await this.em.getRepository(S2MapCategory).save(s2category);
-                    }
-                    s2doc.category = s2category;
-                }
                 await this.em.getRepository(S2Document).save(s2doc);
             }
             else {

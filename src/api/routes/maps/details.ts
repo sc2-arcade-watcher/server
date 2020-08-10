@@ -22,7 +22,6 @@ export default fp(async (server, opts, next) => {
     }, async (request, reply) => {
         const result = await server.conn.getRepository(S2Document)
             .createQueryBuilder('mapDoc')
-            .leftJoinAndSelect('mapDoc.category', 'category')
             .andWhere('mapDoc.regionId = :regionId', { regionId: request.params.regionId })
             .andWhere('mapDoc.bnetId = :bnetId', { bnetId: request.params.mapId })
             .getOne()

@@ -1,7 +1,9 @@
 [Unit]
 Description=starc Data Host
 Wants=network-online.target
-After=network-online.target
+Requires=mariadb.service
+After=network-online.target mariadb.service
+PartOf=mariadb.service
 StartLimitIntervalSec=300
 StartLimitBurst=5
 

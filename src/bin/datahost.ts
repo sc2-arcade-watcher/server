@@ -4,17 +4,22 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as WebSocket from 'ws';
 import * as dotenv from 'dotenv';
+import * as orm from 'typeorm';
+import PQueue from 'p-queue';
 import { logger, logIt, setupFileLogger } from '../logger';
 import { Socket } from 'net';
 import { execAsync, sleep } from '../helpers';
+import { S2Region } from '../entity/S2Region';
+import { S2MapHeader } from '../entity/S2MapHeader';
+import { MapResolver } from '../task/mapResolver';
 
-export interface LblRunnerSession {
+interface RunnerSessionFeed {
     startedAt: number;
     lastUpdateAt: number;
     size: number;
 }
 
-export class LblRunnerInfo {
+class RunnerFeedCtrl {
     readonly id: string;
     readonly hname: string;
     readonly region: string;
@@ -26,8 +31,8 @@ export class LblRunnerInfo {
     }
 
     @logIt()
-    async getCurrentSession(): Promise<LblRunnerSession> {
-        const result = await execAsync(`fd -t f . "${LblStorage.storageDir}/${this.id}/" -x echo "{/.} {}" | sort -h | cut -d " " -f 2-`);
+    async getCurrentSession(): Promise<RunnerSessionFeed> {
+        const result = await execAsync(`fd -t f . "${FeedStorage.storageDir}/${this.id}/" -x echo "{/.} {}" | sort -h | cut -d " " -f 2-`);
         const flist = result.stdout.trimRight().split('\n');
         if (!flist.length || flist[0] === '') return;
 
@@ -43,7 +48,7 @@ export class LblRunnerInfo {
 
     @logIt({ argsDump: true })
     openWriteSession(sessTimestamp: number, offset: number) {
-        const fname = path.join(LblStorage.storageDir, this.id, sessTimestamp.toString());
+        const fname = path.join(FeedStorage.storageDir, this.id, sessTimestamp.toString());
         if (fs.pathExistsSync(fname)) {
             const sInfo = fs.statSync(fname);
             if (sInfo.size !== offset) {
@@ -64,48 +69,61 @@ export class LblRunnerInfo {
     }
 }
 
-export class LblStorage {
+class FeedStorage {
     static storageDir = 'data/lbstream';
-    protected runnerInfo = new Map<string, LblRunnerInfo>();
+    protected runnerInfo = new Map<string, RunnerFeedCtrl>();
 
     async load() {
-        for (const runnerId of await fs.readdir(LblStorage.storageDir)) {
-            const fstat = await fs.stat(path.join(LblStorage.storageDir, runnerId));
+        for (const runnerId of await fs.readdir(FeedStorage.storageDir)) {
+            const fstat = await fs.stat(path.join(FeedStorage.storageDir, runnerId));
             if (!fstat.isDirectory()) continue;
 
             const m = runnerId.match(/^(.*)-(EU|KR|US)$/);
-            const rInfo = new LblRunnerInfo(runnerId, m[1], m[2]);
+            const rInfo = new RunnerFeedCtrl(runnerId, m[1], m[2]);
             this.runnerInfo.set(rInfo.id, rInfo);
         }
     }
 
     async createRunner(hname: string, region: string) {
         const runnerId = `${hname}-${region}`;
-        const rInfo = new LblRunnerInfo(runnerId, hname, region);
+        const rInfo = new RunnerFeedCtrl(runnerId, hname, region);
         this.runnerInfo.set(runnerId, rInfo);
-        await fs.ensureDir(path.join(LblStorage.storageDir, runnerId));
+        await fs.ensureDir(path.join(FeedStorage.storageDir, runnerId));
         return rInfo;
     }
 
     getRunners() {
-        return this.runnerInfo as ReadonlyMap<string, LblRunnerInfo>;
+        return this.runnerInfo as ReadonlyMap<string, RunnerFeedCtrl>;
     }
 }
 
 // ===
 
-enum LbsRequestKind {
-    Welcome         = 0,
-    RunnerIntro     = 1,
-    SetStreamOffset = 2,
-    StreamBegin     = 3,
-    StreamEnd       = 4,
-    StreamChunk     = 5,
+enum MessageKind {
+    Welcome                      = 0,
+    RunnerIntro                  = 1,
+    RunnerWelcome                = 6,
+
+    SetStreamOffset              = 2,
+    StreamBegin                  = 3,
+    StreamEnd                    = 4,
+    StreamChunk                  = 5,
+
+    MapHeaderResult              = 10,
+    MapInfoAck                   = 11,
 }
 
-interface LbsRunnerIntro {
+interface RunnerIntro {
     hostname: string;
     region: string;
+}
+
+interface RunnerWelcome {
+    lastFeed: {
+        session: number;
+        offset: number;
+    };
+    mapProgressOffsetId: number;
 }
 
 interface LbsSetDataOffset {
@@ -128,22 +146,55 @@ interface LbsStreamChunk {
     d: string;
 }
 
+interface MapHeaderResult {
+    regionId: number;
+    mapId: number;
+    mapVersion: number;
+    headerHash: string;
+    isExtensionMod: boolean;
+    isPrivate: boolean;
+}
+
+interface MapInfoAck {
+    regionId: number;
+    mapId: number;
+    mapVersion: number;
+}
+
 interface WsClientDesc {
     isAlive: boolean;
     connSocket: Socket;
-    runnerInfo?: LblRunnerInfo;
-    sessInfo?: LblRunnerSession;
+    ws: WebSocket;
+    region?: S2Region;
+    runnerFeedInfo?: RunnerFeedCtrl;
+    sessInfo?: RunnerSessionFeed;
     sessWriteStream?: fs.WriteStream;
 }
 
 export class LbsServer {
+    protected conn: orm.Connection;
     protected wss: WebSocket.Server;
     protected clientsInfo = new Map<WebSocket, WsClientDesc>();
-    protected lbStorage = new LblStorage();
+    protected fStorage = new FeedStorage();
+    protected regions: S2Region[] = [];
+    protected mapResolver: MapResolver;
+    protected mapHeaderQueue = new PQueue({
+        concurrency: 5,
+    });
+
+    private async setupDbConn() {
+        this.conn = await orm.createConnection();
+        this.mapResolver = new MapResolver(this.conn);
+        this.regions = await this.conn.getRepository(S2Region).find({
+            relations: ['mapProgress'],
+            order: { id: 'ASC' },
+        });
+    }
 
     @logIt()
     async load() {
-        await this.lbStorage.load();
+        await this.setupDbConn();
+        await this.fStorage.load();
         this.wss = new WebSocket.Server({
             port: 8089,
             verifyClient: this.verifyClient.bind(this),
@@ -163,7 +214,7 @@ export class LbsServer {
             this.wss.clients.forEach((ws) => {
                 const sclient = this.clientsInfo.get(ws);
                 if (!sclient.isAlive) {
-                    logger.info(`No response to ping from ${sclient?.runnerInfo.id}. Terminating connection..`);
+                    logger.info(`No response to ping from ${sclient?.runnerFeedInfo.id}. Terminating connection..`);
                     return ws.terminate();
                 }
 
@@ -196,13 +247,17 @@ export class LbsServer {
     }
 
     @logIt({ profiling: false })
-    close() {
+    async close() {
+        this.mapHeaderQueue.pause();
         logger.verbose('Closing websocket..');
         this.wss.close();
+        logger.verbose('Shutting down DB connection..');
+        await this.conn.close();
     }
 
     protected async onNewConnection(ws: WebSocket, request: http.IncomingMessage) {
         this.clientsInfo.set(ws, {
+            ws: ws,
             isAlive: true,
             connSocket: request.connection,
         });
@@ -225,27 +280,34 @@ export class LbsServer {
 
         // logger.debug(`msg ip=${sclient.connSocket.remoteAddress} rport=${sclient.connSocket.remotePort}`, msg);
 
-        switch (Number(msg.$id) as LbsRequestKind) {
-            case LbsRequestKind.RunnerIntro: {
-                const rvRunner: LbsRunnerIntro = msg;
-                const rnKey = `${rvRunner.hostname}-${rvRunner.region}`;
-                let rnInfo = this.lbStorage.getRunners().get(rnKey);
-                if (!rnInfo) {
-                    rnInfo = await this.lbStorage.createRunner(rvRunner.hostname, rvRunner.region);
-                }
+        const msgKind = Number(msg.$id);
+        switch (msgKind as MessageKind) {
+            case MessageKind.RunnerIntro: {
+                const rvRunner: RunnerIntro = msg;
 
                 logger.info(`RunnerIntro: ip=${sclient.connSocket.remoteAddress} rport=${sclient.connSocket.remotePort}`, rvRunner);
+                sclient.region = this.regions.find(x => x.code === rvRunner.region);
+                if (!sclient.region) {
+                    logger.error(`Unknown region=${rvRunner.region}`);
+                    ws.terminate();
+                    return;
+                }
+
+                const rnKey = `${rvRunner.hostname}-${rvRunner.region}`;
+                let rnInfo = this.fStorage.getRunners().get(rnKey);
+                if (!rnInfo) {
+                    rnInfo = await this.fStorage.createRunner(rvRunner.hostname, rvRunner.region);
+                }
 
                 const dupedClients = Array.from(this.clientsInfo.entries()).filter(x => {
                     return (
                         x[1] !== sclient &&
-                        x[1].sessWriteStream &&
-                        x[1].runnerInfo.id === rnInfo.id
+                        x[1].runnerFeedInfo?.id === rnInfo.id
                     );
                 });
                 if (dupedClients.length) {
                     out: for (const [socket, client] of dupedClients) {
-                        logger.warn(`Terminating extra connection of ${client.runnerInfo.id} rport=${client.connSocket.remotePort}`);
+                        logger.warn(`Terminating extra connection of ${client.runnerFeedInfo.id} rport=${client.connSocket.remotePort}`);
                         socket.terminate();
                         for (let i = 0; i < 5; ++i) {
                             await sleep(1000);
@@ -259,10 +321,11 @@ export class LbsServer {
                     }
                 }
 
-                sclient.runnerInfo = rnInfo;
+                sclient.runnerFeedInfo = rnInfo;
                 sclient.sessInfo = await rnInfo.getCurrentSession();
                 logger.verbose('sessInfo', sclient.sessInfo);
 
+                // TODO: obsolete - remove once all runners will be updated
                 const sdOffset: LbsSetDataOffset = {
                     sessionStartAt: 0,
                     line: 0,
@@ -272,16 +335,24 @@ export class LbsServer {
                     sdOffset.sessionStartAt = sclient.sessInfo.startedAt;
                     sdOffset.offset = sclient.sessInfo.size;
                 }
+                ws.send(JSON.stringify({ $id: MessageKind.SetStreamOffset, ...sdOffset }));
+                // END
 
-                ws.send(JSON.stringify({ $id: LbsRequestKind.SetStreamOffset, ...sdOffset }));
+                ws.send(JSON.stringify({ $id: MessageKind.RunnerWelcome, ...{
+                    lastFeed: {
+                        session: sclient.sessInfo?.startedAt ?? 0,
+                        offset: sclient.sessInfo?.size ?? 0,
+                    },
+                    mapProgressOffsetId: sclient.region.mapProgress.offsetMapId,
+                } as RunnerWelcome }));
 
                 break;
             }
 
-            case LbsRequestKind.StreamBegin: {
+            case MessageKind.StreamBegin: {
                 const rvStrBeg: LbsStreamBegin = msg;
 
-                const rnInfo = sclient.runnerInfo;
+                const rnInfo = sclient.runnerFeedInfo;
                 if (sclient.sessWriteStream && Number(path.basename(sclient.sessWriteStream.path as string)) === rvStrBeg.sessionStartAt) {
                     logger.verbose(`resuing same stream instance, path="${sclient.sessWriteStream.path}" bytesWritten="${sclient.sessWriteStream.bytesWritten}"`);
                 }
@@ -303,7 +374,7 @@ export class LbsServer {
                 break;
             }
 
-            case LbsRequestKind.StreamEnd: {
+            case MessageKind.StreamEnd: {
                 const rvStrEnd: LbsStreamEnd = msg;
                 logger.info(`StreamEnd, endAt=${rvStrEnd.sessionEndAt}, path="${sclient.sessWriteStream.path}"`);
                 sclient.sessWriteStream.end(() => logger.verbose(`onConnMessage sessWriteStream end`));
@@ -311,7 +382,7 @@ export class LbsServer {
                 break;
             }
 
-            case LbsRequestKind.StreamChunk: {
+            case MessageKind.StreamChunk: {
                 const rvStrChunk: LbsStreamChunk = msg;
                 if (rvStrChunk.d.length === 0) {
                     logger.error(`Empty payload from ip=${sclient.connSocket.remoteAddress} rport=${sclient.connSocket.remotePort}, terminating conn..`);
@@ -321,7 +392,55 @@ export class LbsServer {
                 sclient.sessWriteStream.write(rvStrChunk.d, 'utf8');
                 break;
             }
+
+            case MessageKind.MapHeaderResult: {
+                await this.onMapHeaderResult(sclient, <MapHeaderResult>msg);
+                break;
+            }
+
+            default: {
+                logger.warn(`Received unknown message kind=${msgKind} ip=${sclient.connSocket.remoteAddress} rport=${sclient.connSocket.remotePort}`, msg);
+                break;
+            }
         }
+    }
+
+    protected async onMapHeaderResult(sclient: WsClientDesc, msg: MapHeaderResult) {
+        logger.verbose(`received map header, regionId=${msg.regionId} mhandle=${msg.mapId},${msg.mapVersion}`);
+        this.mapHeaderQueue.add(() => this.processMapHeader(msg));
+    }
+
+    protected async processMapHeader(msg: MapHeaderResult) {
+        const [ majorVer, minorVer ] = [(msg.mapVersion >> 16) & 0xFFFF, (msg.mapVersion) & 0xFFFF];
+        let mhead = await this.conn.getRepository(S2MapHeader).findOne({
+            where: {
+                regionId: msg.regionId,
+                bnetId: msg.mapId,
+                majorVersion: majorVer,
+                minorVersion: minorVer,
+            },
+        });
+        if (!mhead) {
+            mhead = new S2MapHeader();
+            mhead.regionId = msg.regionId;
+            mhead.bnetId = msg.mapId;
+            mhead.majorVersion = majorVer;
+            mhead.minorVersion = minorVer;
+            mhead.headerHash = msg.headerHash;
+            mhead.isPrivate = msg.isPrivate;
+            mhead.isExtensionMod = msg.isExtensionMod;
+            await this.mapResolver.initializeMapHeader(mhead);
+        }
+        Array.from(this.clientsInfo.values()).filter(x => x.region?.id === mhead.regionId).map(sclient => {
+            sclient.ws.send(JSON.stringify({
+                $id: MessageKind.MapInfoAck,
+                ...{
+                    regionId: msg.regionId,
+                    mapId: msg.mapId,
+                    mapVersion: msg.mapVersion,
+                } as MapInfoAck
+            }));
+        })
     }
 
     protected onConnClose(ws: WebSocket, code: number, reason: string) {
@@ -330,6 +449,7 @@ export class LbsServer {
         if (sclient.sessWriteStream) {
             logger.info(`Closing stream, bytesWritten=${sclient.sessWriteStream.bytesWritten}`);
             sclient.sessWriteStream.end(() => logger.verbose(`onConnClose sessWriteStream end`));
+            sclient.sessWriteStream = void 0;
         }
         this.clientsInfo.delete(ws);
     }
@@ -346,8 +466,8 @@ process.on('unhandledRejection', e => { throw e; });
     const lserv = new LbsServer();
 
     async function terminate(sig: NodeJS.Signals) {
-        logger.info(`SIGTERM received`);
-        lserv.close();
+        logger.info(`${sig} received`);
+        await lserv.close();
     }
 
     process.on('SIGTERM', terminate);

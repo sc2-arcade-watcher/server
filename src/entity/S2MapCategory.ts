@@ -6,11 +6,17 @@ export class S2MapCategory {
     id: number;
 
     @Column({
-        length: 64,
+        length: 32,
         nullable: false,
     })
-    @Index('category_name', {
+    @Index('code_idx', {
         unique: true,
+    })
+    code: string;
+
+    @Column({
+        length: 64,
+        nullable: true,
     })
     name: string;
 
@@ -18,4 +24,7 @@ export class S2MapCategory {
         nullable: true,
     })
     description: string;
+
+    @Column()
+    isMelee: boolean;
 }
