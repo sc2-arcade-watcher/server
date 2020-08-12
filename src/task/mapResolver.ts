@@ -153,7 +153,7 @@ export interface LockedAttribute {
 
 export interface MapLocalizationTable {
     locale: GameLocale;
-    strings: Map<number, string | undefined>;
+    strings: Map<number, string>;
 }
 
 export type MapHeaderLocalized = MapHeaderData & {
@@ -211,27 +211,28 @@ export class MapResolver {
     constructor(protected conn: orm.Connection) {
     }
 
-    async getMapLocalization(region: string, hash: string, persist = false): Promise<MapLocalizationTable> {
+    async getMapLocalization(region: string, hash: string, persist = true): Promise<MapLocalizationTable> {
         const fPath = await this.depot.getPathOrRetrieve(region, `${hash}.s2ml`);
         const data = fxml.parse(await fs.readFile(fPath, { encoding: 'utf8' }), {
             ignoreAttributes: false,
             attributeNamePrefix: '',
             parseNodeValue: true,
             textNodeName: 'text',
+            parseTrueNumberOnly: true,
             attrValueProcessor: (val, attrName) => he.decode(val, { isAttributeValue: true }),
             tagValueProcessor : (val, tagName) => he.decode(val),
         });
         if (!persist) {
             await fs.unlink(fPath);
         }
-        const stringMap = new Map<number, string | undefined>(data.Locale.e.map((x: { id: string, text: string }) => [Number(x.id), x.text]));
+        const stringMap = new Map<number, string>(data.Locale.e.map((x: { id: string, text: string }) => [Number(x.id), x.text ?? '']));
         return {
             locale: data.Locale.region,
             strings: stringMap,
         };
     }
 
-    async getMapHeader(region: string, hash: string, persist = false) {
+    async getMapHeader(region: string, hash: string, persist = true) {
         const fPath = await this.depot.getPathOrRetrieve(region, `${hash}.s2mh`);
         const decodingProc = await spawnWaitExit(spawn('s2mdecoder', [
             fPath,
@@ -240,8 +241,9 @@ export class MapResolver {
             captureStderr: true,
         });
         if (decodingProc.rcode !== 0) {
+            logger.error('s2mdecoder stdout', decodingProc.stdout);
             logger.error('s2mdecoder stderr', decodingProc.stderr);
-            throw new Error(`s2mdecoder failed on "${fPath}" code=${decodingProc.rcode}`);
+            throw new Error(`s2mdecoder failed on "${fPath}" code=${decodingProc.rcode} signal=${decodingProc.signal} killed=${decodingProc.proc.killed}`);
         }
         if (!persist) {
             await fs.unlink(fPath);
@@ -253,17 +255,21 @@ export class MapResolver {
         logger.verbose(`resolving.. map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} hash=${mhead.headerHash}`);
         const rcode = GameRegion[mhead.regionId];
 
-        const s2mhResponse = await this.depot.retrieveHead(rcode, `${mhead.headerHash}.s2mh`);
         const headerData = await this.getMapHeader(rcode, mhead.headerHash);
-        const s2maResponse = await this.depot.retrieveHead(rcode, `${headerData.mapFile.hash}.${headerData.mapFile.type}`);
 
-        mhead.uploadedAt = new Date(s2mhResponse.headers['last-modified']);
+        if (!mhead.uploadedAt) {
+            const s2mhResponse = await this.depot.retrieveHead(rcode, `${mhead.headerHash}.s2mh`);
+            mhead.uploadedAt = new Date(s2mhResponse.headers['last-modified']);
+        }
+        if (!mhead.archiveSize) {
+            const s2maResponse = await this.depot.retrieveHead(rcode, `${headerData.mapFile.hash}.${headerData.mapFile.type}`);
+            mhead.archiveSize = Number(s2maResponse.headers['content-length']);
+        }
         mhead.archiveHash = headerData.mapFile.hash;
-        mhead.archiveSize = Number(s2maResponse.headers['content-length']);
 
         const thumbnail = headerData.mapInfo.visualFiles[headerData.mapInfo.thumbnail.index];
         const mainLocaleTable = headerData.mapInfo.localeTable.find(x => x.locale === GameLocale.enUS) ?? headerData.mapInfo.localeTable[0];
-        const localizationData = await this.getMapLocalization(rcode, mainLocaleTable.stringTable[0].hash);
+        const localizationData = await this.getMapLocalization(rcode, mainLocaleTable.stringTable[0].hash, true);
         const mapLocalized = applyMapLocalization(headerData, localizationData);
 
         let map = await this.conn.getRepository(S2Map).findOne({
@@ -288,6 +294,7 @@ export class MapResolver {
                 map.type = S2MapType.DependencyMod;
             }
             map.name = mapLocalized.mapInfo.name[mainLocaleTable.locale];
+            map.description = mapLocalized.mapInfo.description[mainLocaleTable.locale];
             map.mainCategoryId = mapLocalized.variants[mapLocalized.defaultVariantIndex].categoryId;
             map.iconHash = thumbnail?.hash ?? null;
             map.mainLocale = mainLocaleTable.locale;

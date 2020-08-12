@@ -69,6 +69,12 @@ export class S2Map {
     @Index('name_idx')
     name: string;
 
+    @Column({
+        nullable: true,
+        length: 2048,
+    })
+    description: string;
+
     @ManyToOne(type => S2MapCategory, {
         nullable: true,
         onDelete: 'RESTRICT',

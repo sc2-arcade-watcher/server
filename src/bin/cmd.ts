@@ -4,6 +4,7 @@ import { BattleDepot, convertImage, NestedHashDir } from '../depot';
 import { buildStatsForPeriod } from '../task/statsBuilder';
 import { S2StatsPeriodKind } from '../entity/S2StatsPeriod';
 import { MapResolver, applyMapLocalization } from '../task/mapResolver';
+import { S2Map } from '../entity/S2Map';
 
 async function populateBnetDepot() {
     const bnDepot = new BattleDepot('data/depot');
@@ -43,6 +44,24 @@ program.command('map-header <region> <hash>')
         const mapLocalized = applyMapLocalization(mapHeader, mapLocalization);
         console.log(mapLocalized);
 
+        await conn.close();
+    })
+;
+
+program.command('map-repopulate')
+    .action(async () => {
+        const conn = await orm.createConnection();
+        const mpresolver = new MapResolver(conn);
+        const list = await conn.getRepository(S2Map).find({
+            relations: ['currentVersion'],
+            order: {
+                regionId: 'ASC',
+                bnetId: 'ASC',
+            },
+        });
+        for (const map of list) {
+            await mpresolver.initializeMapHeader(map.currentVersion);
+        }
         await conn.close();
     })
 ;

@@ -90,13 +90,15 @@ export interface SpawnWaitOptions {
     captureStderr?: boolean;
 }
 
-export interface SpawnWaitResult {
+export interface SpawnWaitResult<T> {
+    proc: T;
     rcode: number;
+    signal: NodeJS.Signals;
     stdout?: string;
     stderr?: string;
 }
 
-export function spawnWaitExit<T extends childProc.ChildProcess>(proc: T, opts: SpawnWaitOptions = {}): Promise<SpawnWaitResult> {
+export function spawnWaitExit<T extends childProc.ChildProcess>(proc: T, opts: SpawnWaitOptions = {}): Promise<SpawnWaitResult<T>> {
     const stdout: string[] = [];
     const stderr: string[] = [];
 
@@ -118,7 +120,9 @@ export function spawnWaitExit<T extends childProc.ChildProcess>(proc: T, opts: S
     return new Promise((resolve, reject) => {
         proc.once('exit', (code, signal) => {
             resolve({
+                proc,
                 rcode: code,
+                signal,
                 stdout: opts.captureStdout ? stdout.join('') : void 0,
                 stderr: opts.captureStderr ? stderr.join('') : void 0,
             });

@@ -407,7 +407,14 @@ export class LbsServer {
 
     protected async onMapHeaderResult(sclient: WsClientDesc, msg: MapHeaderResult) {
         logger.verbose(`received map header, regionId=${msg.regionId} mhandle=${msg.mapId},${msg.mapVersion}`);
-        this.mapHeaderQueue.add(() => this.processMapHeader(msg));
+        this.mapHeaderQueue.add(async () => {
+            try {
+                await this.processMapHeader(msg);
+            }
+            catch (e) {
+                logger.error('processing map header fail', msg, e);
+            }
+        });
     }
 
     protected async processMapHeader(msg: MapHeaderResult) {
