@@ -7,6 +7,7 @@ import { GameLobbyStatus } from '../../gametracker';
 import { stripIndents } from 'common-tags';
 import { sleep } from '../../helpers';
 import { S2GameLobby } from '../../entity/S2GameLobby';
+import { S2Map } from '../../entity/S2Map';
 
 enum LobbyQueryMethod {
     LobbyHandle,
@@ -211,18 +212,16 @@ export class LobbyPublishCommand extends GeneralCommand {
             }
 
             case LobbyQueryMethod.MapName: {
-                qb.innerJoin('lobby.mapDocumentVersion', 'mapDocVer');
-                qb.innerJoin('mapDocVer.document', 'mapDoc');
-                qb.andWhere('mapDoc.name = :name', {
+                qb.innerJoinAndMapOne('lobby.map', S2Map, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId');
+                qb.andWhere('map.name = :name', {
                     name: qparams.mapName,
                 });
                 break;
             }
 
             case LobbyQueryMethod.ModName: {
-                qb.innerJoin('lobby.extModDocumentVersion', 'extModDocVer');
-                qb.innerJoin('extModDocVer.document', 'extModDoc');
-                qb.andWhere('extModDoc.name = :name', {
+                qb.innerJoinAndMapOne('lobby.extMod', S2Map, 'extMod', 'extMod.regionId = lobby.regionId AND extMod.bnetId = lobby.extModBnetId');
+                qb.andWhere('extMod.name = :name', {
                     name: qparams.mapName,
                 });
                 break;

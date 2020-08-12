@@ -1,10 +1,9 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneToMany } from 'typeorm';
 import { S2Region } from './S2Region';
-import { S2DocumentVersion } from './S2DocumentVersion';
-import { S2Document } from './S2Document';
 import { GameLobbyStatus } from '../gametracker';
 import { S2GameLobbySlot, S2GameLobbySlotKind } from './S2GameLobbySlot';
 import { S2GameLobbyPlayerJoin } from './S2GameLobbyPlayerJoin';
+import { S2Map } from './S2Map';
 
 @Entity()
 @Unique('bnet_id', ['bnetBucketId', 'bnetRecordId'])
@@ -133,33 +132,6 @@ export class S2GameLobby {
     })
     mapVariantMode: string;
 
-    @ManyToOne(type => S2DocumentVersion, {
-        nullable: true,
-        eager: false,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
-        persistence: false
-    })
-    mapDocumentVersion: S2DocumentVersion;
-
-    @ManyToOne(type => S2DocumentVersion, {
-        nullable: true,
-        eager: false,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
-        persistence: false
-    })
-    extModDocumentVersion: S2DocumentVersion;
-
-    @ManyToOne(type => S2DocumentVersion, {
-        nullable: true,
-        eager: false,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
-        persistence: false
-    })
-    multiModDocumentVersion: S2DocumentVersion;
-
     @Column({
         length: 80,
         // length: 64,
@@ -193,6 +165,10 @@ export class S2GameLobby {
         cascade: false,
     })
     joinHistory: S2GameLobbyPlayerJoin[];
+
+    map?: S2Map;
+    extMod?: S2Map;
+    multimod?: S2Map;
 
     getSlots(opts: { kinds?: S2GameLobbySlotKind[], teams?: number[] }): S2GameLobbySlot[] {
         return this.slots.filter(slot => {

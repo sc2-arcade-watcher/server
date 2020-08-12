@@ -3,7 +3,8 @@ import * as fs from 'fs-extra';
 import * as fp from 'fastify-plugin';
 import { BattleDepot, NestedHashDir, convertImage } from '../../depot';
 import { logger } from '../../logger';
-import { S2Document } from '../../entity/S2Document';
+import { S2Map } from '../../entity/S2Map';
+import { GameRegion } from '../../common';
 
 const bnDepot = new BattleDepot('data/depot');
 const pubBnetDir = new NestedHashDir('data/bnet');
@@ -20,17 +21,20 @@ export default fp(async (server, opts, next) => {
         const jpgPath = pubBnetDir.pathTo(`${request.params.hash}.jpg`);
         if (!(await fs.pathExists(jpgPath))) {
             try {
-                const docResult = await server.conn.getRepository(S2Document)
-                    .createQueryBuilder('doc')
-                    .innerJoinAndSelect('doc.region', 'region')
-                    .andWhere('doc.iconHash = :hash', { hash: request.params.hash })
-                    .getOne()
+                const result = await server.conn.getRepository(S2Map)
+                    .createQueryBuilder('map')
+                    .select(['regionId'])
+                    .andWhere('map.iconHash = :hash', { hash: request.params.hash })
+                    .getRawOne()
                 ;
-                if (!docResult) {
+                if (!result) {
                     return reply.callNotFound();
                 }
 
-                const s2mvPath = await bnDepot.getPathOrRetrieve(docResult.region.code, `${request.params.hash}.s2mv`);
+                const s2mvPath = await bnDepot.getPathOrRetrieve(
+                    GameRegion[result.regionId].toLowerCase(),
+                    `${request.params.hash}.s2mv`
+                );
                 await convertImage(s2mvPath, jpgPath, ['-format', 'jpg', '-quality', '85', '-strip']);
             }
             catch (err) {

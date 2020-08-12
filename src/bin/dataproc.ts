@@ -4,14 +4,11 @@ import { JournalFeed } from '../journal/feed';
 import { S2GameLobby } from '../entity/S2GameLobby';
 import { S2Region } from '../entity/S2Region';
 import { logger, logIt, setupFileLogger } from '../logger';
-import { S2DocumentVersion } from '../entity/S2DocumentVersion';
-import { S2Document, S2DocumentType } from '../entity/S2Document';
 import { S2GameLobbySlot, S2GameLobbySlotKind } from '../entity/S2GameLobbySlot';
 import { SysFeedProvider } from '../entity/SysFeedProvider';
 import { sleep, execAsync } from '../helpers';
 import { DataLobbyCreate, LobbyPvExSlotKind } from '../journal/decoder';
 import { SysFeedPosition } from '../entity/SysFeedPosition';
-import { S2MapCategory } from '../entity/S2MapCategory';
 import { S2Profile } from '../entity/S2Profile';
 import { S2GameLobbyPlayerJoin } from '../entity/S2GameLobbyPlayerJoin';
 
@@ -33,7 +30,6 @@ class DataProc {
     protected feedProviders = new Map<string, SysFeedProvider>();
     protected closed = false;
 
-    protected docVerCache = new Map<string, number>();
     protected lobbiesCache = new Map<number, S2GameLobby>();
     protected profilesCache = new Map<string, S2Profile>();
 
@@ -365,104 +361,8 @@ class DataProc {
         return s2profile;
     }
 
-    async fetchOrCreateDocumentVersion(infoDoc: S2Document, infoDocVer: S2DocumentVersion, opts: { categoryName?: string } = {}) {
-        if (!infoDoc.bnetId) return null;
-        const docKey = `${infoDoc.bnetId}/${infoDocVer.majorVersion}.${infoDocVer.minorVersion}`;
-        let docVersionId = this.docVerCache.get(docKey);
-        if (!docVersionId) {
-            let s2doc = await this.em.getRepository(S2Document).findOne({
-                where: {
-                    region: this.s2region,
-                    bnetId: infoDoc.bnetId,
-                },
-            });
-            if (!s2doc) {
-                s2doc = Object.assign({}, infoDoc);
-                s2doc.region = this.s2region;
-                s2doc.currentMajorVersion = infoDocVer.majorVersion;
-                s2doc.currentMinorVersion = infoDocVer.minorVersion;
-                await this.em.getRepository(S2Document).save(s2doc);
-            }
-            else {
-                if (
-                    (s2doc.currentMajorVersion === null || s2doc.currentMinorVersion === null) ||
-                    (infoDocVer.majorVersion >= s2doc.currentMajorVersion || infoDocVer.minorVersion >= s2doc.currentMinorVersion)
-                ) {
-                    s2doc.currentMajorVersion = infoDocVer.majorVersion;
-                    s2doc.currentMinorVersion = infoDocVer.minorVersion;
-                }
-                if (infoDoc.name.length && !s2doc.name.length) {
-                    s2doc.name = infoDoc.name;
-                }
-                await this.em.getRepository(S2Document).save(s2doc);
-            }
-
-            let s2docVer = await this.em.getRepository(S2DocumentVersion).findOne({
-                where: {
-                    document: s2doc,
-                    majorVersion: infoDocVer.majorVersion,
-                    minorVersion: infoDocVer.minorVersion,
-                },
-            });
-            if (!s2docVer) {
-                s2docVer = new S2DocumentVersion();
-                s2docVer.document = s2doc;
-                s2docVer.majorVersion = infoDocVer.majorVersion;
-                s2docVer.minorVersion = infoDocVer.minorVersion;
-                s2docVer.headerHash = null;
-                s2docVer.documentHash = null;
-                s2docVer.iconHash = infoDocVer.iconHash;
-                s2docVer = await this.em.getRepository(S2DocumentVersion).save(s2docVer);
-            }
-
-            docVersionId = s2docVer.id;
-            this.docVerCache.set(docKey, docVersionId);
-        }
-        return docVersionId;
-    }
-
     async onNewLobby(ev: JournalEventNewLobby) {
         const info = ev.lobby.initInfo;
-
-        const mapDocVer = await this.fetchOrCreateDocumentVersion(
-            {
-                bnetId: info.mapHandle[0],
-                type: S2DocumentType.Map,
-                isArcade: info.isArcade,
-                name: info.mapName,
-                iconHash: info.mapIcon.substr(0, 64),
-            } as S2Document,
-            {
-                iconHash: info.mapIcon.substr(0, 64),
-                minorVersion: info.mapMinorVersion,
-                majorVersion: info.mapMajorVersion,
-            } as S2DocumentVersion,
-            {
-                categoryName: info.mapVariantCategory,
-            },
-        );
-        const extModDocVer = await this.fetchOrCreateDocumentVersion(
-            {
-                bnetId: info.extModHandle[0],
-                name: info.extModName,
-                type: S2DocumentType.ExtensionMod,
-            } as S2Document,
-            {
-                minorVersion: info.extModMinorVersion,
-                majorVersion: info.extModMajorVersion,
-            } as S2DocumentVersion,
-        );
-        const multiModDocVer = await this.fetchOrCreateDocumentVersion(
-            {
-                bnetId: info.multiModHandle[0],
-                name: info.multiModName,
-                type: S2DocumentType.ExtensionMod,
-            } as S2Document,
-            {
-                minorVersion: info.multiModMinorVersion,
-                majorVersion: info.multiModMajorVersion,
-            } as S2DocumentVersion,
-        );
 
         let s2lobby = new S2GameLobby();
         Object.assign(s2lobby, <S2GameLobby>{
@@ -483,10 +383,6 @@ class DataProc {
             multiModBnetId: info.multiModHandle[0] !== 0 ? info.multiModHandle[0] : null,
             multiModMajorVersion: info.multiModHandle[0] !== 0 ? info.multiModMajorVersion : null,
             multiModMinorVersion: info.multiModHandle[0] !== 0 ? info.multiModMinorVersion : null,
-
-            mapDocumentVersion: mapDocVer as any,
-            extModDocumentVersion: extModDocVer as any,
-            multiModDocumentVersion: multiModDocVer as any,
 
             mapVariantIndex: info.mapVariantIndex,
             mapVariantMode: info.mapVariantMode,

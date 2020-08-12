@@ -1,7 +1,7 @@
 import { EntityRepository, Repository, SelectQueryBuilder } from 'typeorm';
 import { S2GameLobby } from '../entity/S2GameLobby';
 import { GameLobbyStatus } from '../gametracker';
-import { S2Document } from '../entity/S2Document';
+import { S2Map } from '../entity/S2Map';
 
 @EntityRepository(S2GameLobby)
 export class S2GameLobbyRepository extends Repository<S2GameLobby> {
@@ -12,13 +12,9 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
             // region
             .innerJoinAndSelect('lobby.region', 'region')
 
-            // map info
-            .innerJoinAndSelect('lobby.mapDocumentVersion', 'mapDocVer')
-            .innerJoinAndSelect('mapDocVer.document', 'mapDoc')
-
-            // ext mod info
-            .leftJoinAndSelect('lobby.extModDocumentVersion', 'extModDocVer')
-            .leftJoinAndSelect('extModDocVer.document', 'extModDoc')
+            // map & ext mod
+            .leftJoinAndMapOne('lobby.map', S2Map, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId')
+            .leftJoinAndMapOne('lobby.extMod', S2Map, 'extMod', 'extMod.regionId = lobby.regionId AND extMod.bnetId = lobby.extModBnetId')
 
             // slots
             .leftJoinAndSelect('lobby.slots', 'slot')
@@ -36,24 +32,20 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
 
     addMapInfo(qb: SelectQueryBuilder<S2GameLobby>, resetSelect = false) {
         qb
-            .leftJoinAndMapOne('lobby.map', S2Document, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId')
-            .leftJoinAndMapOne('lobby.extMod', S2Document, 'extMod', 'extMod.regionId = lobby.regionId AND extMod.bnetId = lobby.extModBnetId')
+            .leftJoinAndMapOne('lobby.map', S2Map, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId')
+            .leftJoinAndMapOne('lobby.extMod', S2Map, 'extMod', 'extMod.regionId = lobby.regionId AND extMod.bnetId = lobby.extModBnetId')
             .select(resetSelect ? [] : void 0)
             .addSelect([
                 'map.regionId',
                 'map.bnetId',
                 'map.name',
                 'map.iconHash',
-                'map.currentMajorVersion',
-                'map.currentMinorVersion',
             ])
             .addSelect([
                 'extMod.regionId',
                 'extMod.bnetId',
                 'extMod.name',
                 'extMod.iconHash',
-                'extMod.currentMajorVersion',
-                'extMod.currentMinorVersion',
             ])
         ;
         return qb;

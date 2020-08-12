@@ -63,6 +63,7 @@ export class S2Map {
         length: 64,
         nullable: true,
     })
+    @Index('icon_hash_idx')
     iconHash: string;
 
     @Column()

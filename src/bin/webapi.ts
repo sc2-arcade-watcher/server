@@ -11,13 +11,12 @@ import * as limitOffsetPaginationStrategy from 'fastify-pagination/dist/strategi
 import * as fastifyOAS from 'fastify-oas';
 import * as fastifyCors from 'fastify-cors';
 import { setupFileLogger, logger } from '../logger';
-import { S2DocumentVersion } from '../entity/S2DocumentVersion';
-import { S2Document } from '../entity/S2Document';
 import * as http from 'http';
 import * as https from 'https';
 import * as http2 from 'http2';
 import { execAsync } from '../helpers';
 import { stripIndents } from 'common-tags';
+import { MapResolver } from '../task/mapResolver';
 
 dotenv.config();
 setupFileLogger('webapi');
@@ -45,7 +44,9 @@ function stripEntityIds(data: any) {
 }
 
 server.register(fp(async (server, opts) => {
-    server.decorate('conn', await orm.createConnection());
+    const conn = await orm.createConnection();
+    server.decorate('conn', conn);
+    server.decorate('mapResolver', new MapResolver(conn));
 }));
 
 server.addHook('onClose', async (instance, done) => {
@@ -60,6 +61,7 @@ declare module 'fastify' {
     HttpResponse = http.ServerResponse
     > {
         conn: orm.Connection;
+        mapResolver: MapResolver;
     }
 }
 
@@ -167,6 +169,7 @@ server.register(require('../api/routes/lobby/mapHistory').default);
 server.register(require('../api/routes/lobby/playerHistory').default);
 
 server.register(require('../api/routes/maps/list').default);
+server.register(require('../api/routes/maps/show').default);
 server.register(require('../api/routes/maps/details').default);
 server.register(require('../api/routes/maps/stats').default);
 

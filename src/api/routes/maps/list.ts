@@ -1,6 +1,5 @@
 import * as fp from 'fastify-plugin';
-import { S2Document, S2DocumentType } from '../../../entity/S2Document';
-import { S2DocumentVersion } from '../../../entity/S2DocumentVersion';
+import { S2Map, S2MapType } from '../../../entity/S2Map';
 
 export default fp(async (server, opts, next) => {
     server.get('/maps', {
@@ -18,11 +17,7 @@ export default fp(async (server, opts, next) => {
                     },
                     type: {
                         type: 'string',
-                        enum: [
-                            S2DocumentType.Map,
-                            S2DocumentType.ExtensionMod,
-                            S2DocumentType.DependencyMod,
-                        ],
+                        enum: Object.values(S2MapType),
                     },
                 }
             },
@@ -30,20 +25,29 @@ export default fp(async (server, opts, next) => {
     }, async (request, reply) => {
         const { limit, offset } = request.parsePagination();
 
-        const qb = server.conn.getRepository(S2Document)
-            .createQueryBuilder('mapDoc')
+        const qb = server.conn.getRepository(S2Map)
+            .createQueryBuilder('map')
+            .select([
+                'map.regionId',
+                'map.bnetId',
+                'map.type',
+                'map.name',
+                'map.description',
+                'map.iconHash',
+                'map.mainCategoryId',
+            ])
             .take(limit)
             .skip(offset)
         ;
 
         if (request.query.name !== void 0) {
-            qb.andWhere('mapDoc.name LIKE :name', { name: '%' + request.query.name + '%' });
+            qb.andWhere('map.name LIKE :name', { name: '%' + request.query.name + '%' });
         }
         if (request.query.type !== void 0) {
-            qb.andWhere('mapDoc.type = :type', { type: request.query.type });
+            qb.andWhere('map.type = :type', { type: request.query.type });
         }
         if (request.query.regionId !== void 0) {
-            qb.andWhere('mapDoc.regionId = :regionId', { regionId: request.query.regionId });
+            qb.andWhere('map.regionId = :regionId', { regionId: request.query.regionId });
         }
 
         const [ result, count ] = await qb.getManyAndCount();

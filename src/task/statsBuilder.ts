@@ -1,10 +1,8 @@
 import * as orm from 'typeorm';
 import { addDays, addWeeks, addMonths, addSeconds } from 'date-fns';
-import { BattleDepot, convertImage, NestedHashDir } from '../depot';
 import { S2GameLobbyRepository } from '../repository/S2GameLobbyRepository';
 import { logger, logIt } from '../logger';
 import { S2GameLobbySlotKind, S2GameLobbySlot } from '../entity/S2GameLobbySlot';
-import { S2Document } from '../entity/S2Document';
 import { S2StatsPeriod, S2StatsPeriodKind } from '../entity/S2StatsPeriod';
 import { S2StatsPeriodMap } from '../entity/S2StatsPeriodMap';
 import { S2GameLobby } from '../entity/S2GameLobby';
@@ -19,14 +17,6 @@ async function generateMapStats(conn: orm.Connection, statPeriod: S2StatsPeriod)
     const lobRecords = await conn.getCustomRepository(S2GameLobbyRepository)
         .createQueryBuilder('lobby')
         .select([])
-        .addSelect(qb => {
-            return qb
-                .from(S2Document, 'map')
-                .select('map.id')
-                .where('map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId')
-                .limit(1)
-            ;
-        }, 'docId')
         .addSelect('lobby.regionId', 'regionId')
         .addSelect('lobby.mapBnetId', 'mapBnetId')
         .addSelect('COUNT(DISTINCT lobby.id)', 'lobbiesHosted')
@@ -64,7 +54,8 @@ async function generateMapStats(conn: orm.Connection, statPeriod: S2StatsPeriod)
         }
         await conn.getRepository(S2StatsPeriodMap).insert({
             period: statPeriod,
-            document: statsRecord.docId,
+            regionId: statsRecord.regionId,
+            bnetId: statsRecord.mapBnetId,
             lobbiesHosted: statsRecord.lobbiesHosted,
             lobbiesStarted: statsRecord.lobbiesStarted,
             participantsTotal: statsRecord.participantsTotal,

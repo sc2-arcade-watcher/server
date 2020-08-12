@@ -2,6 +2,7 @@ import * as fp from 'fastify-plugin';
 import { S2GameLobby } from '../../../entity/S2GameLobby';
 import { S2GameLobbySlotKind } from '../../../entity/S2GameLobbySlot';
 import { GameLobbyStatus } from '../../../gametracker';
+import { S2Map } from '../../../entity/S2Map';
 
 export default fp(async (server, opts, next) => {
     server.get('/open-games', async (request, reply) => {
@@ -19,10 +20,12 @@ export default fp(async (server, opts, next) => {
                 'lobby.hostName',
                 'lobby.slotsHumansTotal',
                 'lobby.slotsHumansTaken',
+                'lobby.mapMajorVersion',
+                'lobby.mapMinorVersion',
+                'lobby.multiModBnetId',
             ])
             .innerJoinAndSelect('lobby.region', 'region')
-            .innerJoinAndSelect('lobby.mapDocumentVersion', 'mapDocVer')
-            .innerJoinAndSelect('mapDocVer.document', 'mapDoc')
+            .innerJoinAndMapOne('lobby.map', S2Map, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId')
             .leftJoinAndSelect('lobby.slots', 'slot')
             .leftJoinAndSelect('slot.joinInfo', 'joinInfo')
             .andWhere('slot.kind = :kind', { kind: S2GameLobbySlotKind.Human })
@@ -36,6 +39,25 @@ export default fp(async (server, opts, next) => {
             if (s2lobby.status === GameLobbyStatus.Abandoned) {
                 (<any>s2lobby).status = 'disbanded';
             }
+            (<any>s2lobby).mapDocumentVersion = {
+                majorVersion: s2lobby.mapMajorVersion,
+                minorVersion: s2lobby.mapMinorVersion,
+                iconHash: s2lobby.map.iconHash,
+                document: {
+                    regionId: s2lobby.map.regionId,
+                    bnetId: s2lobby.map.bnetId,
+                    type: s2lobby.map.type,
+                    isArcade: s2lobby.multiModBnetId === null,
+                    name: s2lobby.map.name,
+                    currentMajorVersion: s2lobby.mapMajorVersion,
+                    currentMinorVersion: s2lobby.mapMinorVersion,
+                    iconHash: s2lobby.map.iconHash,
+                },
+            };
+            delete s2lobby.map;
+            delete s2lobby.mapMajorVersion;
+            delete s2lobby.mapMinorVersion;
+            delete s2lobby.multiModBnetId;
             (<any>s2lobby).mapVariantCategory = 'Other';
             (<any>s2lobby).players = s2lobby.slots.map(s2slot => {
                 if (s2slot.kind !== S2GameLobbySlotKind.Human) return;

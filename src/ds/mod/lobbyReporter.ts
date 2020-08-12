@@ -172,24 +172,27 @@ export class LobbyReporterTask extends BotTask {
         if (
             (
                 (
-                    s2gm.extModBnetId &&
+                    s2gm.extMod &&
                     (
-                        (sub.isMapNameRegex && s2gm.extModDocumentVersion.document.name.match(new RegExp(sub.mapName, 'iu'))) ||
-                        (sub.isMapNamePartial && s2gm.extModDocumentVersion.document.name.toLowerCase().indexOf(sub.mapName.toLowerCase()) !== -1) ||
-                        (!sub.isMapNameRegex && !sub.isMapNamePartial && s2gm.extModDocumentVersion.document.name.toLowerCase() === sub.mapName.toLowerCase())
+                        (sub.isMapNameRegex && s2gm.extMod.name.match(new RegExp(sub.mapName, 'iu'))) ||
+                        (sub.isMapNamePartial && s2gm.extMod.name.toLowerCase().indexOf(sub.mapName.toLowerCase()) !== -1) ||
+                        (!sub.isMapNameRegex && !sub.isMapNamePartial && s2gm.extMod.name.toLowerCase() === sub.mapName.toLowerCase())
                     )
                 ) ||
                 (
-                    (sub.isMapNameRegex && s2gm.mapDocumentVersion.document.name.match(new RegExp(sub.mapName, 'iu'))) ||
-                    (sub.isMapNamePartial && s2gm.mapDocumentVersion.document.name.toLowerCase().indexOf(sub.mapName.toLowerCase()) !== -1) ||
-                    (!sub.isMapNameRegex && !sub.isMapNamePartial && s2gm.mapDocumentVersion.document.name.toLowerCase() === sub.mapName.toLowerCase())
+                    s2gm.map &&
+                    (
+                        (sub.isMapNameRegex && s2gm.map.name.match(new RegExp(sub.mapName, 'iu'))) ||
+                        (sub.isMapNamePartial && s2gm.map.name.toLowerCase().indexOf(sub.mapName.toLowerCase()) !== -1) ||
+                        (!sub.isMapNameRegex && !sub.isMapNamePartial && s2gm.map.name.toLowerCase() === sub.mapName.toLowerCase())
+                    )
                 )
             ) &&
             (!sub.variant || sub.variant === s2gm.mapVariantMode) &&
             (!sub.region || sub.region.id === s2gm.region.id)
         ) {
             trackedLobby.candidates.add(sub);
-            logger.info(`New lobby ${s2gm.region.code}#${s2gm.bnetRecordId} for "${s2gm.mapDocumentVersion.document.name}". subId=${sub.id}`);
+            logger.info(`New lobby ${s2gm.region.code}#${s2gm.bnetRecordId} for "${s2gm.map?.name}". subId=${sub.id}`);
         }
     }
 
@@ -363,7 +366,7 @@ export class LobbyReporterTask extends BotTask {
     @logIt({
         argsDump: (trackedLobby: TrackedGameLobby) => [
             trackedLobby.lobby.id,
-            trackedLobby.lobby.mapDocumentVersion.document.name,
+            trackedLobby.lobby.map.name,
             trackedLobby.lobby.hostName,
             trackedLobby.lobby.slotsHumansTaken,
             trackedLobby.lobby.slots.length
@@ -534,7 +537,7 @@ export class LobbyReporterTask extends BotTask {
     @logIt({
         argsDump: (trackedLobby: TrackedGameLobby) => [
             trackedLobby.lobby.id,
-            trackedLobby.lobby.mapDocumentVersion.document.name,
+            trackedLobby.lobby.map.name,
             trackedLobby.lobby.hostName,
             trackedLobby.lobby.slotsHumansTaken,
             trackedLobby.lobby.slots.length
@@ -570,12 +573,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
     }, cfg);
 
     const em: RichEmbedOptions = {
-        // author: {
-        //     name: `Show details`,
-        //     icon_url: 'https://i.imgur.com/icMQQKh.png',
-        //     url: `https://sc2arcade.talv.space/lobby/${s2gm.regionId}/${s2gm.bnetBucketId}/${s2gm.bnetRecordId}`,
-        // },
-        title: `${s2gm.mapDocumentVersion.document.name}`,
+        title: s2gm.map?.name ?? `#${s2gm.mapBnetId}`,
         url: `https://sc2arcade.talv.space/lobby/${s2gm.regionId}/${s2gm.bnetBucketId}/${s2gm.bnetRecordId}`,
         fields: [],
         timestamp: s2gm.createdAt,
@@ -584,9 +582,9 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
         },
     };
 
-    if (cfg.showThumbnail) {
+    if (cfg.showThumbnail && s2gm.map) {
         em.thumbnail = {
-            url: `http://sc2arcade.talv.space/bnet/${s2gm.mapDocumentVersion.iconHash}.jpg`,
+            url: `http://sc2arcade.talv.space/bnet/${s2gm.map.iconHash}.jpg`,
         };
     }
 
@@ -639,10 +637,10 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
         inline: false,
     });
 
-    if (s2gm.extModDocumentVersion) {
+    if (s2gm.extModBnetId) {
         em.fields.push({
             name: `Extension mod`,
-            value: `${s2gm.extModDocumentVersion.document.name}`,
+            value: s2gm.extMod?.name ?? `#${s2gm.extModBnetId}`,
             inline: false,
         });
     }

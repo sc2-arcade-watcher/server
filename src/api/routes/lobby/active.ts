@@ -1,8 +1,6 @@
 import * as fp from 'fastify-plugin';
 import { stripIndents } from 'common-tags';
-import { S2GameLobby } from '../../../entity/S2GameLobby';
 import { GameLobbyStatus } from '../../../gametracker';
-import { S2Document } from '../../../entity/S2Document';
 import { S2GameLobbyRepository } from '../../../repository/S2GameLobbyRepository';
 
 export default fp(async (server, opts, next) => {

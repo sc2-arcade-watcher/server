@@ -1,9 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneToMany } from 'typeorm';
-import { S2Document } from './S2Document';
 import { S2StatsPeriod } from './S2StatsPeriod';
 
 @Entity()
-@Unique('period_map_idx', ['period', 'document'])
+@Unique('period_map_idx', ['period', 'regionId', 'bnetId'])
 export class S2StatsPeriodMap {
     @PrimaryGeneratedColumn()
     id: number;
@@ -16,13 +15,17 @@ export class S2StatsPeriodMap {
     @Index()
     period: S2StatsPeriod;
 
-    @ManyToOne(type => S2Document, {
-        nullable: false,
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE',
+    @Column({
+        type: 'tinyint',
+        unsigned: true,
     })
-    @Index()
-    document: S2Document;
+    regionId: number;
+
+    @Column({
+        type: 'mediumint',
+        unsigned: true,
+    })
+    bnetId: number;
 
     @Column({
         default: 0,
