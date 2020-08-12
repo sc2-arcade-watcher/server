@@ -173,6 +173,8 @@ server.register(require('../api/routes/maps/show').default);
 server.register(require('../api/routes/maps/details').default);
 server.register(require('../api/routes/maps/stats').default);
 
+server.register(require('../api/routes/mapCategories').default);
+
 server.register(require('../api/routes/stats/regionStats').default);
 
 server.register(require('../api/routes/depot').default);

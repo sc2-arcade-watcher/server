@@ -22,13 +22,48 @@ export default fp(async (server, opts, next) => {
     }, async (request, reply) => {
         const result = await server.conn.getRepository(S2Map)
             .createQueryBuilder('map')
-            .leftJoinAndSelect('map.currentVersion', 'mapHead')
+            .innerJoinAndSelect('map.currentVersion', 'mapHead')
+            .innerJoinAndSelect('map.mainCategory', 'mainCat')
             .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId', {
                 regionId: request.params.regionId,
                 bnetId: request.params.mapId,
             })
             .getOne()
         ;
+
+        // for compatibility with older version of this endpoint, to be removed in the future
+        (<any>result).isArcade = !result.mainCategory.isMelee;
+        (<any>result).currentMajorVersion = result.currentVersion.majorVersion;
+        (<any>result).currentMinorVersion = result.currentVersion.minorVersion;
+        (<any>result).categoryId = (<any>{
+            'Melee': 1,
+            'Survival': 2,
+            'Tug Of War': 3,
+            'Tower Defense': 4,
+            'Other': 5,
+            'Hero Battle': 6,
+            'Arena': 7,
+            'Strategy': 8,
+            'Action': 9,
+            'Single Player': 10,
+            'RPG': 11,
+            'Miscellaneous': 12,
+            'Co-op VS A.I.': 13,
+            'Puzzle': 14,
+            'Archon Co-op VS A.I.': 15,
+            'Archon': 16,
+            'Trainer': 17,
+            'Melee Spectator': 18,
+            'Monobattle': 19,
+            'Campaign': 20,
+        })[result.mainCategory.name];
+        (<any>result).category = {
+            id: (<any>result).categoryId,
+            name: result.mainCategory.name,
+            description: null,
+        };
+        delete result.mainCategory;
+        // end
 
         if (!result) {
             return reply.type('application/json').code(404).send();
