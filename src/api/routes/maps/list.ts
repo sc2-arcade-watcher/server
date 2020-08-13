@@ -23,11 +23,12 @@ export default fp(async (server, opts, next) => {
             },
         },
     }, async (request, reply) => {
-        const { limit, offset } = request.parsePagination();
+        const pQuery = request.parseCursorPagination();
 
         const qb = server.conn.getRepository(S2Map)
             .createQueryBuilder('map')
             .select([
+                'map.id',
                 'map.regionId',
                 'map.bnetId',
                 'map.type',
@@ -36,9 +37,24 @@ export default fp(async (server, opts, next) => {
                 'map.iconHash',
                 'map.mainCategoryId',
             ])
-            .take(limit)
-            .skip(offset)
+            .leftJoin('map.currentVersion', 'cver')
+            .addSelect([
+                'cver.minorVersion',
+                'cver.majorVersion',
+                'cver.isPrivate',
+                'cver.isExtensionMod',
+                'cver.uploadedAt',
+            ])
         ;
+
+        qb.take(pQuery.fetchLimit);
+        if (pQuery.before) {
+            qb.andWhere('map.id < :id', pQuery.before);
+        }
+        else if (pQuery.after) {
+            qb.andWhere('map.id > :id', pQuery.after);
+        }
+        qb.orderBy('map.id', pQuery.getOrderDirection());
 
         if (request.query.name !== void 0) {
             qb.andWhere('map.name LIKE :name', { name: '%' + request.query.name + '%' });
@@ -50,9 +66,9 @@ export default fp(async (server, opts, next) => {
             qb.andWhere('map.regionId = :regionId', { regionId: request.query.regionId });
         }
 
-        const [ result, count ] = await qb.getManyAndCount();
+        const results = await qb.getMany();
 
         reply.header('Cache-control', 'public, s-maxage=60');
-        return reply.type('application/json').code(200).sendWithPagination({ count: count, page: result });
+        return reply.type('application/json').code(200).sendWithCursorPagination(results, pQuery);
     });
 });

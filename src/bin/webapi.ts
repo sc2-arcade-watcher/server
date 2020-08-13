@@ -82,6 +82,8 @@ server.register(fastifyCors, {
     origin: process.env.ENV === 'dev' ? '*' : `https://sc2arcade.talv.space`,
 });
 
+server.register(require('../api/cursorPagination').default);
+
 // @ts-ignore
 server.register(fastifyPagination, {
     strategy: limitOffsetPaginationStrategy({

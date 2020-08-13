@@ -51,7 +51,6 @@ export default fp(async (server, opts, next) => {
         const tmpResult = await server.conn.getRepository(S2StatsPeriodMap)
             .createQueryBuilder('stMap')
             .select([])
-            .innerJoin('stMap.document', 'doc')
             .innerJoin('stMap.period', 'stPer')
             .addSelect('stPer.id', 'statId')
             .addSelect('stMap.lobbiesHosted', 'lobbiesHosted')
@@ -60,7 +59,7 @@ export default fp(async (server, opts, next) => {
             .addSelect('stMap.participantsUniqueTotal', 'participantsUniqueTotal')
             .addSelect('stMap.pendingTimeAverage', 'pendingTimeAverage')
             .andWhere('stPer.id IN (:ids)', { ids: statPeriods.map(x => x.statId) })
-            .andWhere('doc.regionId = :regionId AND doc.bnetId = :bnetId', {
+            .andWhere('stMap.regionId = :regionId AND stMap.bnetId = :bnetId', {
                 regionId: request.params.regionId,
                 bnetId: request.params.mapId,
             })

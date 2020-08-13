@@ -14,7 +14,7 @@ export class S2GameLobbySlot {
     @PrimaryGeneratedColumn()
     id: number;
 
-    @ManyToOne(type => S2GameLobby, {
+    @ManyToOne(type => S2GameLobby, lobby => lobby.slots, {
         onDelete: 'RESTRICT',
         onUpdate: 'RESTRICT',
     })

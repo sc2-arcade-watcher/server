@@ -148,3 +148,11 @@ export function retry(options?: pRetry.Options) {
         };
     };
 }
+
+export function atob(value: string): string {
+    return Buffer.from(value, 'base64').toString();
+}
+
+export function btoa(value: string): string {
+    return Buffer.from(value).toString('base64');
+}

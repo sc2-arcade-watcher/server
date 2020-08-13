@@ -14,7 +14,6 @@ export class S2GameLobby {
 
     @ManyToOne(type => S2Region, {
         nullable: false,
-        eager: true,
         onDelete: 'RESTRICT',
         onUpdate: 'RESTRICT',
     })
