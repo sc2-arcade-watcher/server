@@ -7,7 +7,7 @@ import { S2MapHeader } from '../entity/S2MapHeader';
 import { BattleDepot } from '../depot';
 import { GameRegion, GameLocale } from '../common';
 import { logger, logIt } from '../logger';
-import { spawnWaitExit } from '../helpers';
+import { spawnWaitExit, retry } from '../helpers';
 import { S2Map, S2MapType } from '../entity/S2Map';
 
 export type MapTags = 'BLIZ'
@@ -251,6 +251,12 @@ export class MapResolver {
         return JSON.parse(decodingProc.stdout) as MapHeaderData;
     }
 
+    @retry({
+        retries: 4,
+        onFailedAttempt: err => {
+            logger.warn(`failed to init map header`, err);
+        },
+    })
     async initializeMapHeader(mhead: S2MapHeader) {
         logger.verbose(`resolving.. map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} hash=${mhead.headerHash}`);
         const rcode = GameRegion[mhead.regionId];
@@ -263,11 +269,16 @@ export class MapResolver {
         }
         if (!mhead.archiveSize) {
             const s2maResponse = await this.depot.retrieveHead(rcode, `${headerData.mapFile.hash}.${headerData.mapFile.type}`);
-            mhead.archiveSize = Number(s2maResponse.headers['content-length']);
+            if (s2maResponse.headers['content-length']) {
+                mhead.archiveSize = Number(s2maResponse.headers['content-length']);
+            }
+            else {
+                mhead.archiveSize = null;
+            }
         }
         mhead.archiveHash = headerData.mapFile.hash;
 
-        const thumbnail = headerData.mapInfo.visualFiles[headerData.mapInfo.thumbnail.index];
+        const thumbnail = headerData.mapInfo.visualFiles[headerData.arcade?.mapIcon?.index ?? headerData.mapInfo.thumbnail.index];
         const mainLocaleTable = headerData.mapInfo.localeTable.find(x => x.locale === GameLocale.enUS) ?? headerData.mapInfo.localeTable[0];
         const localizationData = await this.getMapLocalization(rcode, mainLocaleTable.stringTable[0].hash, true);
         const mapLocalized = applyMapLocalization(headerData, localizationData);

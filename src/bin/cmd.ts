@@ -1,10 +1,11 @@
 import * as orm from 'typeorm';
 import * as program from 'commander';
+import * as pMap from 'p-map';
 import { BattleDepot, convertImage, NestedHashDir } from '../depot';
 import { buildStatsForPeriod } from '../task/statsBuilder';
 import { S2StatsPeriodKind } from '../entity/S2StatsPeriod';
 import { MapResolver, applyMapLocalization } from '../task/mapResolver';
-import { S2Map } from '../entity/S2Map';
+import { S2MapHeader } from '../entity/S2MapHeader';
 
 async function populateBnetDepot() {
     const bnDepot = new BattleDepot('data/depot');
@@ -52,16 +53,17 @@ program.command('map-repopulate')
     .action(async () => {
         const conn = await orm.createConnection();
         const mpresolver = new MapResolver(conn);
-        const list = await conn.getRepository(S2Map).find({
-            relations: ['currentVersion'],
+        const list = await conn.getRepository(S2MapHeader).find({
             order: {
                 regionId: 'ASC',
                 bnetId: 'ASC',
             },
         });
-        for (const map of list) {
-            await mpresolver.initializeMapHeader(map.currentVersion);
-        }
+        await pMap(list, async (mhead) => {
+            await mpresolver.initializeMapHeader(mhead);
+        }, {
+            concurrency: 5,
+        });
         await conn.close();
     })
 ;

@@ -1,5 +1,6 @@
 import * as util from 'util';
 import * as childProc from 'child_process';
+import * as pRetry from 'p-retry';
 import { isPromise, logger } from './logger';
 
 export const sleep = util.promisify(setTimeout);
@@ -118,7 +119,13 @@ export function spawnWaitExit<T extends childProc.ChildProcess>(proc: T, opts: S
     }
 
     return new Promise((resolve, reject) => {
-        proc.once('exit', (code, signal) => {
+        proc.once('exit', async (code, signal) => {
+            if (opts.captureStdout && !proc.stdout.destroyed) {
+                await new Promise(resolve => {
+                    proc.stdout.once('close', () => resolve());
+                });
+            }
+
             resolve({
                 proc,
                 rcode: code,
@@ -131,3 +138,13 @@ export function spawnWaitExit<T extends childProc.ChildProcess>(proc: T, opts: S
 }
 
 export type Partial<T> = { [P in keyof T]?: T[P] };
+
+export function retry(options?: pRetry.Options) {
+    return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+        const fn = <Function>descriptor.value;
+
+        descriptor.value = function(this: any, ...args: any[]) {
+            return pRetry(input => fn.apply(this, args), options);
+        };
+    };
+}
