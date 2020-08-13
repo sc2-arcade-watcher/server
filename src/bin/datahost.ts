@@ -406,7 +406,7 @@ export class LbsServer {
     }
 
     protected async onMapHeaderResult(sclient: WsClientDesc, msg: MapHeaderResult) {
-        logger.verbose(`received map header, regionId=${msg.regionId} mhandle=${msg.mapId},${msg.mapVersion}`);
+        logger.debug(`received map header, regionId=${msg.regionId} mhandle=${msg.mapId},${msg.mapVersion}`);
         this.mapHeaderQueue.add(async () => {
             try {
                 await this.processMapHeader(msg);

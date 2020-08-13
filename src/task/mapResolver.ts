@@ -234,7 +234,7 @@ export class MapResolver {
 
     async getMapHeader(region: string, hash: string, persist = true) {
         const fPath = await this.depot.getPathOrRetrieve(region, `${hash}.s2mh`);
-        const decodingProc = await spawnWaitExit(spawn('s2mdecoder', [
+        const decodingProc = await spawnWaitExit(spawn(process.env.STARC_S2MDECODER_PATH ?? 's2mdecoder', [
             fPath,
         ]), {
             captureStdout: true,
