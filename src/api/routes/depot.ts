@@ -23,9 +23,9 @@ export default fp(async (server, opts, next) => {
             try {
                 const result = await server.conn.getRepository(S2Map)
                     .createQueryBuilder('map')
-                    .select(['regionId'])
+                    .select(['map.regionId'])
                     .andWhere('map.iconHash = :hash', { hash: request.params.hash })
-                    .getRawOne()
+                    .getOne()
                 ;
                 if (!result) {
                     return reply.callNotFound();
@@ -36,13 +36,14 @@ export default fp(async (server, opts, next) => {
                     `${request.params.hash}.s2mv`
                 );
                 await convertImage(s2mvPath, jpgPath, ['-format', 'jpg', '-quality', '85', '-strip']);
+                await fs.unlink(s2mvPath);
             }
             catch (err) {
                 logger.error(err);
                 return reply.code(503);
             }
         }
-        reply.header('Cache-control', 'public, maxage=604800');
+        reply.header('Cache-control', 'public, max-age=604800, s-maxage=604800');
         return reply.sendFile(jpgPath, path.resolve('.'));
     });
 });
