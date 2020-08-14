@@ -1,6 +1,7 @@
 import * as util from 'util';
 import * as childProc from 'child_process';
 import * as pRetry from 'p-retry';
+import * as orm from 'typeorm';
 import { isPromise, logger } from './logger';
 
 export const sleep = util.promisify(setTimeout);
@@ -155,4 +156,18 @@ export function atob(value: string): string {
 
 export function btoa(value: string): string {
     return Buffer.from(value).toString('base64');
+}
+
+//
+// ORM stuff
+//
+
+export function isErrDuplicateEntry(err: Error) {
+    if (!(err instanceof orm.QueryFailedError)) return;
+    return (<any>err).code === 'ER_DUP_ENTRY';
+}
+
+export function throwErrIfNotDuplicateEntry(err: Error) {
+    if (isErrDuplicateEntry(err)) return;
+    throw err;
 }

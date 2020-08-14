@@ -153,6 +153,7 @@ interface MapHeaderResult {
     headerHash: string;
     isExtensionMod: boolean;
     isPrivate: boolean;
+    isInitialVersion: boolean;
 }
 
 interface MapInfoAck {
@@ -179,7 +180,7 @@ export class LbsServer {
     protected regions: S2Region[] = [];
     protected mapResolver: MapResolver;
     protected mapHeaderQueue = new PQueue({
-        concurrency: 5,
+        concurrency: 6,
     });
 
     private async setupDbConn() {
@@ -436,7 +437,9 @@ export class LbsServer {
             mhead.headerHash = msg.headerHash;
             mhead.isPrivate = msg.isPrivate;
             mhead.isExtensionMod = msg.isExtensionMod;
-            await this.mapResolver.initializeMapHeader(mhead);
+        }
+        if (!mhead || msg.isInitialVersion) {
+            await this.mapResolver.initializeMapHeader(mhead, msg.isInitialVersion);
         }
         Array.from(this.clientsInfo.values()).filter(x => x.region?.id === mhead.regionId).map(sclient => {
             sclient.ws.send(JSON.stringify({

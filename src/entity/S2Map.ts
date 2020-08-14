@@ -38,6 +38,7 @@ export class S2Map {
         type: 'enum',
         enum: S2MapType,
     })
+    @Index('map_type_idx')
     type: S2MapType;
 
     @ManyToOne(type => S2MapHeader, {
@@ -45,6 +46,12 @@ export class S2Map {
     })
     @Index('current_version_idx')
     currentVersion: S2MapHeader;
+
+    @ManyToOne(type => S2MapHeader, {
+        nullable: true,
+    })
+    @Index('initial_version_idx')
+    initialVersion: S2MapHeader;
 
     @Column({
         type: 'enum',
@@ -72,7 +79,7 @@ export class S2Map {
 
     @Column({
         nullable: true,
-        length: 2048,
+        length: 3072,
     })
     description: string;
 

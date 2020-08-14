@@ -6,21 +6,11 @@ import { S2Region } from '../entity/S2Region';
 import { logger, logIt, setupFileLogger } from '../logger';
 import { S2GameLobbySlot, S2GameLobbySlotKind } from '../entity/S2GameLobbySlot';
 import { SysFeedProvider } from '../entity/SysFeedProvider';
-import { sleep, execAsync } from '../helpers';
+import { sleep, execAsync, isErrDuplicateEntry } from '../helpers';
 import { DataLobbyCreate, LobbyPvExSlotKind } from '../journal/decoder';
 import { SysFeedPosition } from '../entity/SysFeedPosition';
 import { S2Profile } from '../entity/S2Profile';
 import { S2GameLobbyPlayerJoin } from '../entity/S2GameLobbyPlayerJoin';
-
-function isErrDuplicateEntry(err: Error) {
-    if (!(err instanceof orm.QueryFailedError)) return;
-    return (<any>err).code === 'ER_DUP_ENTRY';
-}
-
-function throwErrIfNotDuplicateEntry(err: Error) {
-    if (isErrDuplicateEntry(err)) return;
-    throw err;
-}
 
 class DataProc {
     protected conn: orm.Connection;

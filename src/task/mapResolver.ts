@@ -7,7 +7,7 @@ import { S2MapHeader } from '../entity/S2MapHeader';
 import { BattleDepot } from '../depot';
 import { GameRegion, GameLocale } from '../common';
 import { logger, logIt } from '../logger';
-import { spawnWaitExit, retry } from '../helpers';
+import { spawnWaitExit, retry, throwErrIfNotDuplicateEntry } from '../helpers';
 import { S2Map, S2MapType } from '../entity/S2Map';
 
 export type MapTags = 'BLIZ'
@@ -103,6 +103,7 @@ export interface DepotFileLink {
 export interface MapInfo {
     name: ExternalString;
     description: ExternalString;
+    bigMap: MapImage;
     thumbnail: MapImage;
     maxPlayers: number;
     visualFiles: DepotFileLink[];
@@ -257,7 +258,7 @@ export class MapResolver {
             logger.warn(`failed to init map header`, err);
         },
     })
-    async initializeMapHeader(mhead: S2MapHeader) {
+    async initializeMapHeader(mhead: S2MapHeader, isInitialVersion?: boolean) {
         logger.verbose(`resolving.. map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} hash=${mhead.headerHash}`);
         const rcode = GameRegion[mhead.regionId];
 
@@ -278,7 +279,12 @@ export class MapResolver {
         }
         mhead.archiveHash = headerData.mapFile.hash;
 
-        const thumbnail = headerData.mapInfo.visualFiles[headerData.arcade?.mapIcon?.index ?? headerData.mapInfo.thumbnail.index];
+        const mapPictureKey = (
+            headerData.arcade?.mapIcon ??
+            headerData.mapInfo.thumbnail ??
+            headerData.mapInfo.bigMap
+        );
+        const mapPicture: DepotFileLink = mapPictureKey ? headerData.mapInfo.visualFiles[mapPictureKey.index] : void 0;
         const mainLocaleTable = headerData.mapInfo.localeTable.find(x => x.locale === GameLocale.enUS) ?? headerData.mapInfo.localeTable[0];
         const localizationData = await this.getMapLocalization(rcode, mainLocaleTable.stringTable[0].hash, true);
         const mapLocalized = applyMapLocalization(headerData, localizationData);
@@ -307,18 +313,29 @@ export class MapResolver {
             map.name = mapLocalized.mapInfo.name[mainLocaleTable.locale];
             map.description = mapLocalized.mapInfo.description[mainLocaleTable.locale];
             map.mainCategoryId = mapLocalized.variants[mapLocalized.defaultVariantIndex].categoryId;
-            map.iconHash = thumbnail?.hash ?? null;
+            map.iconHash = mapPicture?.hash ?? null;
             map.mainLocale = mainLocaleTable.locale;
             map.mainLocaleHash = mainLocaleTable.stringTable[0].hash;
             map.currentVersion = mhead;
             updatedMap = true;
         }
-        await this.conn.transaction(async em => {
-            await em.getRepository(S2MapHeader).save(mhead, { transaction: false });
-            if (updatedMap) {
-                await em.getRepository(S2Map).save(map, { transaction: false });
-            }
-        });
+
+        if (isInitialVersion && !map.initialVersion) {
+            map.initialVersion = mhead;
+            updatedMap = true;
+        }
+
+        try {
+            await this.conn.transaction(async em => {
+                await em.getRepository(S2MapHeader).save(mhead, { transaction: false });
+                if (updatedMap) {
+                    await em.getRepository(S2Map).save(map, { transaction: false });
+                }
+            });
+        }
+        catch (err) {
+            throwErrIfNotDuplicateEntry(err);
+        }
 
         logger.info(`resolved map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} name=${headerData.name} updated=${updatedMap} uploadTime=${mhead.uploadedAt.toUTCString()}`);
     }
