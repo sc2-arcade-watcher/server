@@ -65,5 +65,6 @@ export class S2MapHeader {
     @Column({
         nullable: true,
     })
+    @Index('uploaded_at_idx')
     uploadedAt: Date;
 }

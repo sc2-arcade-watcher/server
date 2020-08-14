@@ -31,6 +31,10 @@ export default fp(async (server, opts, next) => {
             .getOne()
         ;
 
+        if (!result) {
+            return reply.type('application/json').code(404).send();
+        }
+
         // for compatibility with older version of this endpoint, to be removed in the future
         (<any>result).isArcade = !result.mainCategory.isMelee;
         (<any>result).currentMajorVersion = result.currentVersion.majorVersion;
@@ -64,10 +68,6 @@ export default fp(async (server, opts, next) => {
         };
         delete result.mainCategory;
         // end
-
-        if (!result) {
-            return reply.type('application/json').code(404).send();
-        }
 
         reply.header('Cache-control', 'public, s-maxage=60');
         return reply.type('application/json').code(200).send(result);

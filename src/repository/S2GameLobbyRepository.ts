@@ -101,4 +101,50 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
         ;
         return qb;
     }
+
+    createQueryForEntriesInIds(recordIds: number[], orderDirection: 'ASC' | 'DESC' = 'DESC') {
+        return this.createQueryBuilder('lobby')
+            .select([])
+            .addSelect([
+                'lobby.id',
+                'lobby.regionId',
+                'lobby.bnetBucketId',
+                'lobby.bnetRecordId',
+                'lobby.mapBnetId',
+                'lobby.mapMajorVersion',
+                'lobby.mapMinorVersion',
+                'lobby.extModBnetId',
+                'lobby.extModMajorVersion',
+                'lobby.extModMinorVersion',
+                'lobby.multiModBnetId',
+                'lobby.multiModMajorVersion',
+                'lobby.multiModMinorVersion',
+                'lobby.createdAt',
+                'lobby.closedAt',
+                'lobby.status',
+                'lobby.mapVariantIndex',
+                'lobby.mapVariantMode',
+                'lobby.lobbyTitle',
+                'lobby.hostName',
+            ])
+            .leftJoin('lobby.slots', 'slot')
+            .addSelect([
+                'slot.slotNumber',
+                'slot.team',
+                'slot.kind',
+                'slot.name',
+            ])
+            // .leftJoin('slot.profile', 'profile')
+            // .addSelect([
+            //     'profile.regionId',
+            //     'profile.realmId',
+            //     'profile.profileId',
+            //     'profile.name',
+            //     'profile.discriminator',
+            // ])
+            .andWhereInIds(recordIds)
+            .addOrderBy('lobby.id', orderDirection)
+            .addOrderBy('slot.slotNumber', 'ASC')
+        ;
+    }
 }

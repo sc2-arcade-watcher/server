@@ -1,6 +1,7 @@
 import * as http from 'http';
 import * as fastify from 'fastify';
 import * as fp from 'fastify-plugin';
+import * as orm from 'typeorm';
 import { atob, btoa } from '../helpers';
 
 export interface CursorPaginationQuery {
@@ -9,6 +10,9 @@ export interface CursorPaginationQuery {
     limit: number;
     fetchLimit: number;
     getOrderDirection: (order?: 'ASC' | 'DESC') => 'ASC' | 'DESC';
+    getOperator: (dir: 'before' | 'after', order?: 'ASC' | 'DESC') => '>' | '<';
+    applyQuery: (qb: orm.SelectQueryBuilder<any>, order?: 'ASC' | 'DESC') => orm.SelectQueryBuilder<any>;
+    toRawKey: (s: string) => string;
     paginationKeys?: string[];
 }
 
@@ -22,13 +26,20 @@ export interface CursorPaginationResponse<T> {
     results: T[];
 }
 
+type rawAndEntities<T> = {
+    entities: T[];
+    raw: any[];
+};
+
+type sendReplyType<T = any> = (this: fastify.FastifyReply<http.ServerResponse>, rData: rawAndEntities<T>, pQuery: CursorPaginationQuery) => CursorPaginationResponse<T>;
+
 declare module 'fastify' {
     interface FastifyRequest {
-        parseCursorPagination(this: fastify.FastifyRequest, opts?: { paginationKeys?: string[]; }): CursorPaginationQuery;
+        parseCursorPagination(this: fastify.FastifyRequest, opts?: { paginationKeys?: string[] | string; }): CursorPaginationQuery;
     }
 
     interface FastifyReply<HttpResponse> {
-        sendWithCursorPagination<T>(this: fastify.FastifyReply<http.ServerResponse>, results: T[], pQuery: CursorPaginationQuery): CursorPaginationResponse<T>;
+        sendWithCursorPagination: sendReplyType;
     }
 }
 
@@ -36,7 +47,7 @@ const defaultLimit = 50;
 const maximumLimit = 500;
 
 export default fp(async (server, opts, next) => {
-    server.decorateRequest('parseCursorPagination', function (this: fastify.FastifyRequest, opts?: { paginationKeys?: string[]; }) {
+    server.decorateRequest('parseCursorPagination', function (this: fastify.FastifyRequest, opts: { paginationKeys?: string[] | string; } = {}) {
         let limit = parseInt(this.query.limit);
         if (Number.isNaN(limit)) {
             limit = defaultLimit;
@@ -48,8 +59,19 @@ export default fp(async (server, opts, next) => {
         const pq: CursorPaginationQuery = {
             limit: limit,
             fetchLimit: limit + 1,
-            paginationKeys: opts?.paginationKeys ?? ['id'],
+            paginationKeys: ['id'],
         } as CursorPaginationQuery;
+        if (typeof opts.paginationKeys === 'string') {
+            pq.paginationKeys = [opts.paginationKeys];
+        }
+        else if (typeof opts.paginationKeys === 'object') {
+            pq.paginationKeys = opts.paginationKeys;
+        }
+
+        pq.toRawKey = function(s: string) {
+            const r = s.split('.');
+            return [r.shift(), ...r.map(server.conn.namingStrategy.relationName)].join('_');
+        };
 
         function decodeKeyValues(value: string) {
             if (!value) return void 0;
@@ -57,7 +79,7 @@ export default fp(async (server, opts, next) => {
             if (!Array.isArray(kvals)) return void 0;
             const kvmap: {[k: string]: string} = {};
             for (const k of pq.paginationKeys) {
-                kvmap[k] = kvals.length ? kvals.shift() : '';
+                kvmap[pq.toRawKey(k)] = kvals.length ? kvals.shift() : null;
             }
             return kvmap;
         }
@@ -72,23 +94,56 @@ export default fp(async (server, opts, next) => {
             return order;
         };
 
+        pq.getOperator = (dir: 'before' | 'after', order?: 'ASC' | 'DESC') => {
+            if (dir === 'before' && pq.getOrderDirection(order) === 'ASC') {
+                return '>';
+            }
+            else if (dir === 'before' && pq.getOrderDirection(order) === 'DESC') {
+                return '<';
+            }
+            else if (dir === 'after' && pq.getOrderDirection(order) === 'ASC') {
+                return '>';
+            }
+            else if (dir === 'after' && pq.getOrderDirection(order) === 'DESC') {
+                return '<';
+            }
+        };
+
+        pq.applyQuery = (qb, order) => {
+            const dir = pq.before ? 'before' : pq.after ? 'after' : null;
+            for (const k of pq.paginationKeys) {
+                if (dir) {
+                    qb.andWhere(k + ' ' + pq.getOperator(dir, order) + ' :' + pq.toRawKey(k));
+                }
+                qb.addOrderBy(k, pq.getOrderDirection(order));
+            }
+            if (dir) {
+                qb.setParameters(pq[dir]);
+            }
+            return qb;
+        };
+
         return pq;
     });
 
-    server.decorateReply('sendWithCursorPagination', function<T> (this: fastify.FastifyReply<http.ServerResponse>, results: T[], pQuery: CursorPaginationQuery) {
+    server.decorateReply('sendWithCursorPagination', function<T> (this: fastify.FastifyReply<http.ServerResponse>, rData: rawAndEntities<T>, pQuery: CursorPaginationQuery) {
         function encodeKeyValues(entry: T) {
             const kvals: string[] = [];
-            for (const k of pQuery.paginationKeys) {
-                let tmpval: string | any = entry;
-                for (const ksub of k.split('.')) {
-                    tmpval = (<any>tmpval)[ksub];
-                    if (tmpval === void 0 || tmpval === null) {
-                        tmpval = '';
-                        break;
-                    }
-                }
-                kvals.push(tmpval);
+            const rawKeys = pQuery.paginationKeys.map(pQuery.toRawKey);
+            for (const k of rawKeys) {
+                kvals.push((<any>entry)[k]);
             }
+            // for (const k of pQuery.paginationKeys) {
+            //     let tmpval: string | any = entry;
+            //     for (const ksub of k.split('.')) {
+            //         tmpval = (<any>tmpval)[ksub];
+            //         if (tmpval === void 0 || tmpval === null) {
+            //             tmpval = '';
+            //             break;
+            //         }
+            //     }
+            //     kvals.push(tmpval);
+            // }
             return btoa(JSON.stringify(kvals));
         }
 
@@ -97,26 +152,27 @@ export default fp(async (server, opts, next) => {
                 prev: null,
                 next: null,
             },
-            results,
+            results: rData.entities,
         };
         if (pQuery.before) {
-            if (results.length) {
-                presponse.page.next = encodeKeyValues(results[0]);
+            if (rData.entities.length) {
+                presponse.page.next = encodeKeyValues(rData.raw[0]);
             }
-            if (results.length > pQuery.limit) {
-                presponse.page.prev = encodeKeyValues(results[pQuery.limit - 1]);
-                presponse.results = results.slice(0, pQuery.limit).reverse();
+            if (rData.entities.length > pQuery.limit) {
+                presponse.page.prev = encodeKeyValues(rData.raw[pQuery.limit - 1]);
+                presponse.results = rData.entities.slice(0, pQuery.limit);
             }
+            presponse.results = presponse.results.reverse();
         }
         else {
             if (pQuery.after) {
-                if (results.length) {
-                    presponse.page.prev = encodeKeyValues(results[0]);
+                if (rData.entities.length) {
+                    presponse.page.prev = encodeKeyValues(rData.raw[0]);
                 }
             }
-            if (results.length > pQuery.limit) {
-                presponse.page.next = encodeKeyValues(results[pQuery.limit - 1]);
-                presponse.results = results.slice(0, pQuery.limit);
+            if (rData.entities.length > pQuery.limit) {
+                presponse.page.next = encodeKeyValues(rData.raw[pQuery.limit - 1]);
+                presponse.results = rData.entities.slice(0, pQuery.limit);
             }
         }
         return presponse;

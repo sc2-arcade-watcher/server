@@ -1,13 +1,12 @@
 import * as fp from 'fastify-plugin';
-import { S2GameLobby } from '../../../entity/S2GameLobby';
-import { GameLobbyStatus } from '../../../gametracker';
-import { logger } from '../../../logger';
+import { S2GameLobbySlot } from '../../../entity/S2GameLobbySlot';
+import { S2GameLobbyRepository } from '../../../repository/S2GameLobbyRepository';
 
 export default fp(async (server, opts, next) => {
     server.get('/lobbies/history/player/:regionId/:realmId/:profileId', {
         schema: {
             tags: ['Lobbies'],
-            summary: 'History of started lobbies where particular player has appeared. Basically a "match history", limited to public games.',
+            summary: 'History of started lobbies where given player was present. Basically a "match history", limited to public games.',
             params: {
                 type: 'object',
                 required: ['regionId', 'realmId', 'profileId'],
@@ -38,36 +37,42 @@ export default fp(async (server, opts, next) => {
             },
         },
     }, async (request, reply) => {
-        const { limit, offset } = request.parsePagination();
+        const pQuery = request.parseCursorPagination();
 
-        logger.verbose(`orderDirection`, request.query);
-
-        const [ result, count ] = await server.conn.getRepository(S2GameLobby)
-            .createQueryBuilder('lobby')
-            .innerJoin('lobby.slots', 'slot')
+        const qb = server.conn.getRepository(S2GameLobbySlot)
+            .createQueryBuilder('slot')
+            .select([])
+            .addSelect('slot.lobbyId', 'lobby_id')
             .innerJoin('slot.profile', 'profile')
-            .select([
-                'lobby.bnetBucketId',
-                'lobby.bnetRecordId',
-                'lobby.status',
-                'lobby.closedAt',
-            ])
             .andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId', {
                 regionId: request.params.regionId,
                 realmId: request.params.realmId,
                 profileId: request.params.profileId,
             })
-            .andWhere('lobby.status = :status', { status: GameLobbyStatus.Started })
-            .addOrderBy('lobby.id', request.query.orderDirection?.toUpperCase() ?? 'DESC')
-            .limit(limit)
-            .offset(offset)
-            // .take(limit)
-            // .skip(offset)
-            .cache(60000)
-            .getManyAndCount()
+            .limit(pQuery.fetchLimit)
         ;
 
-        reply.header('Cache-control', 'public, s-maxage=60');
-        return reply.type('application/json').code(200).sendWithPagination({ count: count, page: result });
+        const sorder = pQuery.getOrderDirection(request.query.orderDirection?.toUpperCase());
+        if (pQuery.before && sorder === 'ASC') {
+            qb.andWhere(`slot.lobbyId < :id`, pQuery.before);
+        }
+        else if (pQuery.before && sorder === 'DESC') {
+            qb.andWhere(`slot.lobbyId > :id`, pQuery.before);
+        }
+        else if (pQuery.after && sorder === 'ASC') {
+            qb.andWhere(`slot.lobbyId > :id`, pQuery.after);
+        }
+        else if (pQuery.after && sorder === 'DESC') {
+            qb.andWhere(`slot.lobbyId < :id`, pQuery.after);
+        }
+        qb.addOrderBy('slot.lobbyId', sorder);
+
+        const lbIds = await qb.getRawMany();
+        const qbFinal = server.conn.getCustomRepository(S2GameLobbyRepository).createQueryForEntriesInIds(
+            lbIds.length ? lbIds.map(x => x.lobby_id) : [0],
+            sorder
+        );
+
+        return reply.type('application/json').code(200).sendWithCursorPagination(await qbFinal.getRawAndEntities(), pQuery);
     });
 });

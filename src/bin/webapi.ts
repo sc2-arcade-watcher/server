@@ -150,14 +150,13 @@ server.register(fastifyOAS, <fastifyOAS.FastifyOASOptions>{
             {
                 name: 'Lobbies',
                 description: stripIndents`
-                    Publicly hosted games on Arcade.\n
-                    **Privately hosted games aren't supported** and most likely never will.
+                    **Publicly** hosted games on Arcade.
                 `,
             },
             {
                 name: 'Maps',
                 description: stripIndents`
-                    Maps & mods published on the Battle.net. Currently database is limited to maps that have been hosted at least once since this project has started. At this time it's the only method of populating the database. I've began working on improvements in that area, with the goal to include every single map published to Battle.net. With ability to auto-discover newly published documents, even before they're hosted for the first time.
+                    Maps & mods published on Arcade.
                 `,
             },
         ],

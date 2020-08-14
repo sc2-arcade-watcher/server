@@ -21,6 +21,9 @@ export class S2GameLobbySlot {
     @Index('lobby')
     lobby: S2GameLobby;
 
+    @Column()
+    lobbyId: number;
+
     @Column({
         type: 'tinyint',
         unsigned: true,

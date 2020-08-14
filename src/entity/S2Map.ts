@@ -5,7 +5,8 @@ import { S2MapHeader } from './S2MapHeader';
 import { S2MapCategory } from './S2MapCategory';
 
 export enum S2MapType {
-    Map = 'map',
+    MeleeMap = 'melee_map',
+    ArcadeMap = 'arcade_map',
     ExtensionMod = 'extension_mod',
     DependencyMod = 'dependency_mod',
 }
@@ -74,6 +75,9 @@ export class S2Map {
     iconHash: string;
 
     @Column()
+    @Index('name_fulltext_idx', {
+        fulltext: true,
+    })
     @Index('name_idx')
     name: string;
 
@@ -92,4 +96,10 @@ export class S2Map {
 
     @Column()
     mainCategoryId: number;
+
+    @Column({
+        nullable: true,
+    })
+    @Index('updated_at_idx')
+    updatedAt: Date;
 }

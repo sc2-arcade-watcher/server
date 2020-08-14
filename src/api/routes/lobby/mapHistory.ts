@@ -1,6 +1,7 @@
 import * as fp from 'fastify-plugin';
 import { GameLobbyStatus } from '../../../gametracker';
 import { S2GameLobby } from '../../../entity/S2GameLobby';
+import { S2GameLobbyRepository } from '../../../repository/S2GameLobbyRepository';
 
 export default fp(async (server, opts, next) => {
     server.get('/lobbies/history/map/:regionId/:mapId', {
@@ -33,13 +34,9 @@ export default fp(async (server, opts, next) => {
                     status: {
                         type: 'string',
                         enum: [
+                            ...Object.values(GameLobbyStatus),
                             'any',
-                            'open',
-                            'started',
-                            'abandoned',
-                            'unknown',
                         ],
-                        default: 'any',
                     },
                 },
             },
@@ -91,51 +88,11 @@ export default fp(async (server, opts, next) => {
         }
 
         const lbIds = await qb.getRawMany();
-        const results = await server.conn.getRepository(S2GameLobby).createQueryBuilder('lobby')
-            .select([])
-            .addSelect([
-                'lobby.id',
-                'lobby.regionId',
-                'lobby.bnetBucketId',
-                'lobby.bnetRecordId',
-                'lobby.mapBnetId',
-                'lobby.mapMajorVersion',
-                'lobby.mapMinorVersion',
-                'lobby.extModBnetId',
-                'lobby.extModMajorVersion',
-                'lobby.extModMinorVersion',
-                'lobby.multiModBnetId',
-                'lobby.multiModMajorVersion',
-                'lobby.multiModMinorVersion',
-                'lobby.createdAt',
-                'lobby.closedAt',
-                'lobby.status',
-                'lobby.mapVariantIndex',
-                'lobby.mapVariantMode',
-                'lobby.lobbyTitle',
-                'lobby.hostName',
-            ])
-            .leftJoin('lobby.slots', 'slot')
-            .addSelect([
-                'slot.slotNumber',
-                'slot.team',
-                'slot.kind',
-                'slot.name',
-            ])
-            // .leftJoin('slot.profile', 'profile')
-            // .addSelect([
-            //     'profile.regionId',
-            //     'profile.realmId',
-            //     'profile.profileId',
-            //     'profile.name',
-            //     'profile.discriminator',
-            // ])
-            .andWhereInIds(lbIds.length ? lbIds.map(x => x.lobby_id) : [0])
-            .addOrderBy('lobby.id', sorder)
-            .addOrderBy('slot.slotNumber', 'ASC')
-            .getMany()
-        ;
+        const qbFinal = server.conn.getCustomRepository(S2GameLobbyRepository).createQueryForEntriesInIds(
+            lbIds.length ? lbIds.map(x => x.lobby_id) : [0],
+            sorder
+        );
 
-        return reply.type('application/json').code(200).sendWithCursorPagination(results, pQuery);
+        return reply.type('application/json').code(200).sendWithCursorPagination(await qbFinal.getRawAndEntities(), pQuery);
     });
 });

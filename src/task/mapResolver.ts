@@ -9,6 +9,7 @@ import { GameRegion, GameLocale } from '../common';
 import { logger, logIt } from '../logger';
 import { spawnWaitExit, retry, throwErrIfNotDuplicateEntry } from '../helpers';
 import { S2Map, S2MapType } from '../entity/S2Map';
+import { S2MapCategory } from '../entity/S2MapCategory';
 
 export type MapTags = 'BLIZ'
     | 'TRIL'
@@ -208,6 +209,7 @@ export function applyMapLocalization(mapHeader: MapHeaderData, mapLocalization: 
 
 export class MapResolver {
     protected depot = new BattleDepot('data/depot');
+    protected mapCategories: S2MapCategory[];
 
     constructor(protected conn: orm.Connection) {
     }
@@ -259,6 +261,10 @@ export class MapResolver {
         },
     })
     async initializeMapHeader(mhead: S2MapHeader, isInitialVersion?: boolean) {
+        if (!this.mapCategories) {
+            this.mapCategories = await this.conn.getRepository(S2MapCategory).find();
+        }
+
         logger.verbose(`resolving.. map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} hash=${mhead.headerHash}`);
         const rcode = GameRegion[mhead.regionId];
 
@@ -301,8 +307,14 @@ export class MapResolver {
 
         let updatedMap = false;
         if (!map.currentVersion || (mhead.majorVersion >= map.currentVersion.majorVersion && mhead.minorVersion >= map.currentVersion.minorVersion)) {
+            const mainCategory = this.mapCategories.find(x => x.id === mapLocalized.variants[mapLocalized.defaultVariantIndex].categoryId);
             if (mapLocalized.mapSize) {
-                map.type = S2MapType.Map;
+                if (mainCategory.isMelee) {
+                    map.type = S2MapType.MeleeMap;
+                }
+                else {
+                    map.type = S2MapType.ArcadeMap;
+                }
             }
             else if (mhead.isExtensionMod) {
                 map.type = S2MapType.ExtensionMod;
@@ -312,10 +324,11 @@ export class MapResolver {
             }
             map.name = mapLocalized.mapInfo.name[mainLocaleTable.locale];
             map.description = mapLocalized.mapInfo.description[mainLocaleTable.locale];
-            map.mainCategoryId = mapLocalized.variants[mapLocalized.defaultVariantIndex].categoryId;
+            map.mainCategoryId = mainCategory.id;
             map.iconHash = mapPicture?.hash ?? null;
             map.mainLocale = mainLocaleTable.locale;
             map.mainLocaleHash = mainLocaleTable.stringTable[0].hash;
+            map.updatedAt = mhead.uploadedAt;
             map.currentVersion = mhead;
             updatedMap = true;
         }
