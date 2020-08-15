@@ -110,12 +110,21 @@ enum MessageKind {
     StreamChunk                  = 5,
 
     MapHeaderResult              = 10,
-    MapInfoAck                   = 11,
+    MapHeaderAck                 = 11,
+    // MapInfoRequest               = 12,
+    // MapInfoResult                = 13,
+    // MapInfoAck                   = 14,
+}
+
+interface RunnerCapabilities {
+    lobbyFeed: boolean;
+    mapResolving: boolean;
 }
 
 interface RunnerIntro {
     hostname: string;
     region: string;
+    capabilities?: RunnerCapabilities;
 }
 
 interface RunnerWelcome {
@@ -156,7 +165,7 @@ interface MapHeaderResult {
     isInitialVersion: boolean;
 }
 
-interface MapInfoAck {
+interface MapHeaderAck {
     regionId: number;
     mapId: number;
     mapVersion: number;
@@ -166,11 +175,17 @@ interface WsClientDesc {
     isAlive: boolean;
     connSocket: Socket;
     ws: WebSocket;
+    rinfo?: RunnerIntro;
     region?: S2Region;
     runnerFeedInfo?: RunnerFeedCtrl;
     sessInfo?: RunnerSessionFeed;
     sessWriteStream?: fs.WriteStream;
 }
+
+type FetchClientOptions = {
+    regionId?: number;
+    requiredCapabilities?: [keyof RunnerCapabilities];
+};
 
 export class LbsServer {
     protected conn: orm.Connection;
@@ -190,6 +205,21 @@ export class LbsServer {
             relations: ['mapProgress'],
             order: { id: 'ASC' },
         });
+    }
+
+    protected getActiveRunners(options: FetchClientOptions = {}) {
+        const matchingRunners: WsClientDesc[] = [];
+        out: for (const item of this.clientsInfo.values()) {
+            if (!item.rinfo) continue;
+            if (options.regionId && options.regionId !== item.region!.id) continue;
+            if (options.requiredCapabilities) {
+                for (const k of options.requiredCapabilities) {
+                    if (!item.rinfo!.capabilities[k]) continue out;
+                }
+            }
+            matchingRunners.push(item);
+        }
+        return matchingRunners;
     }
 
     @logIt()
@@ -288,6 +318,14 @@ export class LbsServer {
                 const rvRunner: RunnerIntro = msg;
 
                 logger.info(`RunnerIntro: ip=${sclient.connSocket.remoteAddress} rport=${sclient.connSocket.remotePort}`, rvRunner);
+                sclient.rinfo = {
+                    hostname: rvRunner.hostname,
+                    region: rvRunner.region,
+                    capabilities: Object.assign<RunnerCapabilities | {}, RunnerCapabilities>(rvRunner.capabilities ?? {}, {
+                        lobbyFeed: true,
+                        mapResolving: true,
+                    }),
+                };
                 sclient.region = this.regions.find(x => x.code === rvRunner.region);
                 if (!sclient.region) {
                     logger.error(`Unknown region=${rvRunner.region}`);
@@ -453,14 +491,19 @@ export class LbsServer {
             logger.debug(`skiping map header init for ${msg.mapId},${msg.mapVersion}`);
         }
 
-        Array.from(this.clientsInfo.values()).filter(x => x.region?.id === mhead.regionId).map(sclient => {
-            sclient.ws.send(JSON.stringify({
-                $id: MessageKind.MapInfoAck,
+        this.getActiveRunners({
+            regionId: mhead.regionId,
+            requiredCapabilities: [
+                'mapResolving',
+            ],
+        }).forEach(x => {
+            x.ws.send(JSON.stringify({
+                $id: MessageKind.MapHeaderAck,
                 ...{
                     regionId: msg.regionId,
                     mapId: msg.mapId,
                     mapVersion: msg.mapVersion,
-                } as MapInfoAck
+                } as MapHeaderAck
             }));
         });
     }

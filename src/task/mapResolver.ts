@@ -253,7 +253,7 @@ export class MapResolver {
     }
 
     @retry({
-        retries: 4,
+        retries: 2,
         onFailedAttempt: err => {
             logger.warn(`failed to init map header`, err);
         },
