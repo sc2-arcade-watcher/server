@@ -180,7 +180,7 @@ export class LbsServer {
     protected regions: S2Region[] = [];
     protected mapResolver: MapResolver;
     protected mapHeaderQueue = new PQueue({
-        concurrency: 6,
+        concurrency: Number(process.env.STARC_DHOST_MR_QUEUE_LIMIT) || 8,
     });
 
     private async setupDbConn() {
@@ -249,10 +249,11 @@ export class LbsServer {
 
     @logIt({ profiling: false })
     async close() {
+        logger.verbose(`Pausing mapHeaderQueue.. qsize=${this.mapHeaderQueue.size}`);
         this.mapHeaderQueue.pause();
-        logger.verbose('Closing websocket..');
+        logger.verbose(`Closing websocket..`);
         this.wss.close();
-        logger.verbose('Shutting down DB connection..');
+        logger.verbose(`Shutting down DB connection..`);
         await this.conn.close();
     }
 
@@ -407,7 +408,7 @@ export class LbsServer {
     }
 
     protected async onMapHeaderResult(sclient: WsClientDesc, msg: MapHeaderResult) {
-        logger.debug(`received map header, regionId=${msg.regionId} mhandle=${msg.mapId},${msg.mapVersion}`);
+        logger.debug(`received map header, regionId=${msg.regionId} mhandle=${msg.mapId},${msg.mapVersion}, qsize=${this.mapHeaderQueue.pending}`);
         this.mapHeaderQueue.add(async () => {
             try {
                 await this.processMapHeader(msg);
@@ -428,6 +429,8 @@ export class LbsServer {
                 minorVersion: minorVer,
             },
         });
+
+        let doUpdate = false;
         if (!mhead) {
             mhead = new S2MapHeader();
             mhead.regionId = msg.regionId;
@@ -437,10 +440,19 @@ export class LbsServer {
             mhead.headerHash = msg.headerHash;
             mhead.isPrivate = msg.isPrivate;
             mhead.isExtensionMod = msg.isExtensionMod;
+            doUpdate = true;
         }
-        if (!mhead || msg.isInitialVersion) {
+        else if (msg.isInitialVersion) {
+            doUpdate = true;
+        }
+
+        if (doUpdate) {
             await this.mapResolver.initializeMapHeader(mhead, msg.isInitialVersion);
         }
+        else {
+            logger.debug(`skiping map header init for ${msg.mapId},${msg.mapVersion}`);
+        }
+
         Array.from(this.clientsInfo.values()).filter(x => x.region?.id === mhead.regionId).map(sclient => {
             sclient.ws.send(JSON.stringify({
                 $id: MessageKind.MapInfoAck,
@@ -450,7 +462,7 @@ export class LbsServer {
                     mapVersion: msg.mapVersion,
                 } as MapInfoAck
             }));
-        })
+        });
     }
 
     protected onConnClose(ws: WebSocket, code: number, reason: string) {
