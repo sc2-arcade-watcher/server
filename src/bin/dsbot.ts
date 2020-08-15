@@ -47,6 +47,9 @@ export class DsBot extends CommandoClient {
             logger.info(`Guilds: ${this.guilds.size} Channels: ${this.channels.size}`);
             for (const guild of this.guilds.sort((a, b) => a.joinedTimestamp - b.joinedTimestamp).values()) {
                 logger.info(`Connected with guild "${guild.name}" (${guild.memberCount}) id=${guild.id}`);
+                for (const chan of guild.channels.values()) {
+                    logger.verbose(`Connected with text channel "${chan.name}" id=${chan.id}`);
+                }
             }
         });
         this.on('disconnect', () => logger.warn('Disconnected!'));

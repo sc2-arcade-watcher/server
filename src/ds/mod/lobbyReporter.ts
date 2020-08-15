@@ -336,7 +336,13 @@ export class LobbyReporterTask extends BotTask {
 
             const destGuildChan = destGuild.channels.get(opts.channelId);
             if (!destGuildChan) {
-                logger.error(`Guild chan doesn't exist, id=${opts.channelId}`, opts);
+                logger.error(
+                    `Guild chan doesn't exist, id=${opts.channelId}`,
+                    opts,
+                    destGuildChan,
+                    this.client.channels.get(opts.channelId),
+                    Array.from(destGuild.channels.values()).map(x => [x.id, x.name])
+                );
                 return;
             }
             if (!(destGuildChan instanceof TextChannel)) {
@@ -355,9 +361,10 @@ export class LobbyReporterTask extends BotTask {
         let chan: TextChannel | DMChannel;
         chan = await this.fetchDestChannel(rule);
         if (!chan) {
-            logger.warn(`Couldn't fetch the channel, deleting subscription, id=${rule.id}`);
-            await this.conn.getRepository(DsGameLobbySubscription).update(rule.id, { enabled: false });
-            this.trackRules.delete(rule.id);
+            logger.warn(`Couldn't fetch the channel, id=${rule.id}`);
+            // FIXME: this currently cannot be trusted, delete sub only if channel truly doesn't exist, and not if it's not cached by discord.js
+            // await this.conn.getRepository(DsGameLobbySubscription).update(rule.id, { enabled: false });
+            // this.trackRules.delete(rule.id);
             return;
         }
         return this.postTrackedLobby(chan, trackedLobby, rule);
