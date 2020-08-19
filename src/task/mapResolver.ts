@@ -176,6 +176,8 @@ const fieldsToLocalize: LocalizableFields = {
     tileset: true,
 };
 
+const reHtmlBr = /<br>/g;
+
 export function applyMapLocalization(mapHeader: MapHeaderData, mapLocalization: MapLocalizationTable): MapHeaderLocalized {
     function localizeField(field: ExternalString | ExternalString[]): ExternalString | ExternalString[] {
         if (Array.isArray(field)) {
@@ -204,6 +206,10 @@ export function applyMapLocalization(mapHeader: MapHeaderData, mapLocalization: 
     }
     r.resolvedLocales.push(mapLocalization.locale);
 
+    if (r.mapInfo.description[mapLocalization.locale]) {
+        r.mapInfo.description[mapLocalization.locale] = r.mapInfo.description[mapLocalization.locale].replace(reHtmlBr, '\n');
+    }
+
     return r;
 }
 
@@ -228,7 +234,7 @@ export class MapResolver {
         if (!persist) {
             await fs.unlink(fPath);
         }
-        const stringMap = new Map<number, string>(data.Locale.e.map((x: { id: string, text: string }) => [Number(x.id), x.text ?? '']));
+        const stringMap = new Map<number, string>(data.Locale.e.map((x: { id: string, text: string }) => [Number(x.id), x.text ? String(x.text) : '']));
         return {
             locale: data.Locale.region,
             strings: stringMap,
