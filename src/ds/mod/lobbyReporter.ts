@@ -1,3 +1,4 @@
+import * as pMap from 'p-map';
 import { User, TextChannel, Message, RichEmbed, RichEmbedOptions, Snowflake, DiscordAPIError, PartialTextBasedChannelFields, DMChannel } from 'discord.js';
 import { BotTask, DiscordErrorCode, GeneralCommand, formatObjectAsMessage, ExtendedCommandInfo } from '../dscommon';
 import { S2GameLobby } from '../../entity/S2GameLobby';
@@ -203,7 +204,7 @@ export class LobbyReporterTask extends BotTask {
         if (!pendingCandidates.length) return;
 
         logger.verbose(`Pending candidates, count=${pendingCandidates.length}`);
-        await Promise.all(pendingCandidates.map(async ([lobId, trackedLobby]) => {
+        await pMap(pendingCandidates, async ([lobId, trackedLobby]) => {
             const trackLob = this.trackedLobbies.get(lobId);
             for (const currCand of trackedLobby.candidates) {
                 const timeDiff = (Date.now() - trackLob.lobby.createdAt.getTime()) / 1000;
@@ -219,7 +220,9 @@ export class LobbyReporterTask extends BotTask {
                     trackedLobby.candidates.delete(currCand);
                 }
             }
-        }));
+        }, {
+            concurrency: 6,
+        });
     }
 
     @logIt({
@@ -290,7 +293,7 @@ export class LobbyReporterTask extends BotTask {
             .getMany()
         ;
         let updateCount = 0;
-        await Promise.all(freshLobbyInfo.map(async lobbyInfo => {
+        await pMap(freshLobbyInfo, async lobbyInfo => {
             const trackedLobby = this.trackedLobbies.get(lobbyInfo.id);
             if (!trackedLobby) return;
             const needsUpdate = trackedLobby.updateInfo(lobbyInfo);
@@ -306,7 +309,9 @@ export class LobbyReporterTask extends BotTask {
             if (trackedLobby.isClosedStatusConcluded() && !trackedLobby.postedMessages.size) {
                 this.trackedLobbies.delete(lobbyInfo.id);
             }
-        }));
+        }, {
+            concurrency: 5,
+        });
         logger.verbose(`Updated tracked lobbies count=${updateCount} (total=${this.trackedLobbies.size})`);
     }
 
