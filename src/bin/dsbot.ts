@@ -97,8 +97,10 @@ export class DsBot extends CommandoClient {
     }
 
     async prepare() {
+        logger.verbose(`Opening sqlite db..`);
         this.slitedb = await sqlite.open('data/commando-settings.db');
         this.setProvider(new SQLiteProvider(this.slitedb));
+        logger.verbose(`Connecting to mariadb..`);
         this.conn = await orm.createConnection();
     }
 
@@ -179,8 +181,7 @@ process.on('unhandledRejection', e => { throw e; });
     process.on('SIGTERM', terminate);
     process.on('SIGINT', terminate);
 
-    await Promise.all([
-        bot.login(process.env.DS_BOT_TOKEN),
-        bot.install(),
-    ]);
+    logger.verbose(`Logging in..`);
+    await bot.login(process.env.DS_BOT_TOKEN);
+    await bot.install();
 })();
