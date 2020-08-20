@@ -108,7 +108,7 @@ export default fp(async (server, opts, next) => {
                 .limit(1)
                 .getQuery()
             ;
-            qb.leftJoin(S2StatsPeriodMap, 'stMap', 'stMap.regionId = map.regionId AND stMap.bnetId = map.bnetId AND stMap.period = ' + stMapQuery);
+            qb.innerJoin(S2StatsPeriodMap, 'stMap', 'stMap.regionId = map.regionId AND stMap.bnetId = map.bnetId AND stMap.period = ' + stMapQuery);
             qb.addSelect('stMap.participantsUniqueTotal');
         }
 
