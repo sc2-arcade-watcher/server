@@ -449,6 +449,10 @@ export class LobbyReporterTask extends BotTask {
             if (!trackedLobby) {
                 trackedLobby = new TrackedGameLobby(lobby);
                 this.trackedLobbies.set(lobby.id, trackedLobby);
+
+                for (const sub of this.trackRules.values()) {
+                    this.testSubscription(sub, lobby.id);
+                }
             }
         }
 
