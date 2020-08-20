@@ -4,6 +4,9 @@ import { S2StatsPeriodMap } from '../../../entity/S2StatsPeriodMap';
 import { S2StatsPeriod } from '../../../entity/S2StatsPeriod';
 
 export default fp(async (server, opts, next) => {
+    const fulltextStopWords = ['a', 'about', 'an', 'are', 'as', 'at', 'be', 'by', 'com', 'de', 'en', 'for', 'from', 'how', 'i', 'in', 'is', 'it', 'la', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'was', 'what', 'when', 'where', 'who', 'will', 'with', 'und', 'the', 'www'];
+    const fulltextMinLength = 3;
+
     server.get('/maps', {
         schema: {
             tags: ['Maps'],
@@ -126,16 +129,20 @@ export default fp(async (server, opts, next) => {
             // strip all operators except: " + - *
             nameQuery = nameQuery.replace(/[<>()~]/g, '').trim();
 
-            if (nameQuery.length) {
-                // if (nameQuery.search(' ') === -1 && nameQuery.length >= 3) {
-                //     nameQuery += '*';
-                // }
+            if (nameQuery.search(/[\p{L}\p{Nd}]{3}/iu) !== -1 || nameQuery.endsWith('*')) {
                 if (nameQuery.search(/[\+\-\*\"]/g) === -1) {
-                    nameQuery = nameQuery.replace(/[\"\+\-\*]/g, '').split(/\s+/).map(x => `+${x}`).join(' ');
+                    nameQuery = nameQuery.replace(/[\"\+\-\*]/g, '').split(/\s+/).map(x => {
+                        return fulltextStopWords.indexOf(x.toLowerCase()) === -1 ? `+${x}` : `${x}*`;
+                    }).join(' ');
                 }
-
                 qb
                     .andWhere('MATCH (map.name) AGAINST(:name IN BOOLEAN MODE)', { name: nameQuery })
+                ;
+            }
+            else {
+                nameQuery = nameQuery.replace(/%/g, '');
+                qb
+                    .andWhere('map.name LIKE :name', { name: nameQuery + '%' })
                 ;
             }
         }
