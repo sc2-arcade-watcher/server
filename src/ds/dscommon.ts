@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import * as orm from 'typeorm';
 import { PermissionResolvable, Message, Util as DiscordUtil } from 'discord.js';
 import { CommandoClient, Command, CommandInfo, CommandMessage, FriendlyError, ArgumentCollector } from 'discord.js-commando';
@@ -125,18 +126,13 @@ export abstract class GeneralCommand extends Command {
             return await this.exec(msg, args, fromPattern);
         }
         catch (err) {
-            logger.error('Failed to execute command', err, msg, args);
+            const reportId = createHash('sha1').update(JSON.stringify([err?.name, err?.message, Date.now()])).digest('hex');
+            logger.error(`Failed to execute command. Report #${reportId}`, err, msg, args);
 
-            const owners = this.client.owners;
-            let ownerList = owners ? owners.map((usr, i) => {
-                const or = i === owners.length - 1 && owners.length > 1 ? 'or ' : '';
-                return `${or}${DiscordUtil.escapeMarkdown(usr.username)}#${usr.discriminator}`;
-            }).join(owners.length > 2 ? ', ' : ' ') : '';
-
-            const invite = '';
             return msg.reply(stripIndents`
                 An error occurred while running the command.
-                If the problem persists please contact ${ownerList || 'the bot owner'}${invite ? ` in this server: ${invite}` : '.'}
+                If the problem persists please report it on the issue tracker: <${this.client.issueTracker}>.
+                Report ID: \`${reportId}\` (please include it, when reporting issue).
             `);
         }
     }

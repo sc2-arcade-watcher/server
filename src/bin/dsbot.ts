@@ -14,6 +14,7 @@ import { LobbyPublishCommand } from '../ds/cmd/lobbyPublish';
 import { HelpCommand } from '../ds/cmd/help';
 
 export class DsBot extends CommandoClient {
+    issueTracker: string;
     conn: orm.Connection;
     slitedb: sqlite.Database;
     tasks: {
@@ -37,6 +38,7 @@ export class DsBot extends CommandoClient {
             disabledEvents: ['TYPING_START', 'VOICE_SERVER_UPDATE', 'VOICE_STATE_UPDATE']
         } as CommandoClientOptions, options);
         super(options);
+        this.issueTracker = 'https://github.com/SC2-Arcade-Watcher/server/issues';
         this.doShutdown = false;
 
         this.on('error', (e) => logger.error(e.message, e));
