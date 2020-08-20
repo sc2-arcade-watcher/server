@@ -8,6 +8,7 @@ import { stripIndents } from 'common-tags';
 import { sleep } from '../../helpers';
 import { S2GameLobby } from '../../entity/S2GameLobby';
 import { S2Map } from '../../entity/S2Map';
+import { battleMapLink } from '../../common';
 
 enum LobbyQueryMethod {
     LobbyHandle,
@@ -40,7 +41,7 @@ interface LobbyQueryParams {
     mapName?: string;
     documentLink?: MapOrModLinkParams;
     modName?: string;
-    playerName?: string;
+    playerName?: string | string[];
     playerBattletag?: PlayerBattleTagParams;
 }
 
@@ -180,9 +181,54 @@ export class LobbyPublishCommand extends GeneralCommand {
                 method: LobbyQueryMethod.PlayerName,
                 playerName: msg.author.username,
             };
+            if (msg.author.username !== msg.member.nickname) {
+                qparams.playerName = [
+                    msg.author.username,
+                    msg.member.nickname,
+                ];
+            }
         }
 
-        const tmpMessage = await msg.channel.send(`Looking for it, hold on.. if the lobby was just made public, it might take few seconds before it'll appear.`) as Message;
+        let criteriaText = '?';
+        switch (qparams.method) {
+            case LobbyQueryMethod.LobbyHandle: {
+                criteriaText = `Lobby handle: \`${qparams.lobbyHandle.regionId}/${qparams.lobbyHandle.bucketId}/${qparams.lobbyHandle.recordId}\``;
+                break;
+            }
+            case LobbyQueryMethod.DocumentLink: {
+                criteriaText = `Document link: \`${battleMapLink(qparams.documentLink.regionId, qparams.documentLink.documentId)}\``;
+                break;
+            }
+            case LobbyQueryMethod.MapName: {
+                criteriaText = `Map name: \`${qparams.mapName}\``;
+                break;
+            }
+            case LobbyQueryMethod.ModName: {
+                criteriaText = `Mod name: \`${qparams.modName}\``;
+                break;
+            }
+            case LobbyQueryMethod.PlayerName: {
+                criteriaText = `Player name: `;
+                if (typeof qparams.playerName === 'string') {
+                    criteriaText += `\`${qparams.playerName}\``;
+                }
+                else {
+                    criteriaText += qparams.playerName.map(x => `\`${x}\``).join(' or ');
+                }
+                break;
+            }
+            case LobbyQueryMethod.PlayerBattletag: {
+                criteriaText = `Player: \`${qparams.playerBattletag.name}#${qparams.playerBattletag.discriminator}\``;
+                break;
+            }
+        }
+
+        const tmpMessage = await msg.channel.send(stripIndents`
+            Looking for lobby which matches following criteria:
+            > ${criteriaText}
+            Hold on.. if the lobby was just made public, it might take few seconds before it'll appear.`,
+            { disableEveryone: true }
+        ) as Message;
 
         let qb = this.conn.getCustomRepository(S2GameLobbyRepository)
             .createQueryBuilder('lobby')
@@ -229,8 +275,8 @@ export class LobbyPublishCommand extends GeneralCommand {
 
             case LobbyQueryMethod.PlayerName: {
                 qb.innerJoin('lobby.slots', 'slot');
-                qb.andWhere(`slot.name = :name`, {
-                    name: qparams.playerName,
+                qb.andWhere(`slot.name IN (:name)`, {
+                    name: typeof qparams.playerName === 'string' ? [qparams.playerName] : qparams.playerName,
                 });
                 break;
             }
@@ -247,7 +293,7 @@ export class LobbyPublishCommand extends GeneralCommand {
         }
 
         let results: S2GameLobby[];
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < 15; i++) {
             results = await qb.getMany();
             if (results.length) {
                 await this.tasks.lreporter.bindMessageWithLobby(tmpMessage, results[0].id);
@@ -256,6 +302,10 @@ export class LobbyPublishCommand extends GeneralCommand {
             await sleep(1000);
         }
 
-        return tmpMessage.edit('Couldn\'t find a public game lobby which meets the criteria. Try again?');
+        return tmpMessage.edit(stripIndents`
+            Couldn't find a public game lobby which meets requested criteria:
+            > ${criteriaText}
+            Try again?`
+        );
     }
 }

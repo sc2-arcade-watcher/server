@@ -21,3 +21,7 @@ export enum GameLocale {
     esMX = 'esMX',
     ptBR = 'ptBR',
 }
+
+export function battleMapLink(regionId: number, mapId: number) {
+    return `battlenet:://starcraft/map/${regionId}/${mapId}`;
+}
