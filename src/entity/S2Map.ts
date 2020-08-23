@@ -87,6 +87,11 @@ export class S2Map {
     })
     description: string;
 
+    @Column({
+        nullable: true,
+    })
+    website: string;
+
     @ManyToOne(type => S2MapCategory, {
         nullable: true,
         onDelete: 'RESTRICT',
@@ -98,8 +103,21 @@ export class S2Map {
     mainCategoryId: number;
 
     @Column({
+        type: 'tinyint',
+        unsigned: true,
+        nullable: true,
+    })
+    maxPlayers: number;
+
+    @Column({
         nullable: true,
     })
     @Index('updated_at_idx')
     updatedAt: Date;
+
+    @Column({
+        nullable: true,
+    })
+    @Index('published_at_idx')
+    publishedAt: Date;
 }

@@ -45,6 +45,7 @@ export default fp(async (server, opts, next) => {
                             'id',
                             'name',
                             'updated',
+                            'published',
                             'popularity',
                         ],
                         default: 'id',
@@ -65,6 +66,10 @@ export default fp(async (server, opts, next) => {
             }
             case 'updated': {
                 orderByKey = 'map.updatedAt';
+                break;
+            }
+            case 'published': {
+                orderByKey = 'map.publishedAt';
                 break;
             }
             case 'popularity': {
@@ -89,9 +94,12 @@ export default fp(async (server, opts, next) => {
                 'map.type',
                 'map.name',
                 'map.description',
+                'map.website',
                 'map.iconHash',
                 'map.mainCategoryId',
+                'map.maxPlayers',
                 'map.updatedAt',
+                'map.publishedAt',
             ])
             .innerJoin('map.currentVersion', 'cver')
             .addSelect([

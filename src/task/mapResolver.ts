@@ -263,8 +263,10 @@ function extractDepotHandle(obj: DepotFileHandle, mapHeader: MapHeaderDataRaw, m
 
 function extractPicture(obj: MapRawImage, mapHeader: MapHeaderDataRaw, mapLocalization: MapLocalizationTable): MapImage {
     if (!obj) return null;
+    const visualFile = mapHeader.workingSet.visualFiles[obj.index];
+    if (!visualFile) return null;
     return {
-        hash: mapHeader.workingSet.visualFiles[obj.index].hash,
+        hash: visualFile.hash,
         top: obj.top,
         left: obj.left,
         width: obj.width,
@@ -464,15 +466,15 @@ export class MapResolver {
         }
         mhead.archiveHash = headerRawData.archiveHandle.hash;
 
-        const mapPictureKey = (
-            headerRawData.arcadeInfo?.mapIcon ??
-            headerRawData.workingSet.thumbnail ??
-            headerRawData.workingSet.bigMap
-        );
-        const mapPicture: DepotFileHandle = mapPictureKey ? headerRawData.workingSet.visualFiles[mapPictureKey.index] : void 0;
         const mainLocaleTable = headerRawData.workingSet.localeTable.find(x => x.locale === GameLocale.enUS) ?? headerRawData.workingSet.localeTable[0];
         const localizationData = await this.getMapLocalization(rcode, mainLocaleTable.stringTable[0].hash, true);
         const mapHeader = reprocessMapHeader(headerRawData, localizationData);
+        const mapIcon = (
+            mapHeader.arcadeInfo?.mapIcon ??
+            mapHeader.workingSet.thumbnail ??
+            mapHeader.workingSet.bigMap ??
+            null
+        );
 
         let map = await this.conn.getRepository(S2Map).findOne({
             relations: ['currentVersion', 'initialVersion'],
@@ -485,7 +487,11 @@ export class MapResolver {
         }
 
         let updatedMap = false;
-        if (!map.currentVersion || (mhead.majorVersion >= map.currentVersion.majorVersion && mhead.minorVersion >= map.currentVersion.minorVersion)) {
+        if (
+            !map.currentVersion ||
+            (mhead.majorVersion > map.currentVersion.majorVersion) ||
+            (mhead.majorVersion === map.currentVersion.majorVersion && mhead.minorVersion >= map.currentVersion.minorVersion)
+        ) {
             const mainCategory = this.mapCategories.find(x => x.id === mapHeader.variants[mapHeader.defaultVariantIndex].categoryId);
             if (mapHeader.mapSize) {
                 if (mainCategory.isMelee) {
@@ -503,8 +509,10 @@ export class MapResolver {
             }
             map.name = mapHeader.workingSet.name;
             map.description = mapHeader.workingSet.description;
+            map.website = mapHeader.arcadeInfo?.website;
             map.mainCategoryId = mainCategory.id;
-            map.iconHash = mapPicture?.hash ?? null;
+            map.maxPlayers = mapHeader.workingSet.maxPlayers;
+            map.iconHash = mapIcon?.hash ?? null;
             map.mainLocale = mainLocaleTable.locale;
             map.mainLocaleHash = mainLocaleTable.stringTable[0].hash;
             map.updatedAt = mhead.uploadedAt;
@@ -514,6 +522,7 @@ export class MapResolver {
 
         if (isInitialVersion && !map.initialVersion) {
             map.initialVersion = mhead;
+            map.publishedAt = mhead.uploadedAt;
             updatedMap = true;
         }
 
@@ -529,6 +538,6 @@ export class MapResolver {
             throwErrIfNotDuplicateEntry(err);
         }
 
-        logger.info(`resolved map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} name=${headerRawData.filename} updated=${updatedMap} uploadTime=${mhead.uploadedAt.toUTCString()}`);
+        return mapHeader;
     }
 }

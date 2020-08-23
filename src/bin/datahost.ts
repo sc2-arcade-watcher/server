@@ -485,7 +485,8 @@ export class LbsServer {
         }
 
         if (doUpdate) {
-            await this.mapResolver.initializeMapHeader(mhead, msg.isInitialVersion);
+            const mapHeader = await this.mapResolver.initializeMapHeader(mhead, msg.isInitialVersion);
+            logger.info(`resolved map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} name=${mapHeader.filename} uploadTime=${mhead.uploadedAt.toUTCString()}`);
         }
         else {
             logger.debug(`skiping map header init for ${msg.mapId},${msg.mapVersion}`);
