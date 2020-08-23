@@ -164,6 +164,15 @@ export class JournalFeed {
         while (this.chunkBuff.byteLength > this.chunkPos) {
             let chunkEnd = this.chunkBuff.indexOf(0x0A, this.chunkPos);
             if (chunkEnd === -1) {
+                logger.error(`chunkEnd`, {
+                    name: this.name,
+                    cursor: this.currCursor,
+                    chunkByteLength: this.chunkBuff.byteLength,
+                    chunkPos: this.chunkPos,
+                    buffString: this.chunkBuff.toString('utf8', this.chunkPos),
+                    chunkBuff: this.chunkBuff,
+                    rbuff: this.rbuff,
+                });
                 throw new Error(`chunkEnd == -1`);
             }
 
