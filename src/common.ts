@@ -27,3 +27,11 @@ export enum GameLocale {
 export function battleMapLink(regionId: number, mapId: number) {
     return `battlenet:://starcraft/map/${regionId}/${mapId}`;
 }
+
+export function encodeMapVersion(majorVersion: number, minorVersion: number) {
+    return ((majorVersion & 0xFFFF) << 16) | minorVersion & 0xFFFF;
+}
+
+export function decodeMapVersion(version: number) {
+    return [(version >> 16) & 0xFFFF, (version) & 0xFFFF];
+}

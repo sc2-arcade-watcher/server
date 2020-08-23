@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, Unique, JoinColumn } from 'typeorm';
 import { S2Region } from './S2Region';
+import { S2Map } from './S2Map';
 
 @Entity()
 @Unique('region_map_ver_idx', ['region', 'bnetId', 'majorVersion', 'minorVersion'])
@@ -67,4 +68,6 @@ export class S2MapHeader {
     })
     @Index('uploaded_at_idx')
     uploadedAt: Date;
+
+    map?: S2Map;
 }

@@ -5,7 +5,7 @@ import * as he from 'he';
 import { spawn } from 'child_process';
 import { S2MapHeader } from '../entity/S2MapHeader';
 import { BattleDepot } from '../depot';
-import { GameRegion, GameLocale, DepotRegion } from '../common';
+import { GameRegion, GameLocale, DepotRegion, decodeMapVersion } from '../common';
 import { logger, logIt } from '../logger';
 import { spawnWaitExit, retry, throwErrIfNotDuplicateEntry, deepCopy } from '../helpers';
 import { S2Map, S2MapType } from '../entity/S2Map';
@@ -388,6 +388,16 @@ export function reprocessMapHeader(mapHeader: MapHeaderDataRaw, mapLocalization:
     return removeUnknownFields(result);
 }
 
+export interface MapDependencyEntry {
+    map: S2Map;
+    mapHeader: S2MapHeader;
+    rawData: MapHeaderDataRaw;
+    requestedVersion: number;
+}
+
+export class MapDependencyError extends Error {
+}
+
 export class MapResolver {
     protected depot = new BattleDepot('data/depot');
     protected mapCategories: S2MapCategory[];
@@ -539,5 +549,73 @@ export class MapResolver {
         }
 
         return mapHeader;
+    }
+
+    async resolveMapDependencies(regionId: number, bnetId: number, version: number = 0) {
+        const rcode = GameRegion[regionId];
+        const deps = new Map<string, MapDependencyEntry>();
+
+        const fetchMapDependencies = (async function(this: MapResolver, regionId: number, bnetId: number, version: number = 0) {
+            let map: S2Map;
+            let mhead: S2MapHeader;
+            if (version === 0) {
+                const result = await this.conn.getRepository(S2Map)
+                    .createQueryBuilder('map')
+                    .innerJoinAndSelect('map.currentVersion', 'mapHead')
+                    .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId', {
+                        regionId: regionId,
+                        bnetId: bnetId,
+                    })
+                    .getOne()
+                ;
+                if (result) {
+                    map = result;
+                    mhead = map.currentVersion;
+                    delete map.currentVersion;
+                }
+            }
+            else {
+                const [ majorVersion, minorVersion ] = decodeMapVersion(version);
+                const result = await this.conn.getRepository(S2MapHeader)
+                    .createQueryBuilder('mapHead')
+                    .innerJoinAndMapOne('mapHead.map', S2Map, 'map', 'map.regionId = :regionId AND map.bnetId = :bnetId')
+                    .andWhere('mapHead.regionId = :regionId AND mapHead.bnetId = :bnetId AND mapHead.majorVersion = :majorVersion AND mapHead.minorVersion = :minorVersion', {
+                        regionId: regionId,
+                        bnetId: bnetId,
+                        majorVersion: majorVersion,
+                        minorVersion: minorVersion,
+                    })
+                    .getOne()
+                ;
+                if (result) {
+                    mhead = result;
+                    map = mhead.map;
+                    delete mhead.map;
+                }
+            }
+
+            if (!map || !mhead) {
+                throw new MapDependencyError(`Failed to obtain "${bnetId},${version}" - not indexed.`);
+            }
+
+            const mapHeaderData = await this.getMapHeader(rcode, mhead.headerHash);
+
+            for (const dep of mapHeaderData.extraDependencies.reverse()) {
+                if (!deps.has(`${dep.id},${dep.version}`)) {
+                    await fetchMapDependencies(regionId, dep.id, dep.version);
+                }
+            }
+
+            deps.set(`${bnetId},${version}`, {
+                map: map,
+                mapHeader: mhead,
+                rawData: mapHeaderData,
+                requestedVersion: version,
+            });
+        }).bind(this);
+
+        await fetchMapDependencies(regionId, bnetId);
+
+        return deps;
     }
 }
