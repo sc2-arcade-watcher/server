@@ -172,6 +172,7 @@ server.register(require('../api/routes/lobby/playerHistory').default);
 server.register(require('../api/routes/maps/list').default);
 server.register(require('../api/routes/maps/show').default);
 server.register(require('../api/routes/maps/details').default);
+server.register(require('../api/routes/maps/versions').default);
 server.register(require('../api/routes/maps/stats').default);
 
 server.register(require('../api/routes/mapCategories').default);
