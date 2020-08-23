@@ -2,7 +2,7 @@ import * as fp from 'fastify-plugin';
 import { S2Map } from '../../../entity/S2Map';
 import { S2MapHeader } from '../../../entity/S2MapHeader';
 import { GameLocale, GameRegion } from '../../../common';
-import { MapHeaderData, MapLocalizationTable, applyMapLocalization } from '../../../task/mapResolver';
+import { MapLocalizationTable, reprocessMapHeader } from '../../../task/mapResolver';
 
 export default fp(async (server, opts, next) => {
     server.get('/maps/:regionId/:mapId/details', {
@@ -15,8 +15,6 @@ export default fp(async (server, opts, next) => {
                 properties: {
                     regionId: {
                         type: 'number',
-                        minimum: 1,
-                        maximum: 3,
                     },
                     mapId: {
                         type: 'number',
@@ -29,20 +27,25 @@ export default fp(async (server, opts, next) => {
                     minorVersion: {
                         type: 'number',
                         minimum: 0,
+                        maximum: 0xFFFF,
                         default: 0,
                     },
                     majorVersion: {
                         type: 'number',
                         minimum: 0,
+                        maximum: 0xFFFF,
                         default: 0,
+                    },
+                    locale: {
+                        type: 'string',
+                        enum: Object.values(GameLocale),
                     },
                 },
             },
         },
     }, async (request, reply) => {
         let mhead: S2MapHeader;
-        let mainLocale: GameLocale;
-        let mainLocaleTableHash: string;
+        let localeTableHash: string;
         if (request.query.minorVersion === 0 && request.query.majorVersion === 0) {
             const result = await server.conn.getRepository(S2Map)
                 .createQueryBuilder('map')
@@ -55,8 +58,7 @@ export default fp(async (server, opts, next) => {
             ;
             if (result) {
                 mhead = result.currentVersion;
-                mainLocale = result.mainLocale;
-                mainLocaleTableHash = result.mainLocaleHash;
+                localeTableHash = result.mainLocaleHash;
             }
         }
         else {
@@ -77,25 +79,29 @@ export default fp(async (server, opts, next) => {
             return reply.type('application/json').code(404).send();
         }
 
-        const rcode = GameRegion[request.params.regionId];
+        const rcode = GameRegion[mhead.regionId];
         if (!rcode) {
-            return reply.code(503).send();
+            return reply.code(400).send();
         }
 
-        let mapHeaderData: MapHeaderData;
+        const mapHeaderData = await server.mapResolver.getMapHeader(rcode, mhead.headerHash);
         let mapLocalizationTable: MapLocalizationTable;
 
-        if (!mainLocale) {
-            mapHeaderData = await server.mapResolver.getMapHeader(rcode, mhead.headerHash, true);
-            mapLocalizationTable = await server.mapResolver.getMapLocalization(rcode, mapHeaderData.localeTable[0].stringTable[0].hash, true);
+        if (!localeTableHash || request.query.locale) {
+            let localeTable = mapHeaderData.localeTable[0];
+            if (request.query.locale) {
+                localeTable = mapHeaderData.localeTable.find(x => x.locale === request.query.locale);
+            }
+            if (!localeTable) {
+                return reply.code(404).send();
+            }
+            localeTableHash = localeTable.stringTable[0].hash;
         }
-        else {
-            [ mapHeaderData, mapLocalizationTable ] = [
-                await server.mapResolver.getMapHeader(rcode, mhead.headerHash, false),
-                await server.mapResolver.getMapLocalization(rcode, mainLocaleTableHash, false),
-            ];
-        }
-        reply.header('Cache-control', 'public, s-maxage=60');
-        return reply.type('application/json').code(200).send(applyMapLocalization(mapHeaderData, mapLocalizationTable));
+        mapLocalizationTable = await server.mapResolver.getMapLocalization(rcode, localeTableHash);
+
+        reply.header('Cache-control', 'public, max-age=300, s-maxage=300');
+        return reply.type('application/json').code(200).send(Object.assign(mhead, {
+            info: reprocessMapHeader(mapHeaderData, mapLocalizationTable),
+        }));
     });
 });

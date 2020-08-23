@@ -1,10 +1,11 @@
+import * as util from 'util';
 import * as orm from 'typeorm';
 import * as program from 'commander';
 import * as pMap from 'p-map';
 import { BattleDepot, convertImage, NestedHashDir } from '../depot';
 import { buildStatsForPeriod } from '../task/statsBuilder';
 import { S2StatsPeriodKind } from '../entity/S2StatsPeriod';
-import { MapResolver, applyMapLocalization } from '../task/mapResolver';
+import { MapResolver, reprocessMapHeader } from '../task/mapResolver';
 import { S2MapHeader } from '../entity/S2MapHeader';
 
 async function populateBnetDepot() {
@@ -42,8 +43,11 @@ program.command('map-header <region> <hash>')
 
         const mapHeader = await mpresolver.getMapHeader(region, hash);
         const mapLocalization = await mpresolver.getMapLocalization(region, mapHeader.localeTable[0].stringTable[0].hash);
-        const mapLocalized = applyMapLocalization(mapHeader, mapLocalization);
-        console.log(mapLocalized);
+        const mapDetails = reprocessMapHeader(mapHeader, mapLocalization);
+        console.log(util.inspect(mapDetails, {
+            depth: 6,
+            colors: true,
+        }));
 
         await conn.close();
     })

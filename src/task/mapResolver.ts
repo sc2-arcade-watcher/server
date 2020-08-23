@@ -5,9 +5,9 @@ import * as he from 'he';
 import { spawn } from 'child_process';
 import { S2MapHeader } from '../entity/S2MapHeader';
 import { BattleDepot } from '../depot';
-import { GameRegion, GameLocale } from '../common';
+import { GameRegion, GameLocale, DepotRegion } from '../common';
 import { logger, logIt } from '../logger';
-import { spawnWaitExit, retry, throwErrIfNotDuplicateEntry } from '../helpers';
+import { spawnWaitExit, retry, throwErrIfNotDuplicateEntry, deepCopy } from '../helpers';
 import { S2Map, S2MapType } from '../entity/S2Map';
 import { S2MapCategory } from '../entity/S2MapCategory';
 
@@ -28,49 +28,13 @@ export type MapTags = 'BLIZ'
     | 'PREM'
 ;
 
-export interface MapHeaderData {
-    header: MapLink;
-    name: string;
-    mapFile: DepotFileLink;
-    mapNamespace: number;
-    mapInfo: MapInfo;
-    attributes: any[];
-    localeTable: LocaleTable[];
-    mapSize: MapSize | null;
-    tileset: ExternalString | null;
-    defaultVariantIndex: number;
-    variants: Variant[];
-    dependencies?: MapLink[];
-    addDefaultPermissions?: boolean;
-    relevantPermissions?: any[];
-    specialTags?: MapTags[];
-    arcade?: ArcadeInfo | null;
-    addMultiMod?: boolean;
-}
-
-export interface ArcadeInfo {
-    gameInfoScreenshots: Screenshot[];
-    howToPlayScreenshots: Screenshot[];
-    howToPlaySections: ContentSection[];
-    patchNoteSections: ContentSection[];
-    mapIcon: MapImage;
-    tutorialLink: null;
-    matchmakerTags: any[];
-    website: ExternalString;
-}
-
-export interface Screenshot {
-    picture: MapImage;
-    caption: ExternalString;
-}
-
 export type ExternalString = {
     color: number | null;
     table: number;
     index: number;
-} & {[key in GameLocale]?: string};
+};
 
-export interface MapImage {
+export interface MapRawImage {
     index: number;
     top: number;
     left: number;
@@ -78,37 +42,38 @@ export interface MapImage {
     height: number;
 }
 
-export interface ContentSection {
-    title: ExternalString;
-    listType: string;
-    subtitle: ExternalString;
-    items: ExternalString[];
+export interface MapScreenshot<ET, MI> {
+    picture: MI;
+    caption: ET;
 }
 
-export interface MapLink {
+export enum ContentListTypeKind {
+    Bulleted = 'bulleted',
+    Numbered = 'numbered',
+    None = 'none',
+}
+
+export interface ContentSection<ET = ExternalString> {
+    title: ET;
+    listType: ContentListTypeKind;
+    subtitle: ET | null;
+    items: ET[];
+}
+
+export interface DocumentInstance {
     id: number;
     version: number;
 }
 
-export interface LocaleTable {
-    locale: GameLocale;
-    stringTable: DepotFileLink[];
-}
-
-export interface DepotFileLink {
+export interface DepotFileHandle {
     type: string;
-    server: string;
+    region: DepotRegion;
     hash: string;
 }
 
-export interface MapInfo {
-    name: ExternalString;
-    description: ExternalString;
-    bigMap: MapImage;
-    thumbnail: MapImage;
-    maxPlayers: number;
-    visualFiles: DepotFileLink[];
-    localeTable: LocaleTable[];
+export interface LocaleTable<DF> {
+    locale: GameLocale;
+    stringTable: DF[];
 }
 
 export interface MapSize {
@@ -116,41 +81,145 @@ export interface MapSize {
     vertical: number;
 }
 
-export interface Variant {
-    categoryId: number;
-    modeId: number;
-    categoryName: ExternalString;
-    modeName: ExternalString;
-    categoryDescription: ExternalString;
-    modeDescription: ExternalString;
-    attributeDefaults: AttributeDefault[];
-    lockedAttributes: LockedAttribute[];
-    maxTeamSize: number;
-    attributeVisibility: AttributeVisibility[];
-    achievementTags: any[];
-    maxHumanPlayers: number;
-    maxOpenSlots: number;
-    premiumInfo: null;
+export interface PremiumInfo {
+    license: number;
 }
 
-export interface AttributeDefault {
-    attribute: Attribute;
-    value: number[] | number;
-}
-
-export interface Attribute {
+export interface AttributeInstance {
     namespace: number;
     id: number;
 }
 
+export interface AttributeValue {
+    index: number;
+}
+
+export interface AttributeDefault {
+    attribute: AttributeInstance;
+    value: AttributeValue | AttributeValue[];
+}
+
+export interface AttributeLocked {
+    attribute: AttributeInstance;
+    lockedScopes: number;
+}
+
 export interface AttributeVisibility {
-    attribute: Attribute;
+    attribute: AttributeInstance;
     hidden: number;
 }
 
-export interface LockedAttribute {
-    attribute: Attribute;
-    lockedScopes: number;
+export interface AttributeVisual<ET, MI> {
+    text: ET | null;
+    tip: ET | null;
+    art: MI | null;
+}
+
+export interface AttributeValueDefinition<ET, MI> {
+    value: string;
+    visual: AttributeVisual<ET, MI>;
+}
+
+export enum AttributeRestrictionKind {
+    None = 'none',
+    Self = 'self',
+    Host = 'host',
+    All = 'all',
+}
+
+export interface AttributeDefinition<ET, MI> {
+    instance: AttributeInstance;
+    values: AttributeValueDefinition<ET, MI>[];
+    // TODO: requirements
+    arbitration: number;
+    visibility: AttributeRestrictionKind;
+    access: AttributeRestrictionKind;
+    options: number;
+    default: AttributeValue | AttributeValue[];
+    sortOrder: number;
+}
+
+export interface Variant<ET> {
+    categoryId: number;
+    modeId: number;
+    categoryName: ET;
+    modeName: ET;
+    categoryDescription: ET;
+    modeDescription: ET;
+    attributeDefaults: AttributeDefault[];
+    lockedAttributes: AttributeLocked[];
+    maxTeamSize: number;
+    attributeVisibility?: AttributeVisibility[];
+    achievementTags?: string[];
+    maxHumanPlayers?: number;
+    maxOpenSlots?: number;
+    premiumInfo?: PremiumInfo[];
+    teamNames?: ET[];
+}
+
+export interface WorkingSet<ET, MI, DF> {
+    name: ET;
+    description: ET;
+    thumbnail: MI | null;
+    bigMap: MI | null;
+    maxPlayers: number;
+    instances: AttributeDefault[];
+    visualFiles: DF[];
+    localeTable: LocaleTable<DF>[];
+}
+
+export interface PermissionEntry {
+    name: string;
+    id: number;
+}
+
+export interface TutorialLink {
+    variantIndex: number;
+    speed: string;
+    map: DocumentInstance;
+}
+
+export interface ArcadeInfo<ET, MI> {
+    gameInfoScreenshots: MapScreenshot<ET, MI>[];
+    howToPlayScreenshots: MapScreenshot<ET, MI>[];
+    howToPlaySections: ContentSection<ET>[];
+    patchNoteSections: ContentSection<ET>[];
+    mapIcon: MI | null;
+    tutorialLink: TutorialLink | null;
+    matchmakerTags: string[];
+    website: ET | null;
+}
+
+export interface MapHeaderDataRaw<ET = ExternalString, MI = MapRawImage, DF = DepotFileHandle> {
+    header: DocumentInstance;
+    filename: string;
+    archiveHandle: DF;
+    mapNamespace: number;
+    workingSet: WorkingSet<ET, MI, DF>;
+    attributes: AttributeDefinition<ET, MI>[];
+    localeTable: LocaleTable<DF>[];
+    mapSize: MapSize | null;
+    tileset: ET | null;
+    defaultVariantIndex: number;
+    variants: Variant<ET>[];
+    extraDependencies?: DocumentInstance[];
+    addDefaultPermissions?: boolean;
+    relevantPermissions?: PermissionEntry[];
+    specialTags?: MapTags[];
+    arcadeInfo?: ArcadeInfo<ET, MI> | null;
+    addMultiMod?: boolean;
+}
+
+// ===
+// ===
+// ===
+
+export interface MapImage {
+    hash: string;
+    top: number;
+    left: number;
+    width: number;
+    height: number;
 }
 
 export interface MapLocalizationTable {
@@ -158,59 +227,163 @@ export interface MapLocalizationTable {
     strings: Map<number, string>;
 }
 
-export type MapHeaderLocalized = MapHeaderData & {
-    // tileset?: string;
-    mainLocale: GameLocale;
-    resolvedLocales: GameLocale[];
+export type MapHeader = MapHeaderDataRaw<string | null, MapImage, string> & {
+    meta: {
+        region: DepotRegion;
+        locale: GameLocale;
+    };
 };
 
-type LocalizableFields = {
-    [fieldName: string]: true | LocalizableFields,
+// ===
+// ===
+// ===
+
+type FieldTransformFn<T = any> = (obj: T, mapHeader: MapHeaderDataRaw, mapLocalization: MapLocalizationTable) => any;
+
+type TransformableSectionRules = {
+    [fieldName: string]: FieldTransformFn | TransformableSectionRules,
 };
 
-const fieldsToLocalize: LocalizableFields = {
-    mapInfo: {
-        name: true,
-        description: true,
-    },
-    tileset: true,
-};
+function localizeField(obj: ExternalString, mapHeader: MapHeaderDataRaw, mapLocalization: MapLocalizationTable) {
+    return mapLocalization.strings.get(obj.index) ?? null;
+}
 
 const reHtmlBr = /<br>/g;
-
-export function applyMapLocalization(mapHeader: MapHeaderData, mapLocalization: MapLocalizationTable): MapHeaderLocalized {
-    function localizeField(field: ExternalString | ExternalString[]): ExternalString | ExternalString[] {
-        if (Array.isArray(field)) {
-            return field.map(x => localizeField(x)) as ExternalString[];
-        }
-        field[mapLocalization.locale] = mapLocalization.strings.get(field.index);
-        return field as ExternalString;
+function localizeMultilineField(obj: ExternalString, mapHeader: MapHeaderDataRaw, mapLocalization: MapLocalizationTable) {
+    let s = localizeField(obj, mapHeader, mapLocalization);
+    if (typeof s === 'string') {
+        s = s.replace(reHtmlBr, '\n');
     }
+    return s;
+}
 
-    function localizeObject(obj: any, fields: LocalizableFields) {
-        for (const key in fields) {
-            if (typeof fields[key] === 'object') {
-                obj[key] = localizeObject(obj[key], fields[key] as LocalizableFields)
+function extractDepotHandle(obj: DepotFileHandle, mapHeader: MapHeaderDataRaw, mapLocalization: MapLocalizationTable) {
+    return obj.hash;
+}
+
+function extractPicture(obj: MapRawImage, mapHeader: MapHeaderDataRaw, mapLocalization: MapLocalizationTable): MapImage {
+    if (!obj) return null;
+    return {
+        hash: mapHeader.workingSet.visualFiles[obj.index].hash,
+        top: obj.top,
+        left: obj.left,
+        width: obj.width,
+        height: obj.height,
+    };
+}
+
+const fieldsToTransform: TransformableSectionRules = {
+    archiveHandle: extractDepotHandle,
+    workingSet: {
+        name: localizeField,
+        description: localizeMultilineField,
+        thumbnail: extractPicture,
+        bigMap: extractPicture,
+        visualFiles: null,
+        localeTable: null,
+    },
+    attributes: {
+        values: {
+            visual: {
+                text: localizeField,
+                tip: localizeField,
+                art: extractPicture,
+            },
+        },
+        visual: {
+            text: localizeField,
+            tip: localizeField,
+            art: extractPicture,
+        },
+    },
+    localeTable: {
+        stringTable: extractDepotHandle,
+    },
+    tileset: localizeField,
+    variants: {
+        categoryName: localizeField,
+        modeName: localizeField,
+        categoryDescription: localizeField,
+        modeDescription: localizeField,
+    },
+    arcadeInfo: {
+        gameInfoScreenshots: {
+            caption: localizeField,
+            picture: extractPicture,
+        },
+        howToPlayScreenshots: {
+            caption: localizeField,
+            picture: extractPicture,
+        },
+        howToPlaySections: {
+            title: localizeField,
+            subtitle: localizeField,
+            items: localizeField,
+        },
+        patchNoteSections: {
+            title: localizeField,
+            subtitle: localizeField,
+            items: localizeField,
+        },
+        mapIcon: extractPicture,
+        website: localizeField,
+    },
+};
+
+export function reprocessMapHeader(mapHeader: MapHeaderDataRaw, mapLocalization: MapLocalizationTable): MapHeader {
+    function transformSection(obj: any, transformInstructions: TransformableSectionRules | FieldTransformFn) {
+        if (typeof transformInstructions === 'function') {
+            return transformInstructions(obj, mapHeader, mapLocalization);
+        }
+
+        for (const key in transformInstructions) {
+            if (transformInstructions[key] === null) {
+                delete obj[key];
+                continue;
+            }
+            if (typeof obj[key] === 'undefined' || obj[key] === null) {
+                continue;
+            }
+
+            if (Array.isArray(obj[key])) {
+                obj[key] = obj[key].map((x: any) => transformSection(x, transformInstructions[key]));
+            }
+            else if (typeof transformInstructions[key] === 'object') {
+                obj[key] = transformSection(obj[key], transformInstructions[key]);
             }
             else if (obj[key] !== null) {
-                obj[key] = localizeField(obj[key]);
+                obj[key] = transformSection(obj[key], transformInstructions[key]);
+            }
+        }
+
+        return obj;
+    }
+
+    function removeUnknownFields(obj: any) {
+        for (const key in obj) {
+            if (key.startsWith('_')) {
+                delete obj[key];
+                continue;
+            }
+            if (Array.isArray(obj[key])) {
+                obj[key].forEach((x: any) => removeUnknownFields(x));
+            }
+            else if (typeof obj[key] === 'object') {
+                removeUnknownFields(obj[key]);
             }
         }
         return obj;
     }
 
-    const r = localizeObject(mapHeader, fieldsToLocalize) as MapHeaderLocalized;
-    if (!r.mainLocale) {
-        r.mainLocale = mapLocalization.locale;
-        r.resolvedLocales = [];
-    }
-    r.resolvedLocales.push(mapLocalization.locale);
+    let result: MapHeader = Object.assign({
+        meta: {
+            region: mapHeader.archiveHandle.region,
+            locale: mapLocalization.locale,
+        },
+    } as MapHeader, deepCopy(mapHeader));
+    transformSection(result, fieldsToTransform) as MapHeader;
 
-    if (r.mapInfo.description[mapLocalization.locale]) {
-        r.mapInfo.description[mapLocalization.locale] = r.mapInfo.description[mapLocalization.locale].replace(reHtmlBr, '\n');
-    }
-
-    return r;
+    return removeUnknownFields(result);
 }
 
 export class MapResolver {
@@ -257,7 +430,7 @@ export class MapResolver {
         if (!persist) {
             await fs.unlink(fPath);
         }
-        return JSON.parse(decodingProc.stdout) as MapHeaderData;
+        return JSON.parse(decodingProc.stdout) as MapHeaderDataRaw;
     }
 
     @retry({
@@ -274,14 +447,14 @@ export class MapResolver {
         logger.verbose(`resolving.. map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} hash=${mhead.headerHash}`);
         const rcode = GameRegion[mhead.regionId];
 
-        const headerData = await this.getMapHeader(rcode, mhead.headerHash);
+        const headerRawData = await this.getMapHeader(rcode, mhead.headerHash);
 
         if (!mhead.uploadedAt) {
             const s2mhResponse = await this.depot.retrieveHead(rcode, `${mhead.headerHash}.s2mh`);
             mhead.uploadedAt = new Date(s2mhResponse.headers['last-modified']);
         }
         if (!mhead.archiveSize) {
-            const s2maResponse = await this.depot.retrieveHead(rcode, `${headerData.mapFile.hash}.${headerData.mapFile.type}`);
+            const s2maResponse = await this.depot.retrieveHead(rcode, `${headerRawData.archiveHandle.hash}.${headerRawData.archiveHandle.type}`);
             if (s2maResponse.headers['content-length']) {
                 mhead.archiveSize = Number(s2maResponse.headers['content-length']);
             }
@@ -289,20 +462,20 @@ export class MapResolver {
                 mhead.archiveSize = null;
             }
         }
-        mhead.archiveHash = headerData.mapFile.hash;
+        mhead.archiveHash = headerRawData.archiveHandle.hash;
 
         const mapPictureKey = (
-            headerData.arcade?.mapIcon ??
-            headerData.mapInfo.thumbnail ??
-            headerData.mapInfo.bigMap
+            headerRawData.arcadeInfo?.mapIcon ??
+            headerRawData.workingSet.thumbnail ??
+            headerRawData.workingSet.bigMap
         );
-        const mapPicture: DepotFileLink = mapPictureKey ? headerData.mapInfo.visualFiles[mapPictureKey.index] : void 0;
-        const mainLocaleTable = headerData.mapInfo.localeTable.find(x => x.locale === GameLocale.enUS) ?? headerData.mapInfo.localeTable[0];
+        const mapPicture: DepotFileHandle = mapPictureKey ? headerRawData.workingSet.visualFiles[mapPictureKey.index] : void 0;
+        const mainLocaleTable = headerRawData.workingSet.localeTable.find(x => x.locale === GameLocale.enUS) ?? headerRawData.workingSet.localeTable[0];
         const localizationData = await this.getMapLocalization(rcode, mainLocaleTable.stringTable[0].hash, true);
-        const mapLocalized = applyMapLocalization(headerData, localizationData);
+        const mapHeader = reprocessMapHeader(headerRawData, localizationData);
 
         let map = await this.conn.getRepository(S2Map).findOne({
-            relations: ['currentVersion'],
+            relations: ['currentVersion', 'initialVersion'],
             where: { regionId: mhead.regionId, bnetId: mhead.bnetId },
         });
         if (!map) {
@@ -313,8 +486,8 @@ export class MapResolver {
 
         let updatedMap = false;
         if (!map.currentVersion || (mhead.majorVersion >= map.currentVersion.majorVersion && mhead.minorVersion >= map.currentVersion.minorVersion)) {
-            const mainCategory = this.mapCategories.find(x => x.id === mapLocalized.variants[mapLocalized.defaultVariantIndex].categoryId);
-            if (mapLocalized.mapSize) {
+            const mainCategory = this.mapCategories.find(x => x.id === mapHeader.variants[mapHeader.defaultVariantIndex].categoryId);
+            if (mapHeader.mapSize) {
                 if (mainCategory.isMelee) {
                     map.type = S2MapType.MeleeMap;
                 }
@@ -328,8 +501,8 @@ export class MapResolver {
             else {
                 map.type = S2MapType.DependencyMod;
             }
-            map.name = mapLocalized.mapInfo.name[mainLocaleTable.locale];
-            map.description = mapLocalized.mapInfo.description[mainLocaleTable.locale];
+            map.name = mapHeader.workingSet.name;
+            map.description = mapHeader.workingSet.description;
             map.mainCategoryId = mainCategory.id;
             map.iconHash = mapPicture?.hash ?? null;
             map.mainLocale = mainLocaleTable.locale;
@@ -356,6 +529,6 @@ export class MapResolver {
             throwErrIfNotDuplicateEntry(err);
         }
 
-        logger.info(`resolved map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} name=${headerData.name} updated=${updatedMap} uploadTime=${mhead.uploadedAt.toUTCString()}`);
+        logger.info(`resolved map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} name=${headerRawData.filename} updated=${updatedMap} uploadTime=${mhead.uploadedAt.toUTCString()}`);
     }
 }

@@ -40,7 +40,7 @@ export default fp(async (server, opts, next) => {
             }
             catch (err) {
                 logger.error(err);
-                return reply.code(503);
+                return reply.code(500);
             }
         }
         reply.header('Cache-control', 'public, max-age=604800, s-maxage=604800');

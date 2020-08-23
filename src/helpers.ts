@@ -158,6 +158,10 @@ export function btoa(value: string): string {
     return Buffer.from(value).toString('base64');
 }
 
+export function deepCopy(a: any) {
+    return JSON.parse(JSON.stringify(a));
+}
+
 //
 // ORM stuff
 //
