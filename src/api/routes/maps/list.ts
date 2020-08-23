@@ -141,11 +141,17 @@ export default fp(async (server, opts, next) => {
             let nameQuery = String(request.query.name);
             // https://mariadb.com/kb/en/full-text-index-overview/#in-boolean-mode
             // strip all operators except: " + - *
-            nameQuery = nameQuery.replace(/[<>()~]/g, '').trim();
+            // nameQuery = nameQuery.replace(/[<>()~]/g, '').trim();
+            // .. actually, strip all of them, since it currently is used unitentionally
+            // and can lead to parse errors which aren't even shown on the frontend
+            nameQuery = nameQuery.replace(/[<>()~"*+-]/g, '').trim();
 
             if (nameQuery.search(/[\p{L}\p{Nd}]{3}/iu) !== -1 || nameQuery.endsWith('*')) {
+                // nameQuery = nameQuery.replace(/[\+\-]+$/, '');
+
                 if (nameQuery.search(/[\+\-\*\"]/g) === -1) {
                     nameQuery = nameQuery.replace(/[\"\+\-\*]/g, '').split(/\s+/).map(x => {
+                        if (x.length < 3) return `${x}*`;
                         return fulltextStopWords.indexOf(x.toLowerCase()) === -1 ? `+${x}` : `${x}*`;
                     }).join(' ');
                 }
