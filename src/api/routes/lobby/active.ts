@@ -21,11 +21,11 @@ export default fp(async (server, opts, next) => {
 
                 - It's possible to have a human slot without \`profile\` linked (in which case it'll be \`null\`). It happens rather rarely and it's a result of a bug within the SC2 bot that hasn't yet been eliminated.
 
-                - Maximum amount of slots is 16. But only 15 can be occupied by either human or an AI. There's at least one map on the Arcade with 16 slots open, which shouldn't be possible, as SC2 is limited to 15 players. But the slot still appears as open.
+                - Maximum amount of slots is 16. But only 15 can be occupied by either human or an AI. There's at least one map on the Arcade with 16 slots open, which shouldn't be possible, as SC2 is limited to 15 players. But the slot still appears as open, despite being unusable.
 
                 - Property \`slotsUpdatedAt\` indicates when the \`slots\` data has changed the last time - not when it was "checked" by the SC2 bot last time. Thus if no player join or leave it will remain the same.
 
-                - Sometimes lobby might be flagged as started/closed and then re-appear as open shortly after.
+                - Sometimes the same lobby might be flagged as started/closed and then re-appear as open shortly after, in majority of the cases this happens due to a bug in the code of SC2 bot (will update this notice, once the bug will be squashed - hopefully soon). However, this can also happen naturally - I'm not sure what conditions are leading to this.
             `,
             querystring: {
                 type: 'object',

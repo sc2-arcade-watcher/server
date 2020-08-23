@@ -43,6 +43,7 @@ export default fp(async (server, opts, next) => {
                         type: 'string',
                         enum: [
                             'id',
+                            'versionId',
                             'name',
                             'updated',
                             'published',
@@ -58,6 +59,10 @@ export default fp(async (server, opts, next) => {
         switch (request.query.orderBy) {
             case 'id': {
                 orderByKey = 'map.id';
+                break;
+            }
+            case 'versionId': {
+                orderByKey = 'cver.id';
                 break;
             }
             case 'name': {
@@ -103,6 +108,7 @@ export default fp(async (server, opts, next) => {
             ])
             .innerJoin('map.currentVersion', 'cver')
             .addSelect([
+                'cver.id',
                 'cver.minorVersion',
                 'cver.majorVersion',
                 'cver.isPrivate',

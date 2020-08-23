@@ -16,7 +16,7 @@ Documentation: http://sc2arcade.talv.space/docs/api/
 
 **Website**
 
-*under development*
+https://sc2arcade.talv.space
 
 ## How does it work
 
