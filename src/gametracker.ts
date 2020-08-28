@@ -325,7 +325,7 @@ export class JournalReader {
             lobbyId,
             removedAt,
             orphan,
-            seenLastAt: this.dateFromEvent(this.prevCompleteListEntry)
+            seenLastAt: this.dateFromEvent(this.prevCompleteListEntry ?? this.initEntry)
         });
     }
 
