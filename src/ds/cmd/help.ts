@@ -63,8 +63,9 @@ export class HelpCommand extends GeneralCommand {
             }
             else {
                 messages.push(<Message>await msg.direct(stripIndents`
-                    Website: <http://sc2arcade.talv.space>
-                    Report bugs and ideas at <${this.client.issueTracker}>
+                    Website: <https://sc2arcade.talv.space>
+                    Support: <https://discord.gg/VxAJYjF> (SC2Mapster server, \`#arcade-watcher\` channel)
+                    Issue tracker: <${this.client.issueTracker}>
 
                     Use ${this.usage('<command>', null, null)} to view detailed information about a specific command.
 

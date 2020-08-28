@@ -20,6 +20,8 @@ export class StatusTask extends BotTask {
             await sleepUnless(8000, () => !this.client.doShutdown);
             await this.showNumberOfRecentGames();
             await sleepUnless(8000, () => !this.client.doShutdown);
+            await this.client.user.setActivity('Visit sc2arcade.talv.space', { type: 'WATCHING' });
+            await sleepUnless(8000, () => !this.client.doShutdown);
         }
         this.running = false;
     }
