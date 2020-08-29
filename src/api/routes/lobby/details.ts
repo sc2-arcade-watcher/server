@@ -33,10 +33,28 @@ export default fp(async (server, opts, next) => {
             })
         ;
 
-        lobbyRepo.addMapInfo(qb);
+        lobbyRepo.addMapInfo(qb, true);
         lobbyRepo.addSlots(qb);
         lobbyRepo.addSlotsJoinInfo(qb);
         lobbyRepo.addJoinHistory(qb);
+
+        qb.addSelect([
+            'lobby.regionId',
+            'lobby.bnetBucketId',
+            'lobby.bnetRecordId',
+            'lobby.mapBnetId',
+            'lobby.extModBnetId',
+            'lobby.multiModBnetId',
+            'lobby.createdAt',
+            'lobby.closedAt',
+            'lobby.status',
+            'lobby.mapVariantIndex',
+            'lobby.mapVariantMode',
+            'lobby.lobbyTitle',
+            'lobby.hostName',
+            'lobby.slotsUpdatedAt',
+            'lobby.snapshotUpdatedAt',
+        ]);
 
         const result = await qb.getOne();
         if (!result) {

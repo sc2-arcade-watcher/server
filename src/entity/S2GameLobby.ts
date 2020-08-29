@@ -166,7 +166,7 @@ export class S2GameLobby {
 
     map?: S2Map;
     extMod?: S2Map;
-    multimod?: S2Map;
+    multiMod?: S2Map;
 
     getSlots(opts: { kinds?: S2GameLobbySlotKind[], teams?: number[] }): S2GameLobbySlot[] {
         return this.slots.filter(slot => {

@@ -34,6 +34,7 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
         qb
             .leftJoinAndMapOne('lobby.map', S2Map, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId')
             .leftJoinAndMapOne('lobby.extMod', S2Map, 'extMod', 'extMod.regionId = lobby.regionId AND extMod.bnetId = lobby.extModBnetId')
+            .leftJoinAndMapOne('lobby.multiMod', S2Map, 'multiMod', 'multiMod.regionId = lobby.regionId AND multiMod.bnetId = lobby.multiModBnetId')
             .select(resetSelect ? [] : void 0)
             .addSelect([
                 'map.regionId',
@@ -46,6 +47,12 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
                 'extMod.bnetId',
                 'extMod.name',
                 'extMod.iconHash',
+            ])
+            .addSelect([
+                'multiMod.regionId',
+                'multiMod.bnetId',
+                'multiMod.name',
+                'multiMod.iconHash',
             ])
         ;
         return qb;
