@@ -1,4 +1,5 @@
 import * as orm from 'typeorm';
+import * as pMap from 'p-map';
 import { addDays, addWeeks, addMonths, addSeconds } from 'date-fns';
 import { S2GameLobbyRepository } from '../repository/S2GameLobbyRepository';
 import { logger, logIt } from '../logger';
@@ -8,61 +9,120 @@ import { S2StatsPeriodMap } from '../entity/S2StatsPeriodMap';
 import { S2GameLobby } from '../entity/S2GameLobby';
 import { GameLobbyStatus } from '../gametracker';
 import { S2StatsPeriodRegion } from '../entity/S2StatsPeriodRegion';
+import { S2GameLobbyMap } from '../entity/S2GameLobbyMap';
 
 function hasProfileIds(statPeriod: S2StatsPeriod) {
     return statPeriod.dateFrom >= new Date('2020-04-27');
 }
 
+interface MapStatTmp {
+    regionId: number;
+    bnetId: number;
+    lobbyIds: number[];
+    lobbiesHosted: number;
+    lobbiesStarted: number;
+    participantsTotal: number;
+    participantsUniqueTotal: number;
+    pendingTime: number[];
+}
+
 async function generateMapStats(conn: orm.Connection, statPeriod: S2StatsPeriod) {
-    const lobRecords = await conn.getCustomRepository(S2GameLobbyRepository)
-        .createQueryBuilder('lobby')
+    const mapStats = new Map<string, MapStatTmp>();
+
+    let lrecords = await conn.getRepository(S2GameLobbyMap)
+        .createQueryBuilder('lmap')
+        .innerJoin('lmap.lobby', 'lobby')
         .select([])
-        .addSelect('lobby.regionId', 'regionId')
-        .addSelect('lobby.mapBnetId', 'mapBnetId')
-        .addSelect('COUNT(DISTINCT lobby.id)', 'lobbiesHosted')
-        .addSelect('SUM(lobby.status = \'started\')', 'lobbiesStarted')
-        .addSelect('ABS(AVG(CASE WHEN lobby.status = \'started\' THEN (UNIX_TIMESTAMP(lobby.closedAt) - UNIX_TIMESTAMP(lobby.createdAt)) ELSE 0 END))', 'pendingTimeAverage')
+        .addSelect('lmap.regionId', 'regionId')
+        .addSelect('lmap.bnetId', 'bnetId')
+        .addSelect('lobby.id', 'lobbyId')
+        .addSelect('lobby.status', 'status')
+        .addSelect('UNIX_TIMESTAMP(lobby.closedAt) - UNIX_TIMESTAMP(lobby.createdAt)', 'pendingTime')
         .andWhere('lobby.closedAt >= :from AND lobby.closedAt < :to', { from: statPeriod.dateFrom, to: statPeriod.dateTo })
-        .groupBy('lobby.regionId, lobby.mapBnetId')
         .getRawMany()
     ;
+    logger.verbose(`LobbyMap records=${lrecords.length}`);
 
-    for (const [i, lobMap] of lobRecords.entries()) {
-        const slotMap = await conn.getCustomRepository(S2GameLobbyRepository)
+    for (const record of lrecords) {
+        const mkey = `${record.regionId}/${record.bnetId}`;
+        let mstat =  mapStats.get(mkey);
+        if (!mstat) {
+            mstat = {
+                regionId: record.regionId,
+                bnetId: record.bnetId,
+                lobbyIds: [],
+                lobbiesHosted: 0,
+                lobbiesStarted: 0,
+                participantsTotal: 0,
+                participantsUniqueTotal: 0,
+                pendingTime: [],
+            };
+            mapStats.set(mkey, mstat);
+        }
+        mstat.lobbyIds.push(record.lobbyId);
+        ++mstat.lobbiesHosted;
+        if (record.status === GameLobbyStatus.Started) {
+            ++mstat.lobbiesStarted;
+            mstat.pendingTime.push(Number(record.pendingTime));
+        }
+    }
+
+    lrecords = [];
+
+    async function getParticipantsData(regionId: number, bnetId: number, lobbyIds?: number[]) {
+        const qb = conn.getCustomRepository(S2GameLobbyRepository)
             .createQueryBuilder('lobby')
             .leftJoin('lobby.slots', 'slot')
             .select([])
             .addSelect('COUNT(DISTINCT slot.id)', 'participantsTotal')
-            .addSelect('COUNT(DISTINCT IFNULL(slot.profile, slot.name))', 'participantsUniqueTotal')
-            .andWhere('lobby.regionId = :regionId AND lobby.mapBnetId = :mapBnetId', { regionId: lobMap.regionId, mapBnetId: lobMap.mapBnetId })
-            .andWhere('lobby.status = :status', { status: GameLobbyStatus.Started })
-            .andWhere('lobby.closedAt >= :from AND lobby.closedAt < :to', { from: statPeriod.dateFrom, to: statPeriod.dateTo })
-            .andWhere('slot.kind = :kind', { kind: S2GameLobbySlotKind.Human })
-            .getRawOne()
+            .addSelect('COUNT(DISTINCT slot.profile)', 'participantsUniqueTotal')
         ;
 
-        const statsRecord = {
-            ...lobMap,
-            ...slotMap,
-        };
-        for (const [k, v] of Object.entries(statsRecord)) {
-            statsRecord[k] = Number(v);
+        if (lobbyIds) {
+            qb.andWhere(`lobby.id IN (${lobbyIds.join(',')})`);
+        }
+        else {
+            qb.andWhere('lobby.regionId = :regionId AND lobby.mapBnetId = :mapBnetId', { regionId: regionId, mapBnetId: bnetId });
+            qb.andWhere('lobby.closedAt >= :from AND lobby.closedAt < :to', { from: statPeriod.dateFrom, to: statPeriod.dateTo });
         }
 
-        if (!hasProfileIds(statPeriod)) {
-            statsRecord.participantsUniqueTotal = null;
-        }
-        await conn.getRepository(S2StatsPeriodMap).insert({
-            period: statPeriod,
-            regionId: statsRecord.regionId,
-            bnetId: statsRecord.mapBnetId,
-            lobbiesHosted: statsRecord.lobbiesHosted,
-            lobbiesStarted: statsRecord.lobbiesStarted,
-            participantsTotal: statsRecord.participantsTotal,
-            participantsUniqueTotal: statsRecord.participantsUniqueTotal,
-            pendingTimeAverage: statsRecord.pendingTimeAverage,
-        });
+        qb
+            .andWhere('lobby.status = :status', { status: GameLobbyStatus.Started })
+            .andWhere('slot.kind = :kind', { kind: S2GameLobbySlotKind.Human })
+        ;
+        const slotMap = await qb.getRawOne();
+
+        return [ Number(slotMap.participantsTotal), Number(slotMap.participantsUniqueTotal) ];
     }
+
+    await pMap(mapStats.values(), async (mstat) => {
+        [ mstat.participantsTotal, mstat.participantsUniqueTotal ] = await getParticipantsData(
+            mstat.regionId,
+            mstat.bnetId,
+            mstat.lobbyIds.length < 50000 ? mstat.lobbyIds : void 0
+        );
+        if (!hasProfileIds(statPeriod)) {
+            mstat.participantsUniqueTotal = null;
+        }
+    }, {
+        concurrency: 5,
+    });
+
+    logger.verbose(`stat records=${mapStats.size}`);
+    const inserts = Array.from(mapStats.values()).map(x => {
+        return {
+            period: statPeriod,
+            regionId: x.regionId,
+            bnetId: x.bnetId,
+            lobbiesHosted: x.lobbiesHosted,
+            lobbiesStarted: x.lobbiesStarted,
+            participantsTotal: x.participantsTotal,
+            participantsUniqueTotal: x.participantsUniqueTotal,
+            pendingTimeAverage: x.pendingTime.length ? Math.abs(x.pendingTime.reduce((prev, curr) => prev + curr, 0) / x.pendingTime.length) : 0,
+        } as Partial<S2StatsPeriodMap>;
+    });
+
+    await conn.getRepository(S2StatsPeriodMap).insert(inserts);
 }
 
 async function generateRegionStats(conn: orm.Connection, statPeriod: S2StatsPeriod) {
@@ -74,7 +134,7 @@ async function generateRegionStats(conn: orm.Connection, statPeriod: S2StatsPeri
         .addSelect('COUNT(DISTINCT lobby.id)', 'lobbiesHosted')
         .addSelect('COUNT(DISTINCT CASE WHEN lobby.status = \'started\' THEN lobby.id END)', 'lobbiesStarted')
         .addSelect('COUNT(DISTINCT slot.id)', 'participantsTotal')
-        .addSelect('COUNT(DISTINCT IFNULL(slot.profile, slot.name))', 'participantsUniqueTotal')
+        .addSelect('COUNT(DISTINCT slot.profile)', 'participantsUniqueTotal')
         .andWhere('lobby.closedAt >= :from AND lobby.closedAt < :to', { from: statPeriod.dateFrom, to: statPeriod.dateTo })
         .groupBy('lobby.regionId')
         .getRawMany()
@@ -128,13 +188,11 @@ export async function buildStatsForPeriod(conn: orm.Connection, statKind: S2Stat
     else {
         switch (statKind) {
             case S2StatsPeriodKind.Daily:
-            case S2StatsPeriodKind.Weekly:
-            {
+            case S2StatsPeriodKind.Weekly: {
                 currDate = new Date('2020-01-27');
                 break;
             }
-            case S2StatsPeriodKind.Monthly:
-            {
+            case S2StatsPeriodKind.Monthly: {
                 currDate = new Date('2020-02-01');
                 break;
             }
@@ -163,6 +221,7 @@ export async function buildStatsForPeriod(conn: orm.Connection, statKind: S2Stat
 
         statPeriod.completed = true;
         await conn.getRepository(S2StatsPeriod).save(statPeriod);
+        logger.info(`done ${currDate.toDateString()} kind=${statKind}`);
 
         currDate = incDate(currDate);
     }

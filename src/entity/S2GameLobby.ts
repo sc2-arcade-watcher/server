@@ -7,7 +7,6 @@ import { S2Map } from './S2Map';
 
 @Entity()
 @Unique('bnet_id', ['bnetBucketId', 'bnetRecordId'])
-@Index('region_map_status', ['region', 'mapBnetId', 'status'])
 export class S2GameLobby {
     @PrimaryGeneratedColumn()
     id: number;

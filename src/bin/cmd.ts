@@ -10,32 +10,25 @@ import { S2MapHeader } from '../entity/S2MapHeader';
 import { S2Map } from '../entity/S2Map';
 import { logger } from '../logger';
 
-async function populateBnetDepot() {
-    const bnDepot = new BattleDepot('data/depot');
-    const pubBnetDir = new NestedHashDir('data/bnet');
-    const filename = '18d81abcc4847b567bc73891213fa29d6f4c9478a142baaa805837350ec3ff2a';
-    const s2mvPath = await bnDepot.getPathOrRetrieve('us', `${filename}.s2mv`);
-    const jpgPath = pubBnetDir.pathTo(`${filename}.jpg`);
-    await convertImage(s2mvPath, jpgPath, ['-format', 'jpg', '-quality', '85', '-strip']);
-}
-
-
-async function statsGenerate() {
-    await populateBnetDepot();
-
-    const conn = await orm.createConnection();
-    await buildStatsForPeriod(conn, S2StatsPeriodKind.Daily);
-    await buildStatsForPeriod(conn, S2StatsPeriodKind.Weekly);
-    await buildStatsForPeriod(conn, S2StatsPeriodKind.Monthly);
-    await conn.close();
-}
-
 program.command('depot-test')
-    .action(populateBnetDepot)
+    .action(async () => {
+        const bnDepot = new BattleDepot('data/depot');
+        const pubBnetDir = new NestedHashDir('data/bnet');
+        const filename = '18d81abcc4847b567bc73891213fa29d6f4c9478a142baaa805837350ec3ff2a';
+        const s2mvPath = await bnDepot.getPathOrRetrieve('us', `${filename}.s2mv`);
+        const jpgPath = pubBnetDir.pathTo(`${filename}.jpg`);
+        await convertImage(s2mvPath, jpgPath, ['-format', 'jpg', '-quality', '85', '-strip']);
+    })
 ;
 
 program.command('stats')
-    .action(statsGenerate)
+    .action(async () => {
+        const conn = await orm.createConnection();
+        await buildStatsForPeriod(conn, S2StatsPeriodKind.Monthly);
+        await buildStatsForPeriod(conn, S2StatsPeriodKind.Weekly);
+        await buildStatsForPeriod(conn, S2StatsPeriodKind.Daily);
+        await conn.close();
+    })
 ;
 
 program.command('map:dump-header <region> <hash>')

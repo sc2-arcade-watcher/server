@@ -2,12 +2,13 @@ import * as fp from 'fastify-plugin';
 import { GameLobbyStatus } from '../../../gametracker';
 import { S2GameLobby } from '../../../entity/S2GameLobby';
 import { S2GameLobbyRepository } from '../../../repository/S2GameLobbyRepository';
+import { S2GameLobbyMap } from '../../../entity/S2GameLobbyMap';
 
 export default fp(async (server, opts, next) => {
     server.get('/lobbies/history/map/:regionId/:mapId', {
         schema: {
             tags: ['Lobbies'],
-            summary: 'History of hosted lobbies of a specific map',
+            summary: 'History of hosted lobbies of a specific map or mod.',
             params: {
                 type: 'object',
                 required: ['regionId', 'mapId'],
@@ -42,40 +43,18 @@ export default fp(async (server, opts, next) => {
             },
         },
     }, async (request, reply) => {
-        const pQuery = request.parseCursorPagination();
+        const pQuery = request.parseCursorPagination({
+            paginationKeys: ['lobby.id'],
+        });
 
         const qb = server.conn.getRepository(S2GameLobby)
             .createQueryBuilder('lobby')
-            .select(['lobby.id'])
-            // .addSelect(qb => {
-            //     return qb.subQuery().from(S2GameLobbySlot, 'slot').select('COUNT(slot.id)').where('slot.lobby = lobby.id AND slot.kind = \'human\'');
-            // }, 'slotsHumanCount')
-            // .addSelect(qb => {
-            //     return qb.subQuery().from(S2GameLobbySlot, 'slot').select('COUNT(slot.id)').where('slot.lobby = lobby.id');
-            // }, 'slotsTotalCount')
-            .limit(pQuery.fetchLimit)
-        ;
-
-        const sorder = pQuery.getOrderDirection(request.query.orderDirection?.toUpperCase());
-        if (pQuery.before && sorder === 'ASC') {
-            qb.andWhere(`lobby.id < :id`, pQuery.before);
-        }
-        else if (pQuery.before && sorder === 'DESC') {
-            qb.andWhere(`lobby.id > :id`, pQuery.before);
-        }
-        else if (pQuery.after && sorder === 'ASC') {
-            qb.andWhere(`lobby.id > :id`, pQuery.after);
-        }
-        else if (pQuery.after && sorder === 'DESC') {
-            qb.andWhere(`lobby.id < :id`, pQuery.after);
-        }
-        qb.addOrderBy('lobby.id', sorder);
-
-        qb
-            .andWhere('lobby.regionId = :regionId AND lobby.mapBnetId = :bnetId', {
+            .innerJoin(S2GameLobbyMap, 'lmap', 'lmap.lobby = lobby.id AND lmap.regionId = :regionId AND lmap.bnetId = :bnetId', {
                 regionId: request.params.regionId,
                 bnetId: request.params.mapId,
             })
+            .select(pQuery.paginationKeys)
+            .limit(pQuery.fetchLimit)
         ;
 
         if (request.query.status && request.query.status !== 'any') {
@@ -87,12 +66,18 @@ export default fp(async (server, opts, next) => {
             });
         }
 
+        pQuery.applyQuery(qb, request.query.orderDirection!.toUpperCase());
+
         const lbIds = await qb.getRawMany();
+
         const qbFinal = server.conn.getCustomRepository(S2GameLobbyRepository).createQueryForEntriesInIds(
             lbIds.length ? lbIds.map(x => x.lobby_id) : [0],
-            sorder
+            pQuery.getOrderDirection(request.query.orderDirection!.toUpperCase())
         );
 
-        return reply.type('application/json').code(200).sendWithCursorPagination(await qbFinal.getRawAndEntities(), pQuery);
+        return reply.type('application/json').code(200).sendWithCursorPagination({
+            raw: lbIds,
+            entities: (await qbFinal.getRawAndEntities()).entities,
+        }, pQuery);
     });
 });

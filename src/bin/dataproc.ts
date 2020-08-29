@@ -11,6 +11,7 @@ import { DataLobbyCreate, LobbyPvExSlotKind } from '../journal/decoder';
 import { SysFeedPosition } from '../entity/SysFeedPosition';
 import { S2Profile } from '../entity/S2Profile';
 import { S2GameLobbyPlayerJoin } from '../entity/S2GameLobbyPlayerJoin';
+import { S2GameLobbyMap, S2GameLobbyMapKind } from '../entity/S2GameLobbyMap';
 
 class DataProc {
     protected conn: orm.Connection;
@@ -384,7 +385,33 @@ class DataProc {
         });
 
         try {
-            await this.em.getRepository(S2GameLobby).insert(s2lobby);
+            await this.conn.transaction(async tsManager => {
+                await tsManager.getRepository(S2GameLobby).insert(s2lobby);
+                const s2LobbyMaps: Partial<S2GameLobbyMap>[] = [];
+                s2LobbyMaps.push({
+                    lobby: s2lobby,
+                    regionId: this.s2region.id,
+                    bnetId: info.mapHandle[0],
+                    type: S2GameLobbyMapKind.Map,
+                });
+                if (info.extModHandle[0] !== 0) {
+                    s2LobbyMaps.push({
+                        lobby: s2lobby,
+                        regionId: this.s2region.id,
+                        bnetId: info.extModHandle[0],
+                        type: S2GameLobbyMapKind.ExtensionMod,
+                    });
+                }
+                if (info.multiModHandle[0] !== 0) {
+                    s2LobbyMaps.push({
+                        lobby: s2lobby,
+                        regionId: this.s2region.id,
+                        bnetId: info.multiModHandle[0],
+                        type: S2GameLobbyMapKind.MultiMod,
+                    });
+                }
+                await tsManager.getRepository(S2GameLobbyMap).insert(s2LobbyMaps);
+            });
             s2lobby.slots = [];
             this.lobbiesCache.set(info.lobbyId, s2lobby);
             logger.info(`NEW src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} map="${info.mapName}"`);

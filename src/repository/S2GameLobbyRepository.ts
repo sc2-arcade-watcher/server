@@ -103,8 +103,11 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
     }
 
     createQueryForEntriesInIds(recordIds: number[], orderDirection: 'ASC' | 'DESC' = 'DESC') {
-        return this.createQueryBuilder('lobby')
+        const qb = this.createQueryBuilder('lobby')
             .select([])
+        ;
+        this.addMapInfo(qb, true);
+        qb
             .addSelect([
                 'lobby.id',
                 'lobby.regionId',
@@ -146,5 +149,6 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
             .addOrderBy('lobby.id', orderDirection)
             .addOrderBy('slot.slotNumber', 'ASC')
         ;
+        return qb;
     }
 }
