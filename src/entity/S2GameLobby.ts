@@ -66,18 +66,6 @@ export class S2GameLobby {
     mapBnetId: number;
 
     @Column({
-        type: 'smallint',
-        unsigned: true,
-    })
-    mapMajorVersion: number;
-
-    @Column({
-        type: 'smallint',
-        unsigned: true,
-    })
-    mapMinorVersion: number;
-
-    @Column({
         type: 'mediumint',
         unsigned: true,
         nullable: true,
@@ -85,39 +73,11 @@ export class S2GameLobby {
     extModBnetId: number;
 
     @Column({
-        type: 'smallint',
-        unsigned: true,
-        nullable: true,
-    })
-    extModMajorVersion: number;
-
-    @Column({
-        type: 'smallint',
-        unsigned: true,
-        nullable: true,
-    })
-    extModMinorVersion: number;
-
-    @Column({
         type: 'mediumint',
         unsigned: true,
         nullable: true,
     })
     multiModBnetId: number;
-
-    @Column({
-        type: 'smallint',
-        unsigned: true,
-        nullable: true,
-    })
-    multiModMajorVersion: number;
-
-    @Column({
-        type: 'smallint',
-        unsigned: true,
-        nullable: true,
-    })
-    multiModMinorVersion: number;
 
     @Column({
         type: 'tinyint',

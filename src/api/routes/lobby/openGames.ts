@@ -20,8 +20,6 @@ export default fp(async (server, opts, next) => {
                 'lobby.hostName',
                 'lobby.slotsHumansTotal',
                 'lobby.slotsHumansTaken',
-                'lobby.mapMajorVersion',
-                'lobby.mapMinorVersion',
                 'lobby.multiModBnetId',
             ])
             .innerJoinAndSelect('lobby.region', 'region')
@@ -40,8 +38,8 @@ export default fp(async (server, opts, next) => {
                 (<any>s2lobby).status = 'disbanded';
             }
             (<any>s2lobby).mapDocumentVersion = {
-                majorVersion: s2lobby.mapMajorVersion,
-                minorVersion: s2lobby.mapMinorVersion,
+                majorVersion: 0,
+                minorVersion: 0,
                 iconHash: s2lobby.map.iconHash,
                 document: {
                     regionId: s2lobby.map.regionId,
@@ -49,14 +47,12 @@ export default fp(async (server, opts, next) => {
                     type: s2lobby.map.type,
                     isArcade: s2lobby.multiModBnetId === null,
                     name: s2lobby.map.name,
-                    currentMajorVersion: s2lobby.mapMajorVersion,
-                    currentMinorVersion: s2lobby.mapMinorVersion,
+                    currentMajorVersion: 0,
+                    currentMinorVersion: 0,
                     iconHash: s2lobby.map.iconHash,
                 },
             };
             delete s2lobby.map;
-            delete s2lobby.mapMajorVersion;
-            delete s2lobby.mapMinorVersion;
             delete s2lobby.multiModBnetId;
             (<any>s2lobby).mapVariantCategory = 'Other';
             (<any>s2lobby).players = s2lobby.slots.map(s2slot => {

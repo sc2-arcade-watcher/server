@@ -594,7 +594,6 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
         fields: [],
         timestamp: s2gm.createdAt,
         footer: {
-            text: `v${s2gm.mapMajorVersion}.${s2gm.mapMinorVersion}`,
         },
     };
 
@@ -660,12 +659,9 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
             inline: false,
         });
     }
-    else if (s2gm.mapVariantMode.trim().length) {
-        em.fields.push({
-            name: `Variant`,
-            value: `${s2gm.mapVariantMode}`,
-            inline: false,
-        });
+
+    if (s2gm.mapVariantMode.trim().length) {
+        em.footer.text = s2gm.mapVariantMode;
     }
 
     if (s2gm.lobbyTitle) {

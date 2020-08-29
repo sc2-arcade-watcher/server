@@ -364,16 +364,8 @@ class DataProc {
             snapshotUpdatedAt: ev.lobby.snapshotUpdatedAt,
 
             mapBnetId: info.mapHandle[0],
-            mapMajorVersion: info.mapMajorVersion,
-            mapMinorVersion: info.mapMinorVersion,
-
             extModBnetId: info.extModHandle[0] !== 0 ? info.extModHandle[0] : null,
-            extModMajorVersion: info.extModHandle[0] !== 0 ? info.extModMajorVersion : null,
-            extModMinorVersion: info.extModHandle[0] !== 0 ? info.extModMinorVersion : null,
-
             multiModBnetId: info.multiModHandle[0] !== 0 ? info.multiModHandle[0] : null,
-            multiModMajorVersion: info.multiModHandle[0] !== 0 ? info.multiModMajorVersion : null,
-            multiModMinorVersion: info.multiModHandle[0] !== 0 ? info.multiModMinorVersion : null,
 
             mapVariantIndex: info.mapVariantIndex,
             mapVariantMode: info.mapVariantMode,

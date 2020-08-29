@@ -93,14 +93,8 @@ export default fp(async (server, opts, next) => {
             'lobby.bnetBucketId',
             'lobby.bnetRecordId',
             'lobby.mapBnetId',
-            'lobby.mapMajorVersion',
-            'lobby.mapMinorVersion',
             'lobby.extModBnetId',
-            'lobby.extModMajorVersion',
-            'lobby.extModMinorVersion',
             'lobby.multiModBnetId',
-            'lobby.multiModMajorVersion',
-            'lobby.multiModMinorVersion',
             'lobby.createdAt',
             'lobby.closedAt',
             'lobby.status',
@@ -112,6 +106,17 @@ export default fp(async (server, opts, next) => {
         ]);
 
         const result = await qb.getMany();
+
+        // START for compatibility, to be removed
+        result.forEach(x => {
+            (<any>x).mapMajorVersion = 0;
+            (<any>x).mapMinorVersion = 0;
+            (<any>x).extModMajorVersion = 0;
+            (<any>x).extModMinorVersion = 0;
+            (<any>x).multiModMajorVersion = 0;
+            (<any>x).multiModMinorVersion = 0;
+        });
+        // END
 
         reply.header('Cache-control', 'public, s-maxage=4');
         return reply.type('application/json').code(200).send(result);

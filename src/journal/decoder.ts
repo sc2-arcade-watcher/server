@@ -283,22 +283,28 @@ export class JournalDecoder {
         ed.slotsHumansTaken = Number(popFirst(args));
         ed.slotsHumansTotal = Number(popFirst(args));
 
-        ed.mapName = popFirst(args);
-        ed.mapMajorVersion = Number(popFirst(args));
-        ed.mapMinorVersion = Number(popFirst(args));
-        ed.isArcade = Boolean(Number(popFirst(args)));
-        ed.mapVariantMode = popFirst(args);
-        ed.mapVariantCategory = popFirst(args);
+        if (version >= 4) {
+            ed.mapVariantMode = popFirst(args);
+        }
+        else if (3 >= version) {
+            ed.mapName = popFirst(args);
+            ed.mapMajorVersion = Number(popFirst(args));
+            ed.mapMinorVersion = Number(popFirst(args));
+            ed.isArcade = Boolean(Number(popFirst(args)));
+            ed.mapVariantMode = popFirst(args);
+            ed.mapVariantCategory = popFirst(args);
 
-        ed.extModName = popFirst(args);
-        ed.extModMajorVersion = Number(popFirst(args));
-        ed.extModMinorVersion = Number(popFirst(args));
+            ed.extModName = popFirst(args);
+            ed.extModMajorVersion = Number(popFirst(args));
+            ed.extModMinorVersion = Number(popFirst(args));
 
-        ed.multiModName = popFirst(args);
-        ed.multiModMajorVersion = Number(popFirst(args));
-        ed.multiModMinorVersion = Number(popFirst(args));
+            ed.multiModName = popFirst(args);
+            ed.multiModMajorVersion = Number(popFirst(args));
+            ed.multiModMinorVersion = Number(popFirst(args));
 
-        ed.mapIcon = popFirst(args);
+            ed.mapIcon = popFirst(args);
+        }
+
         return ed;
     }
 
