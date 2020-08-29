@@ -320,7 +320,7 @@ const fieldsToTransform: TransformableSectionRules = {
         howToPlaySections: {
             title: localizeField,
             subtitle: localizeField,
-            items: localizeField,
+            items: localizeMultilineField,
         },
         patchNoteSections: {
             title: localizeField,
@@ -471,6 +471,8 @@ export class MapResolver {
                 mhead.archiveSize = Number(s2maResponse.headers['content-length']);
             }
             else {
+                // most likely means it's invalid archive, such as:
+                // http://us.depot.battle.net:1119/02374236dc17df4e4e0ee7dd85662c2dca06a666795cec665ef37fad9187d593.s2ma
                 mhead.archiveSize = null;
             }
         }

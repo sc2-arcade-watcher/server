@@ -89,6 +89,7 @@ export class S2Map {
 
     @Column({
         nullable: true,
+        length: 512,
     })
     website: string;
 
