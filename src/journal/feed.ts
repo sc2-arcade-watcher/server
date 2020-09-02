@@ -16,6 +16,7 @@ export class JournalFeed {
     protected rs: fs.ReadStream;
     protected chunkBuff: Buffer;
     protected chunkPos: number;
+    /** remaining (and incomplete) data from previous chunk  */
     protected rbuff: Buffer;
     protected dataTimeout: NodeJS.Timer;
     protected tailProc: ChildProcessByStdio<Writable, Readable, Readable>;
@@ -163,24 +164,47 @@ export class JournalFeed {
     protected readlineFromBuff() {
         while (this.chunkBuff.byteLength > this.chunkPos) {
             let chunkEnd = this.chunkBuff.indexOf(0x0A, this.chunkPos);
+
+            // no EOL
             if (chunkEnd === -1) {
-                logger.error(`chunkEnd`, {
-                    name: this.name,
-                    cursor: this.currCursor,
-                    chunkByteLength: this.chunkBuff.byteLength,
-                    chunkPos: this.chunkPos,
-                    buffString: this.chunkBuff.toString('utf8', this.chunkPos),
-                    chunkBuff: this.chunkBuff,
-                    rbuff: this.rbuff,
-                });
-                throw new Error(`chunkEnd == -1`);
+                // if we haven't read enough from the stream to begin with
+                // copy it to rbuff until we reach an EOL
+                if (this.chunkPos === 0) {
+                    // if rbuff is empty there's no need to allocate anything new
+                    if (!this.rbuff) {
+                        this.rbuff = this.chunkBuff;
+                    }
+                    // if rbuff already has something then allocate new buffer and merge the content
+                    else {
+                        const tmpbuff = Buffer.allocUnsafe(this.rbuff.byteLength + this.chunkBuff.byteLength);
+                        this.rbuff.copy(tmpbuff);
+                        this.chunkBuff.copy(tmpbuff, this.rbuff.byteLength, 0, this.chunkBuff.byteLength);
+                    }
+                    this.chunkBuff = void 0;
+                    return null;
+                }
+                else {
+                    // this should never happen.. probably?
+                    logger.error(`chunkEnd`, {
+                        name: this.name,
+                        cursor: this.currCursor,
+                        chunkByteLength: this.chunkBuff.byteLength,
+                        chunkPos: this.chunkPos,
+                        chunkString: this.chunkBuff.toString('utf8', this.chunkPos),
+                        chunkBuff: this.chunkBuff,
+                        rbuff: this.rbuff,
+                        rstring: this.rbuff ? this.rbuff.toString('utf8') : void 0,
+                    });
+                    throw new Error(`chunkEnd == -1`);
+                }
             }
 
             let line: string;
+            // prepend the remaining content from previous read
             if (this.rbuff) {
-                const tmpbuff = Buffer.allocUnsafe(this.rbuff.length + (chunkEnd - this.chunkPos));
+                const tmpbuff = Buffer.allocUnsafe(this.rbuff.byteLength + (chunkEnd - this.chunkPos));
                 this.rbuff.copy(tmpbuff);
-                this.chunkBuff.copy(tmpbuff, this.rbuff.length, this.chunkPos, chunkEnd);
+                this.chunkBuff.copy(tmpbuff, this.rbuff.byteLength, this.chunkPos, chunkEnd);
                 line = tmpbuff.toString('utf8');
                 this.rbuff = void 0;
             }
@@ -275,6 +299,9 @@ export class JournalFeed {
                 const line = this.readlineFromBuff();
                 if (line) {
                     return line;
+                }
+                else if (line === null) {
+                    continue;
                 }
                 else {
                     throw new Error(`readlineFromBuff: src=${this.name} cursor=${this.currCursor}`);
