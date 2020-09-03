@@ -44,22 +44,28 @@ export default fp(async (server, opts, next) => {
             },
         },
     }, async (request, reply) => {
+        const map = await server.conn.getRepository(S2Map)
+            .createQueryBuilder('map')
+            .innerJoinAndSelect('map.currentVersion', 'mapHead')
+            .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId', {
+                regionId: request.params.regionId,
+                bnetId: request.params.mapId,
+            })
+            .getOne()
+        ;
+
+        if (!map) {
+            return reply.type('application/json').code(404).send();
+        }
+        if (map.currentVersion.isPrivate) {
+            return reply.type('application/json').code(403).send();
+        }
+
         let mhead: S2MapHeader;
         let localeTableHash: string;
         if (request.query.minorVersion === 0 && request.query.majorVersion === 0) {
-            const result = await server.conn.getRepository(S2Map)
-                .createQueryBuilder('map')
-                .innerJoinAndSelect('map.currentVersion', 'mapHead')
-                .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId', {
-                    regionId: request.params.regionId,
-                    bnetId: request.params.mapId,
-                })
-                .getOne()
-            ;
-            if (result) {
-                mhead = result.currentVersion;
-                localeTableHash = result.mainLocaleHash;
-            }
+            mhead = map.currentVersion;
+            localeTableHash = map.mainLocaleHash;
         }
         else {
             const result = await server.conn.getRepository(S2MapHeader)
@@ -73,17 +79,13 @@ export default fp(async (server, opts, next) => {
                 .getOne()
             ;
             mhead = result;
-        }
 
-        if (!mhead) {
-            return reply.type('application/json').code(404).send();
+            if (!mhead) {
+                return reply.type('application/json').code(404).send();
+            }
         }
 
         const rcode = GameRegion[mhead.regionId];
-        if (!rcode) {
-            return reply.code(400).send();
-        }
-
         const mapHeaderData = await server.mapResolver.getMapHeader(rcode, mhead.headerHash);
         let mapLocalizationTable: MapLocalizationTable;
 

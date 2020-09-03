@@ -121,4 +121,6 @@ export class S2Map {
     })
     @Index('published_at_idx')
     publishedAt: Date;
+
+    revisions?: S2MapHeader[];
 }

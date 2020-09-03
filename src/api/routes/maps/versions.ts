@@ -1,6 +1,7 @@
 import * as fp from 'fastify-plugin';
 import { S2MapHeader } from '../../../entity/S2MapHeader';
 import { stripIndents } from 'common-tags';
+import { S2Map } from '../../../entity/S2Map';
 
 export default fp(async (server, opts, next) => {
     server.get('/maps/:regionId/:mapId/versions', {
@@ -26,37 +27,49 @@ export default fp(async (server, opts, next) => {
             },
         },
     }, async (request, reply) => {
-        const mapHeaders = await server.conn.getRepository(S2MapHeader)
-            .createQueryBuilder('mapHead')
+        const map = await server.conn.getRepository(S2Map)
+            .createQueryBuilder('map')
+            .innerJoinAndSelect('map.currentVersion', 'mapHead')
+            .innerJoinAndMapMany(
+                'map.revisions',
+                S2MapHeader,
+                'revision',
+                'revision.regionId = :regionId AND revision.bnetId = :bnetId'
+            )
+            .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId')
             .select([
-                'mapHead.majorVersion',
-                'mapHead.minorVersion',
-                'mapHead.headerHash',
+                'map.regionId',
+                'map.bnetId',
                 'mapHead.isPrivate',
-                'mapHead.isExtensionMod',
-                'mapHead.archiveHash',
-                'mapHead.archiveSize',
-                'mapHead.uploadedAt',
+                'revision.majorVersion',
+                'revision.minorVersion',
+                'revision.headerHash',
+                'revision.isPrivate',
+                'revision.isExtensionMod',
+                'revision.archiveHash',
+                'revision.archiveSize',
+                'revision.uploadedAt',
             ])
-            .andWhere('mapHead.regionId = :regionId AND mapHead.bnetId = :bnetId', {
+            .setParameters({
                 regionId: request.params.regionId,
                 bnetId: request.params.mapId,
             })
-            .addOrderBy('mapHead.majorVersion', 'DESC')
-            .addOrderBy('mapHead.minorVersion', 'DESC')
-            .getMany()
+            .addOrderBy('revision.majorVersion', 'DESC')
+            .addOrderBy('revision.minorVersion', 'DESC')
+            .getOne()
         ;
 
-        if (!mapHeaders.length) {
-            return reply.type('application/json').code(404);
+        if (!map) {
+            return reply.type('application/json').code(404).send();
+        }
+        if (map.currentVersion.isPrivate) {
+            return reply.type('application/json').code(403).send();
         }
 
-        const result = {
+        return reply.type('application/json').code(200).send({
             regionId: request.params.regionId,
             bnetId: request.params.mapId,
-            versions: mapHeaders,
-        };
-
-        return reply.type('application/json').code(200).send(result);
+            versions: map.revisions,
+        });
     });
 });

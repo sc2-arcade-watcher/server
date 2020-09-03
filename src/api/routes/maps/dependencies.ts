@@ -1,5 +1,6 @@
 import * as fp from 'fastify-plugin';
 import { GameRegion } from '../../../common';
+import { S2Map } from '../../../entity/S2Map';
 
 export default fp(async (server, opts, next) => {
     server.get('/maps/:regionId/:mapId/dependencies', {
@@ -29,8 +30,33 @@ export default fp(async (server, opts, next) => {
             return reply.code(400).send();
         }
 
-        const depMap = await server.mapResolver.resolveMapDependencies(request.params.regionId, request.params.mapId);
+        const map = await server.conn.getRepository(S2Map)
+            .createQueryBuilder('map')
+            .innerJoinAndSelect('map.currentVersion', 'mapHead')
+            .innerJoinAndSelect('map.mainCategory', 'mainCat')
+            .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId', {
+                regionId: request.params.regionId,
+                bnetId: request.params.mapId,
+            })
+            .getOne()
+        ;
+
+        if (!map) {
+            return reply.type('application/json').code(404).send();
+        }
+        if (map.currentVersion.isPrivate) {
+            return reply.type('application/json').code(403).send();
+        }
+
+        const depMap = await server.mapResolver.resolveMapDependencies(map.regionId, map.bnetId);
         const depList = Array.from(depMap.values()).map(x => {
+            if (x.mapHeader.isPrivate) {
+                x.map.mainLocaleHash = null;
+                x.mapHeader.headerHash = null;
+                // if the map itself is public, there's no reason to hide archive hash of a dependency
+                // x.mapHeader.archiveHash = null;
+            }
+
             return {
                 map: x.map,
                 mapHeader: x.mapHeader,
@@ -40,8 +66,8 @@ export default fp(async (server, opts, next) => {
         });
 
         const result = {
-            regionId: request.params.regionId,
-            bnetId: request.params.mapId,
+            regionId: map.regionId,
+            bnetId: map.bnetId,
             list: depList,
         };
 

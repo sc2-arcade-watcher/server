@@ -20,7 +20,7 @@ export default fp(async (server, opts, next) => {
             },
         },
     }, async (request, reply) => {
-        const result = await server.conn.getRepository(S2Map)
+        const map = await server.conn.getRepository(S2Map)
             .createQueryBuilder('map')
             .innerJoinAndSelect('map.currentVersion', 'mapHead')
             .innerJoinAndSelect('map.mainCategory', 'mainCat')
@@ -31,9 +31,16 @@ export default fp(async (server, opts, next) => {
             .getOne()
         ;
 
-        if (!result) {
+        if (!map) {
             return reply.type('application/json').code(404).send();
         }
+        if (map.currentVersion.isPrivate) {
+            map.mainLocaleHash = null;
+            map.currentVersion.headerHash = null;
+            map.currentVersion.archiveHash = null;
+        }
+
+        const result = map;
 
         // for compatibility with older version of this endpoint, to be removed in the future
         (<any>result).isArcade = !result.mainCategory.isMelee;
