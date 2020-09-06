@@ -47,9 +47,9 @@ export interface MapScreenshot<ET, MI> {
 }
 
 export enum ContentListTypeKind {
-    Bulleted = 'bulleted',
-    Numbered = 'numbered',
-    None = 'none',
+    Bulleted = 0,
+    Numbered = 1,
+    None     = 2,
 }
 
 export interface ContentSection<ET = ExternalString> {
@@ -119,21 +119,32 @@ export interface AttributeValueDefinition<ET, MI> {
     visual: AttributeVisual<ET, MI>;
 }
 
+export enum AttributeArbitrationKind {
+    Always = 0,
+    FCFS   = 1,
+}
+
 export enum AttributeRestrictionKind {
-    None = 'none',
-    Self = 'self',
-    Host = 'host',
-    All = 'all',
+    None   = 0,
+    Self   = 1,
+    Host   = 2,
+    All    = 3,
+}
+
+export enum AttributeOptionsFlag {
+    Unknown          = 0x01,
+    LockedWhenPublic = 0x02,
+    Hidden           = 0x04,
 }
 
 export interface AttributeDefinition<ET, MI> {
     instance: AttributeInstance;
     values: AttributeValueDefinition<ET, MI>[];
     // TODO: requirements
-    arbitration: number;
+    arbitration: AttributeArbitrationKind;
     visibility: AttributeRestrictionKind;
     access: AttributeRestrictionKind;
-    options: number;
+    options: AttributeOptionsFlag;
     default: AttributeValue | AttributeValue[];
     sortOrder: number;
 }
@@ -150,9 +161,9 @@ export interface Variant<ET> {
     maxTeamSize: number;
     attributeVisibility?: AttributeVisibility[];
     achievementTags?: string[];
-    maxHumanPlayers?: number;
-    maxOpenSlots?: number;
-    premiumInfo?: PremiumInfo[];
+    maxHumanPlayers?: number | null;
+    maxOpenSlots?: number | null;
+    premiumInfo?: PremiumInfo | null;
     teamNames?: ET[];
 }
 
@@ -204,7 +215,7 @@ export interface MapHeaderDataRaw<ET = ExternalString, MI = MapRawImage, DF = De
     extraDependencies?: DocumentInstance[];
     addDefaultPermissions?: boolean;
     relevantPermissions?: PermissionEntry[];
-    specialTags?: MapTags[];
+    specialTags: MapTags[];
     arcadeInfo?: ArcadeInfo<ET, MI> | null;
     addMultiMod?: boolean;
 }
@@ -360,22 +371,6 @@ export function reprocessMapHeader(mapHeader: MapHeaderDataRaw, mapLocalization:
         return obj;
     }
 
-    function removeUnknownFields(obj: any) {
-        for (const key in obj) {
-            if (key.startsWith('_')) {
-                delete obj[key];
-                continue;
-            }
-            if (Array.isArray(obj[key])) {
-                obj[key].forEach((x: any) => removeUnknownFields(x));
-            }
-            else if (typeof obj[key] === 'object') {
-                removeUnknownFields(obj[key]);
-            }
-        }
-        return obj;
-    }
-
     let result: MapHeader = Object.assign({
         meta: {
             region: mapHeader.archiveHandle.region,
@@ -384,7 +379,7 @@ export function reprocessMapHeader(mapHeader: MapHeaderDataRaw, mapLocalization:
     } as MapHeader, deepCopy(mapHeader));
     transformSection(result, fieldsToTransform) as MapHeader;
 
-    return removeUnknownFields(result);
+    return result;
 }
 
 export interface MapDependencyEntry {
@@ -426,16 +421,17 @@ export class MapResolver {
 
     async getMapHeader(region: string, hash: string, persist = true) {
         const fPath = await this.depot.getPathOrRetrieve(region, `${hash}.s2mh`);
-        const decodingProc = await spawnWaitExit(spawn(process.env.STARC_S2MDECODER_PATH ?? 's2mdecoder', [
+        const decodingProc = await spawnWaitExit(spawn(process.env.STARC_S2MDEC_PATH ?? 's2mdec', [
+            '-c',
             fPath,
         ]), {
             captureStdout: true,
             captureStderr: true,
         });
         if (decodingProc.rcode !== 0) {
-            logger.error('s2mdecoder stdout', decodingProc.stdout);
-            logger.error('s2mdecoder stderr', decodingProc.stderr);
-            throw new Error(`s2mdecoder failed on "${fPath}" code=${decodingProc.rcode} signal=${decodingProc.signal} killed=${decodingProc.proc.killed}`);
+            logger.error('s2mdec stdout', decodingProc.stdout);
+            logger.error('s2mdec stderr', decodingProc.stderr);
+            throw new Error(`s2mdec failed on "${fPath}" code=${decodingProc.rcode} signal=${decodingProc.signal} killed=${decodingProc.proc.killed}`);
         }
         if (!persist) {
             await fs.unlink(fPath);
