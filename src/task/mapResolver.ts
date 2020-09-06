@@ -6,10 +6,9 @@ import { spawn } from 'child_process';
 import { S2MapHeader } from '../entity/S2MapHeader';
 import { BattleDepot } from '../depot';
 import { GameRegion, GameLocale, DepotRegion, decodeMapVersion } from '../common';
-import { logger, logIt } from '../logger';
-import { spawnWaitExit, retry, throwErrIfNotDuplicateEntry, deepCopy } from '../helpers';
-import { S2Map, S2MapType } from '../entity/S2Map';
-import { S2MapCategory } from '../entity/S2MapCategory';
+import { logger } from '../logger';
+import { spawnWaitExit, deepCopy } from '../helpers';
+import { S2Map } from '../entity/S2Map';
 
 export type MapTags = 'BLIZ'
     | 'TRIL'
@@ -399,8 +398,7 @@ export class MapDependencyError extends Error {
 }
 
 export class MapResolver {
-    protected depot = new BattleDepot('data/depot');
-    protected mapCategories: S2MapCategory[];
+    public readonly depot = new BattleDepot('data/depot');
 
     constructor(protected conn: orm.Connection) {
     }
@@ -443,114 +441,6 @@ export class MapResolver {
             await fs.unlink(fPath);
         }
         return JSON.parse(decodingProc.stdout) as MapHeaderDataRaw;
-    }
-
-    @retry({
-        retries: 2,
-        onFailedAttempt: err => {
-            logger.warn(`failed to init map header`, err);
-        },
-    })
-    async initializeMapHeader(mhead: S2MapHeader, isInitialVersion?: boolean) {
-        if (!this.mapCategories) {
-            this.mapCategories = await this.conn.getRepository(S2MapCategory).find();
-        }
-
-        logger.verbose(`resolving.. map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} hash=${mhead.headerHash}`);
-        const rcode = GameRegion[mhead.regionId];
-
-        const headerRawData = await this.getMapHeader(rcode, mhead.headerHash);
-
-        if (!mhead.uploadedAt) {
-            const s2mhResponse = await this.depot.retrieveHead(rcode, `${mhead.headerHash}.s2mh`);
-            mhead.uploadedAt = new Date(s2mhResponse.headers['last-modified']);
-        }
-        if (!mhead.archiveSize) {
-            const s2maResponse = await this.depot.retrieveHead(rcode, `${headerRawData.archiveHandle.hash}.${headerRawData.archiveHandle.type}`);
-            if (s2maResponse.headers['content-length']) {
-                mhead.archiveSize = Number(s2maResponse.headers['content-length']);
-            }
-            else {
-                // most likely means it's invalid archive, such as:
-                // http://us.depot.battle.net:1119/02374236dc17df4e4e0ee7dd85662c2dca06a666795cec665ef37fad9187d593.s2ma
-                mhead.archiveSize = null;
-            }
-        }
-        mhead.archiveHash = headerRawData.archiveHandle.hash;
-
-        const mainLocaleTable = headerRawData.workingSet.localeTable.find(x => x.locale === GameLocale.enUS) ?? headerRawData.workingSet.localeTable[0];
-        const localizationData = await this.getMapLocalization(rcode, mainLocaleTable.stringTable[0].hash, true);
-        const mapHeader = reprocessMapHeader(headerRawData, localizationData);
-        const mapIcon = (
-            mapHeader.arcadeInfo?.mapIcon ??
-            mapHeader.workingSet.thumbnail ??
-            mapHeader.workingSet.bigMap ??
-            null
-        );
-
-        let map = await this.conn.getRepository(S2Map).findOne({
-            relations: ['currentVersion', 'initialVersion'],
-            where: { regionId: mhead.regionId, bnetId: mhead.bnetId },
-        });
-        if (!map) {
-            map = new S2Map();
-            map.regionId = mhead.regionId;
-            map.bnetId = mhead.bnetId;
-        }
-
-        let updatedMap = false;
-        if (
-            !map.currentVersion ||
-            (mhead.majorVersion > map.currentVersion.majorVersion) ||
-            (mhead.majorVersion === map.currentVersion.majorVersion && mhead.minorVersion >= map.currentVersion.minorVersion)
-        ) {
-            const mainCategory = this.mapCategories.find(x => x.id === mapHeader.variants[mapHeader.defaultVariantIndex].categoryId);
-            if (mapHeader.mapSize) {
-                if (mainCategory.isMelee) {
-                    map.type = S2MapType.MeleeMap;
-                }
-                else {
-                    map.type = S2MapType.ArcadeMap;
-                }
-            }
-            else if (mhead.isExtensionMod) {
-                map.type = S2MapType.ExtensionMod;
-            }
-            else {
-                map.type = S2MapType.DependencyMod;
-            }
-            map.name = mapHeader.workingSet.name;
-            map.description = mapHeader.workingSet.description;
-            map.website = mapHeader.arcadeInfo?.website;
-            map.mainCategoryId = mainCategory.id;
-            map.maxPlayers = mapHeader.workingSet.maxPlayers;
-            map.iconHash = mapIcon?.hash ?? null;
-            map.mainLocale = mainLocaleTable.locale;
-            map.mainLocaleHash = mainLocaleTable.stringTable[0].hash;
-            map.updatedAt = mhead.uploadedAt;
-            map.currentVersion = mhead;
-            updatedMap = true;
-        }
-
-        if (isInitialVersion && !map.initialVersion) {
-            map.initialVersion = mhead;
-            map.publishedAt = mhead.uploadedAt;
-            updatedMap = true;
-        }
-
-        try {
-            await this.conn.transaction(async em => {
-                await em.getRepository(S2MapHeader).save(mhead, { transaction: false });
-                if (updatedMap) {
-                    await em.getRepository(S2Map).save(map, { transaction: false });
-                }
-            });
-        }
-        catch (err) {
-            throwErrIfNotDuplicateEntry(err);
-        }
-
-        return mapHeader;
     }
 
     async resolveMapDependencies(regionId: number, bnetId: number, version: number = 0) {

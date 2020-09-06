@@ -52,6 +52,7 @@ export class RunnerFeedCtrl {
                 flags: 'r+',
                 start: offset,
                 autoClose: true,
+                highWaterMark: 128 * 1024,
             });
         }
         else {
@@ -60,6 +61,7 @@ export class RunnerFeedCtrl {
                 encoding: 'utf8',
                 flags: 'w',
                 autoClose: true,
+                highWaterMark: 128 * 1024,
             });
         }
     }

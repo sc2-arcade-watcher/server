@@ -138,6 +138,26 @@ export function spawnWaitExit<T extends childProc.ChildProcess>(proc: T, opts: S
     });
 }
 
+export function setupProcessTerminator(handler: () => void) {
+    function terminationProxy(sig: NodeJS.Signals) {
+        logger.info(`${sig} received`);
+        handler();
+        process.once('SIGINT', function () {
+            logger.warn(`${sig} received for the second time, forcing shutdown..`);
+            process.exit(1);
+        });
+    }
+
+    process.once('SIGTERM', terminationProxy);
+    process.once('SIGINT', terminationProxy);
+}
+
+export async function systemdNotifyReady() {
+    logger.verbose(`systemd-notify call`);
+    const r = await execAsync('systemd-notify --ready');
+    logger.debug(`systemd-notify result`, r);
+}
+
 export type Partial<T> = { [P in keyof T]?: T[P] };
 
 export function retry(options?: pRetry.Options) {

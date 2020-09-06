@@ -39,6 +39,7 @@ export class S2Profile {
     @Column({
         type: 'varchar',
         length: 12,
+        nullable: true,
     })
     @Index()
     name: string;
@@ -46,6 +47,12 @@ export class S2Profile {
     @Column({
         type: 'mediumint',
         unsigned: true,
+        nullable: true,
     })
     discriminator: number;
+
+    @Column({
+        default: false,
+    })
+    deleted: boolean;
 }

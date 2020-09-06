@@ -24,6 +24,14 @@ export enum GameLocale {
     ptBR = 'ptBR',
 }
 
+export interface PlayerProfile {
+    regionId: number;
+    realmId: number;
+    profileId: number;
+    name: string;
+    discriminator: number;
+}
+
 export function battleMapLink(regionId: number, mapId: number) {
     return `battlenet:://starcraft/map/${regionId}/${mapId}`;
 }

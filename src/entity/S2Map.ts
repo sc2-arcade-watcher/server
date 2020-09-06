@@ -3,6 +3,7 @@ import { S2Region } from './S2Region';
 import { GameLocale } from '../common';
 import { S2MapHeader } from './S2MapHeader';
 import { S2MapCategory } from './S2MapCategory';
+import { S2Profile } from './S2Profile';
 
 export enum S2MapType {
     MeleeMap = 'melee_map',
@@ -34,6 +35,13 @@ export class S2Map {
         unsigned: true,
     })
     bnetId: number;
+
+    @ManyToOne(type => S2Profile, {
+        onDelete: 'RESTRICT',
+        onUpdate: 'RESTRICT',
+    })
+    @Index('author_idx')
+    author: S2Profile;
 
     @Column({
         type: 'enum',

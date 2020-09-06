@@ -6,9 +6,9 @@ import { BattleDepot, convertImage, NestedHashDir } from '../depot';
 import { buildStatsForPeriod } from '../task/statsBuilder';
 import { S2StatsPeriodKind } from '../entity/S2StatsPeriod';
 import { MapResolver, reprocessMapHeader } from '../task/mapResolver';
-import { S2MapHeader } from '../entity/S2MapHeader';
 import { S2Map } from '../entity/S2Map';
 import { logger } from '../logger';
+import { MapIndexer } from '../server/mapIndexer';
 
 program.command('depot-test')
     .action(async () => {
@@ -52,7 +52,8 @@ program.command('map:update-maps [offset]')
     .option<Number>('--concurrency [number]', 'concurrency', (value, previous) => Number(value), 5)
     .action(async function (offset, cmd: program.Command) {
         const conn = await orm.createConnection();
-        const mpresolver = new MapResolver(conn);
+        const mIndexer = new MapIndexer(conn);
+        await mIndexer.load();
         const list = await conn.getRepository(S2Map).createQueryBuilder('map')
             .select('map.id', 'id')
             .innerJoin('map.currentVersion', 'mapHead')
@@ -64,29 +65,13 @@ program.command('map:update-maps [offset]')
             const map = await conn.getRepository(S2Map).findOneOrFail(mapId, {
                 relations: ['currentVersion'],
             });
-            await mpresolver.initializeMapHeader(map.currentVersion);
+            await mIndexer.updateMapDataFromHeader(
+                map,
+                map.currentVersion
+            );
             logger.verbose(`Completed ${map.id} from ${list[list.length - 1].id}`);
         }, {
             concurrency: cmd.concurrency,
-        });
-        await conn.close();
-    })
-;
-
-program.command('map:update-headers')
-    .action(async () => {
-        const conn = await orm.createConnection();
-        const mpresolver = new MapResolver(conn);
-        const list = await conn.getRepository(S2MapHeader).find({
-            order: {
-                regionId: 'ASC',
-                bnetId: 'ASC',
-            },
-        });
-        await pMap(list, async (mhead) => {
-            await mpresolver.initializeMapHeader(mhead);
-        }, {
-            concurrency: 5,
         });
         await conn.close();
     })
