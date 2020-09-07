@@ -151,6 +151,12 @@ export class MapIndexer {
         }
     }
 
+    @retry({
+        retries: 2,
+        onFailedAttempt: err => {
+            logger.warn(`failed to process map discover`, err);
+        },
+    })
     protected async processMapDiscover(msg: MessageMapDiscoverResult) {
         const dateQuery = new Date(msg.queriedAt * 1000);
         logger.verbose(`processing map discover ${msg.regionId}/${msg.mapId} author=${msg.author.name}`);
@@ -193,6 +199,12 @@ export class MapIndexer {
             mtrack.bnetId = currentRevision.mhead.bnetId;
             mtrack.lastCheckedAt = dateQuery;
             mtrack.lastSeenAvailableAt = dateQuery;
+        }
+        else if (dateQuery > mtrack.lastCheckedAt) {
+            mtrack.lastCheckedAt = dateQuery;
+            mtrack.lastSeenAvailableAt = dateQuery;
+            mtrack.firstSeenUnvailableAt = null;
+            mtrack.unavailabilityCounter = 0;
         }
 
         if (
@@ -240,27 +252,19 @@ export class MapIndexer {
             updatedMap = true;
         }
 
-        try {
-            await this.conn.transaction(async em => {
-                if (!em.getRepository(S2MapHeader).hasId(initialRevision.mhead)) {
-                    await em.getRepository(S2MapHeader).insert(initialRevision.mhead);
-                }
-                if (!em.getRepository(S2MapHeader).hasId(currentRevision.mhead)) {
-                    await em.getRepository(S2MapHeader).insert(currentRevision.mhead);
-                }
-                if (!em.getRepository(S2Profile).hasId(map.author)) {
-                    await em.getRepository(S2Profile).insert(map.author);
-                }
-                if (updatedMap) {
-                    await em.getRepository(S2Map).save(map, { transaction: false });
-                    if (!em.getRepository(S2MapTracking).hasId(mtrack)) {
-                        await em.getRepository(S2MapTracking).insert(mtrack);
-                    }
-                }
-            });
+        if (!this.conn.getRepository(S2MapHeader).hasId(initialRevision.mhead)) {
+            await this.conn.getRepository(S2MapHeader).insert(initialRevision.mhead);
         }
-        catch (err) {
-            throwErrIfNotDuplicateEntry(err);
+        if (!this.conn.getRepository(S2MapHeader).hasId(currentRevision.mhead)) {
+            await this.conn.getRepository(S2MapHeader).insert(currentRevision.mhead);
+        }
+        if (!this.conn.getRepository(S2Profile).hasId(map.author)) {
+            await this.conn.getRepository(S2Profile).insert(map.author);
+        }
+
+        if (updatedMap) {
+            await this.conn.getRepository(S2Map).save(map, { transaction: false });
+            await this.conn.getRepository(S2MapTracking).save(mtrack, { transaction: false });
         }
     }
 
@@ -331,6 +335,8 @@ export class MapIndexer {
                     break;
                 }
             }
+        }, {
+            priority: msg.$id === MessageKind.MapDiscoverResult ? 10 : 5,
         });
     }
 }
