@@ -274,6 +274,10 @@ export class MapIndexer {
                 throwErrIfNotDuplicateEntry(err);
             }
         }
+        else {
+            logger.debug(`skpping map revision ${msg.regionId}/${msg.mapId},${msg.mapVersion}`);
+            return;
+        }
 
         const map = await this.conn.getRepository(S2Map).findOne({
             relations: [
