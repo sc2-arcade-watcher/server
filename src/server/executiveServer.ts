@@ -485,8 +485,16 @@ export class ExecutiveServer {
             mtrack.bnetId = msg.mapId;
         }
 
-        if (mtrack && mtrack.lastCheckedAt > dateQuery) {
+        if (mtrack.lastCheckedAt > dateQuery) {
             logger.debug(`received report outdated, map=${msg.regionId}/${msg.mapId} date=${dateQuery} lastCheckedAt=${mtrack.lastCheckedAt}`);
+            cnRunner.acknowledgeMessage(msg);
+            return;
+        }
+
+        // increase unavailabilityCounter only for reports which are at least newer by one day
+        if (mtrack.unavailabilityCounter > 0 && (dateQuery.getTime() - mtrack.lastCheckedAt.getTime()) < 24 * 3600 * 1000) {
+            logger.debug(`received report irrelevant, map=${msg.regionId}/${msg.mapId} date=${dateQuery} lastCheckedAt=${mtrack.lastCheckedAt}`);
+            cnRunner.acknowledgeMessage(msg);
             return;
         }
 
