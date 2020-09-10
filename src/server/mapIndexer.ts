@@ -164,7 +164,7 @@ export class MapIndexer {
         const initialRevision = await this.prepareMapRevision(msg.regionId, msg.mapId, msg.initialRevision);
         const currentRevision = (
             msg.initialRevision.mapVersion === msg.latestRevision.mapVersion ?
-            initialRevision : await this.prepareMapRevision(msg.regionId, msg.mapId, msg.initialRevision)
+            initialRevision : await this.prepareMapRevision(msg.regionId, msg.mapId, msg.latestRevision)
         );
 
         let map = await this.conn.getRepository(S2Map).findOne({
