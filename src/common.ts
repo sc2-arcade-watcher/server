@@ -33,6 +33,18 @@ export interface PlayerProfile {
     discriminator: number;
 }
 
+export function regionCode(regionCodeOrId: GameRegion | string) {
+    let regionId: number;
+    if (typeof regionCodeOrId === 'string') {
+        regionId = (GameRegion as any)[regionCodeOrId.toUpperCase()];
+        if (regionId === void 0) return void 0;
+    }
+    else {
+        regionId = regionCodeOrId;
+    }
+    return GameRegion[regionId] as keyof typeof GameRegion;
+}
+
 export function battleMapLink(regionId: number, mapId: number) {
     return `battlenet:://starcraft/map/${regionId}/${mapId}`;
 }

@@ -1,9 +1,12 @@
+import * as dotenv from 'dotenv';
 import * as util from 'util';
 import * as orm from 'typeorm';
 import * as program from 'commander';
 import { BattleDepot, convertImage, NestedHashDir } from '../depot';
 import { buildStatsForPeriod } from '../task/statsBuilder';
 import { S2StatsPeriodKind } from '../entity/S2StatsPeriod';
+
+dotenv.config();
 
 program.command('depot-test')
     .action(async () => {
@@ -27,6 +30,7 @@ program.command('stats')
 ;
 
 import '../cmd/map';
+import '../cmd/battle';
 
 process.on('unhandledRejection', e => { throw e; });
 program.parse(process.argv);

@@ -25,23 +25,7 @@ const server = fastify({
     logger: false,
     trustProxy: ['127.0.0.1'],
 });
-const webapiPort = Number(process.env.WEBAPI_PORT ?? 8090);
-
-function stripEntityIds(data: any) {
-    // TODO: remove
-    return data;
-    if (typeof data === 'object' && data !== null) {
-        if (typeof data.id === 'number') {
-            delete data.id;
-        }
-        for (const k in data) {
-            if (typeof data[k] === 'object') {
-                data[k] = stripEntityIds(data[k]);
-            }
-        }
-    }
-    return data;
-}
+const webapiPort = Number(process.env.STARC_WEBAPI_PORT ?? 8090);
 
 server.register(fp(async (server, opts) => {
     const conn = await orm.createConnection();
@@ -51,7 +35,6 @@ server.register(fp(async (server, opts) => {
 
 server.addHook('onClose', async (instance, done) => {
     await instance.conn.close();
-    done();
 });
 
 declare module 'fastify' {
@@ -65,8 +48,6 @@ declare module 'fastify' {
     }
 }
 
-
-
 server.register(fastifyStatic, {
     root: path.resolve('data/public'),
     serve: false,
@@ -79,10 +60,11 @@ server.register(fastifyRateLimit, {
 });
 
 server.register(fastifyCors, {
-    origin: process.env.ENV === 'dev' ? '*' : `https://sc2arcade.talv.space`,
+    origin: process.env.ENV === 'dev' ? '*' : process.env.STARC_WEBAPI_HOSTNAME_WHITELIST.split(' ').map(x => `https://${x}`),
 });
 
 server.register(require('../api/cursorPagination').default);
+server.register(require('../api/authManager').default);
 
 // @ts-ignore
 server.register(fastifyPagination, {
@@ -128,6 +110,11 @@ server.addHook('onResponse', (req, reply, done) => {
     done();
 });
 
+server.addHook('onError', (req, reply, err, done) => {
+    logger.warn(`REQ #${req.id} ERR:`, err);
+    done();
+});
+
 server.register(fastifyOAS, <fastifyOAS.FastifyOASOptions>{
     routePrefix: '/docs/api',
     exposeRoute: true,
@@ -162,6 +149,10 @@ server.register(fastifyOAS, <fastifyOAS.FastifyOASOptions>{
         ],
     }
 });
+
+server.register(require('../api/routes/account/auth/bnet').default);
+server.register(require('../api/routes/account/info').default);
+server.register(require('../api/routes/account/logout').default);
 
 server.register(require('../api/routes/lobby/openGames').default);
 server.register(require('../api/routes/lobby/active').default);

@@ -305,7 +305,7 @@ export class ExecutiveServer {
             return;
         }
         else if (typeof message !== 'string') {
-            logger.warning(`unknown message datatype`, typeof message, message);
+            logger.warn(`unknown message datatype`, typeof message, message);
             return;
         }
 

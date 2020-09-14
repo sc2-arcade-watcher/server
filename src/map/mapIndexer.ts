@@ -308,8 +308,8 @@ export class MapIndexer {
                 else {
                     authorProfile.name = msg.author.name;
                     authorProfile.discriminator = msg.author.discriminator;
+                    authorProfile.nameUpdatedAt = dateQuery;
                 }
-                authorProfile.updatedAt = dateQuery;
             }
             map.author = authorProfile;
             updatedMap = true;

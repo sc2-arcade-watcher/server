@@ -24,6 +24,7 @@ export default fp(async (server, opts, next) => {
             .createQueryBuilder('map')
             .innerJoinAndSelect('map.currentVersion', 'mapHead')
             .innerJoinAndSelect('map.mainCategory', 'mainCat')
+            .leftJoinAndSelect('map.author', 'author')
             .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId', {
                 regionId: request.params.regionId,
                 bnetId: request.params.mapId,
@@ -35,6 +36,7 @@ export default fp(async (server, opts, next) => {
             return reply.type('application/json').code(404).send();
         }
         if (map.currentVersion.isPrivate) {
+            map.author = null;
             map.mainLocaleHash = null;
             map.currentVersion.headerHash = null;
             map.currentVersion.archiveHash = null;

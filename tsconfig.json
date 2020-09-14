@@ -8,7 +8,8 @@
             "es2017",
             "es2018",
             "es2019",
-            "esnext.asynciterable"
+            "esnext.asynciterable",
+            "DOM", // due to axios-case-converter
         ],
         "preserveConstEnums": true,
         "allowUnreachableCode": true,

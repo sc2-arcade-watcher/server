@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneToMany } from 'typeorm';
 import { S2Region } from './S2Region';
+import { BnAccount } from './BnAccount';
 
 @Entity()
 @Unique('bnet_id', ['regionId', 'realmId', 'profileId'])
@@ -10,8 +11,7 @@ export class S2Profile {
     @Column({
         nullable: true,
     })
-    @Index()
-    updatedAt: Date;
+    nameUpdatedAt: Date;
 
     @ManyToOne(type => S2Region, {
         nullable: false,
@@ -55,4 +55,17 @@ export class S2Profile {
         default: false,
     })
     deleted: boolean;
+
+    @ManyToOne(type => BnAccount, account => account.profiles, {
+        nullable: true,
+        onDelete: 'RESTRICT',
+        onUpdate: 'RESTRICT',
+    })
+    @Index('account_idx')
+    account: BnAccount;
+
+    @Column({
+        nullable: true,
+    })
+    avatarUrl: string | null;
 }

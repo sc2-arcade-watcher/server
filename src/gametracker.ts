@@ -33,11 +33,6 @@ function parsePlayerProfile(s: string): PlayerProfile {
     };
 }
 
-export function toPlayerHandle(profile: LobbyPvExProfile) {
-    return `${profile.regionId}-S2-${profile.realmId}-${profile.profileId}`;
-}
-
-
 interface PreviewRequestStatus {
     lobbyId: number;
     reqEntry: SignalLobbyRequest;
