@@ -69,8 +69,8 @@ interface TrackedLobbyHeadUpdate extends DataLobbyUpdate {
 interface TrackedLobbyPreview {
     lobbyId: number;
     requstedAt: Date;
-    basicPreview?: DataLobbyPreview;
-    extendedPreview?: DataLobbyPvEx;
+    basicPreview?: SignalLobbyPreview;
+    extendedPreview?: SignalLobbyPvEx;
 }
 
 interface TrackedLobbyListCount {
@@ -720,8 +720,8 @@ export class GameLobbyDesc {
     slots?: GameLobbySlotDesc[];
     slotsPreviewUpdatedAt?: Date;
     basicPreviewUpdatedAt?: Date;
-    pendingBasicPreview?: DataLobbyPreview;
-    extendedPreview?: DataLobbyPvEx;
+    pendingBasicPreview?: SignalLobbyPreview;
+    extendedPreview?: SignalLobbyPvEx;
 
     constructor(lobbyData: TrackedLobbyCreate) {
         this.initInfo = Object.assign({}, lobbyData);
@@ -782,16 +782,26 @@ export class GameLobbyDesc {
     }
 
     close(closeData: TrackedLobbyRemove) {
-        if (this.pendingBasicPreview) {
+        // make sure the basic preview is actually newer before falling back to it
+        if (this.pendingBasicPreview && (
+            !this.slotsPreviewUpdatedAt || this.basicPreviewUpdatedAt > this.slotsPreviewUpdatedAt
+        )) {
             const pendingSlots = gameLobbySlotsFromBasicPreview(this.pendingBasicPreview);
             if (this.extendedPreview) {
                 const slBasic = serializeBasicPreview(this.pendingBasicPreview);
                 const slExtended = serializeExtendedPreview(this.extendedPreview);
-                if (slBasic.length === 16 && slExtended.length === 15) {
+
+                if (
+                    this.extendedPreview.$version < 3 &&
+                    (slBasic.length === 16 && slExtended.length === 15)
+                ) {
+                    // supress the warning:
                     // it's possible for 16 slots to be unlocked, but 15 at most is usable
+                    // however this was fixed in LBPEv3 - it now includes all 16 slots
+                    // moreover sometimes the slot at last index would still be used in place of a slot with lower index
                 }
                 else if (slBasic.length !== slExtended.length) {
-                    // ignore
+                    // log it but don't do anything - this doesn't necessarily means the data is incorrect
                     logger.verbose(`extended slot count missmatch`, slBasic, slExtended);
                 }
                 else if (slBasic.join('') !== slExtended.join('')) {
