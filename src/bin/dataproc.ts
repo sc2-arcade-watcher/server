@@ -47,10 +47,13 @@ class DataProc {
         })).map(x => [`${x.name}-${x.region.code}`, x]));
 
         for (const [name, item] of this.feedProviders) {
-            const feed = new JournalFeed(`data/lbstream/${name}`, {
-                session: item.position.resumingFile,
-                // offset: item.position.resumingOffset,
-                offset: 0,
+            const lbfeedDir = process.env['STARC_LBFEED_DIR'] || 'data/lbstream';
+            const feed = new JournalFeed(`${lbfeedDir}/${name}`, {
+                initCursor: {
+                    session: item.position.resumingFile,
+                    // offset: item.position.resumingOffset,
+                    offset: 0,
+                },
             });
             this.journalProc.addFeedSource(feed);
         }

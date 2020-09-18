@@ -114,12 +114,14 @@ export class JournalReader {
     protected lblsCursor: JournalFeedCursor;
     protected timezoneOffset = 0;
 
+    protected _onFeedEnd = new TypedEvent<JournalFeed>();
     protected _onLobbyCreate = new TypedEvent<TrackedLobbyCreate>();
     protected _onLobbyRemove = new TypedEvent<TrackedLobbyRemove>();
     protected _onLobbyUpdate = new TypedEvent<TrackedLobbyHeadUpdate>();
     protected _onLobbyPreview = new TypedEvent<TrackedLobbyPreview>();
     protected _onLobbyListCount = new TypedEvent<TrackedLobbyListCount>();
 
+    readonly onFeedEnd = this._onFeedEnd.on.bind(this._onFeedEnd);
     readonly onLobbyCreate = this._onLobbyCreate.on.bind(this._onLobbyCreate);
     readonly onLobbyRemove = this._onLobbyRemove.on.bind(this._onLobbyRemove);
     readonly onLobbyUpdate = this._onLobbyUpdate.on.bind(this._onLobbyUpdate);
@@ -134,7 +136,7 @@ export class JournalReader {
     }
 
     async close() {
-        await this.jfeed.close();
+        this.jfeed.close();
     }
 
     async peek() {
@@ -144,8 +146,11 @@ export class JournalReader {
         else {
             this.prevCursorPos = Object.assign({}, this.jfeed.cursor);
             const tmp = await this.jfeed.read();
-            if (tmp) {
+            if (typeof tmp === 'string') {
                 this.nextSignal = this.decodeSignal(tmp);
+            }
+            else if (tmp === false) {
+                this._onFeedEnd.emit(this.jfeed);
             }
             return this.nextSignal;
         }
@@ -153,7 +158,7 @@ export class JournalReader {
 
     async next() {
         if (!this.nextSignal) {
-            this.peek();
+            await this.peek();
         }
         if (this.nextSignal) {
             this.processSignal(this.nextSignal);
@@ -998,6 +1003,11 @@ export class JournalMultiProcessor {
         });
     }
 
+    protected handleFeedEnd(jreader: JournalReader, evFeed: JournalFeed) {
+        this.gtracks.delete(evFeed.name);
+        logger.info(`onFeedEnd: ${evFeed.name} (${this.gtracks.size})`);
+    }
+
     async close() {
         if (this.closed) {
             logger.warn(`already closed`);
@@ -1015,34 +1025,49 @@ export class JournalMultiProcessor {
         jreader.onLobbyUpdate(this.handleLobbyUpdate.bind(this, jreader));
         jreader.onLobbyPreview(this.handleLobbyPreview.bind(this, jreader));
         jreader.onLobbyListCount(this.handleLobbyListCount.bind(this, jreader));
+        jreader.onFeedEnd(this.handleFeedEnd.bind(this, jreader));
     }
 
     async proceed(timeout: number = -1): Promise<JournalEvent> {
         let breakloop = false;
         let tim: NodeJS.Timer;
         if (timeout >= 0) {
-            tim = setTimeout(() => { breakloop = true; }, timeout);
+            tim = setTimeout(() => {
+                breakloop = true;
+                tim = void 0;
+            }, timeout);
         }
 
         while (!breakloop) {
             while (this.eventQueue.length) {
                 return this.eventQueue.shift();
             }
-            if (this.closed) return;
+            if (this.closed || !this.gtracks.size) return;
 
-            const result = (await Promise.all(Array.from(this.gtracks.entries()).map(async v => {
-                return {key: v[0], val: await v[1].peek()};
-            }))).filter(v => v.val).sort((a, b) => a.val.$timestamp - b.val.$timestamp);
+            const activeGtracks = Array.from(this.gtracks.values());
+            let result = (await Promise.all(activeGtracks.map(async v => {
+                return [v, await v.peek()] as [JournalReader, SignalDesc];
+            }))).filter(v => v[1]);
+            if (result.length > 1) {
+                result = result.sort((a, b) => a[1].$timestamp - b[1].$timestamp);
+            }
+
             if (!result.length) {
                 await sleep(10);
                 continue;
             }
-            else if (tim) {
-                clearTimeout(tim);
+            if (tim) {
+                tim.refresh();
             }
 
-            await this.gtracks.get(result[0].key).next();
-            this.currentDate = this.gtracks.get(result[0].key).dateFromEvent(result[0].val);
+            await result[0][0].next();
+            this.currentDate = result[0][0].dateFromEvent(result[0][1]);
+        }
+
+        if (tim) {
+            clearTimeout(tim);
+            tim = void 0;
+            // TODO: throw timeout exception?
         }
 
         return;

@@ -1,13 +1,21 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { spawn, ChildProcessByStdio } from 'child_process';
-import { sleep, sleepUnless, spawnWaitExit } from '../helpers';
+import { spawnWaitExit } from '../helpers';
 import { Readable, Writable } from 'stream';
 import { logger } from '../logger';
 
 export interface JournalFeedCursor {
     session: number;
     offset: number;
+}
+
+export interface JournalFeedOptios {
+    initCursor?: JournalFeedCursor;
+    // TODO:implement endCursor
+    // endCursor?: JournalFeedCursor;
+    timeout?: number;
+    follow?: boolean;
 }
 
 export class JournalFeed {
@@ -24,16 +32,17 @@ export class JournalFeed {
     private waitingForData = false;
     private closed = false;
     private firstRead = true;
+    public readonly options: JournalFeedOptios;
 
-    constructor(
-        public baseDir: string,
-        public readonly initCursor: JournalFeedCursor = { session: 0, offset: 0 },
-        public readonly endCursor?: JournalFeedCursor,
-    ) {
+    constructor(public baseDir: string, options: JournalFeedOptios = {}) {
         this.cursor = {
-            session: initCursor.session,
-            offset: initCursor.offset,
+            session: options.initCursor?.session ?? 0,
+            offset: options.initCursor?.offset ?? 0,
         };
+        this.options = Object.assign({
+            timeout: -1,
+            follow: true,
+        } as JournalFeedOptios, options);
     }
 
     get name(): string {
@@ -48,7 +57,7 @@ export class JournalFeed {
         return path.join(this.baseDir, this.cursor.session.toString());
     }
 
-    async close() {
+    close() {
         if (this.closed) return;
         logger.info(`Closing stream reader of ${this.name}, cursor=${this.currCursor}`);
         this.closed = true;
@@ -94,7 +103,7 @@ export class JournalFeed {
     protected async setupReadstream() {
         const sessName = this.cursor.session;
 
-        if (!this.isCurrSessionLast()) {
+        if (!this.isCurrSessionLast() || !this.options.follow) {
             this.rs = fs.createReadStream(this.currFilename, {
                 encoding: null,
                 start: this.cursor.offset,
@@ -242,7 +251,13 @@ export class JournalFeed {
         this.chunkBuff = void 0;
     }
 
-    async read(timeout: number = 500) {
+    /**
+     * - returns `string` for a succesfull read
+     * - returns `undefined` when reached timeout
+     * - returns `false` when reached an end and follow mode was disabled
+     * @param timeout
+     */
+    async read(timeout: number = 500): Promise<string | false | undefined> {
         if (this.closed) {
             logger.warn(`attempting to read from closed feed, src=${this.name}`);
             return;
@@ -250,11 +265,11 @@ export class JournalFeed {
 
         if (
             this.firstRead &&
-            this.cursor.session === this.initCursor.session &&
-            this.cursor.offset === this.initCursor.offset
+            this.cursor.session === this.options.initCursor.session &&
+            this.cursor.offset === this.options.initCursor.offset
         ) {
             this.firstRead = false;
-            if (this.initCursor.offset !== 0) {
+            if (this.options.initCursor.offset !== 0) {
                 const headProc = spawn('head', [
                     '--lines',
                     '1',
@@ -266,7 +281,7 @@ export class JournalFeed {
                 }
                 return headResult.stdout.trimRight();
             }
-            else if (this.initCursor.session === 0) {
+            else if (this.options.initCursor.session === 0) {
                 await this.refreshFileList();
                 if (!this.sessionFileList.length) {
                     logger.warn(`feed source is empty, src=${this.name}`);
@@ -288,6 +303,14 @@ export class JournalFeed {
                             `offset past the filesize, src=${this.name} cursor=${this.currCursor} size=${fSize}`
                         );
                     }
+                }
+
+                if (!this.options.follow && (
+                    this.cursor.session !== this.options.initCursor.session || this.cursor.offset === fSize
+                )) {
+                    logger.verbose(`feed src=${this.name} session end, not following further`);
+                    this.close();
+                    return false;
                 }
 
                 logger.info(`opening src=${this.name} cursor=${this.currCursor}`);
@@ -334,20 +357,18 @@ export class JournalFeed {
                     const fSize = (await fs.stat(this.currFilename)).size;
                     if (this.tailProc && fSize === this.cursor.offset) {
                         this.waitingForData = true;
-                        logger.debug(`nothing to read: src=${this.name} cursor=${this.currCursor} fsize=${fSize}`);
+                        // logger.debug(`nothing to read: src=${this.name} cursor=${this.currCursor} fsize=${fSize}`);
                         return;
                     }
                     else if (!this.tailProc && fSize === this.cursor.offset) {
                         logger.debug(`reached EOF: src=${this.name} cursor=${this.currCursor} fsize=${fSize}`);
-                        this.closeCurrentStream();
-                        this.cursor.session = this.sessionFileList[this.sessionFileList.findIndex(v => v === this.cursor.session) + 1];
-                        this.cursor.offset = 0;
-                        continue;
                     }
                     else {
                         ++readTimeoutCounter;
-                        logger.error(`Feed read timeout, c=${readTimeoutCounter} src=${this.name} cursor=${this.currCursor} fsize=${fSize} tailProc=${Boolean(this.tailProc)}`);
-                        if (readTimeoutCounter > 10) {
+                        if (readTimeoutCounter >= 2) {
+                            logger.warn(`Feed read timeout, c=${readTimeoutCounter} src=${this.name} cursor=${this.currCursor} fsize=${fSize} tailProc=${Boolean(this.tailProc)}`);
+                        }
+                        else if (readTimeoutCounter > 10) {
                             throw new Error(`Feed read attempts exceeded, src=${this.name} cursor=${this.currCursor}`);
                         }
                         continue;

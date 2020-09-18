@@ -8,8 +8,7 @@
     "scripts": {
         "clean": "rm -rf out/*",
         "build": "rm -rf out/* && tsc -p ./",
-        "build:watch": "rm -rf out/* && tsc -watch -p ./",
-        "test": "jest --env=node --colors --coverage test"
+        "build:watch": "rm -rf out/* && tsc -watch -p ./"
     },
     "dependencies": {
         "axios": "^0.19.2",

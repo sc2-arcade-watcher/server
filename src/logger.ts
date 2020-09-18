@@ -2,6 +2,7 @@ import * as util from 'util';
 import { createLogger, format, transports } from 'winston';
 import * as DailyRotateFile from 'winston-daily-rotate-file';
 
+const colorizer = format.colorize();
 export const logger = createLogger({
     format: format.combine(
         format.timestamp({
@@ -13,8 +14,8 @@ export const logger = createLogger({
         format.printf(info => {
             const out: string[] = [];
             out.push(
-                format.colorize().colorize('debug', `${info.time} - `) +
-                format.colorize().colorize(info.level, `${info.level.substr(0, 4)}:`) +
+                colorizer.colorize('debug', `${info.time} - `) +
+                colorizer.colorize(info.level, `${info.level.substr(0, 4)}:`) +
                 ` ${info.message}`,
             );
 
