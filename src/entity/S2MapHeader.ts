@@ -70,4 +70,8 @@ export class S2MapHeader {
     uploadedAt: Date;
 
     map?: S2Map;
+
+    get linkVer() {
+        return `${this.regionId}/${this.bnetId} v${this.majorVersion}.${this.minorVersion}`;
+    }
 }

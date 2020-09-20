@@ -1,7 +1,7 @@
 import * as orm from 'typeorm';
 import PQueue from 'p-queue';
 import { logger } from '../logger';
-import { retry, throwErrIfNotDuplicateEntry, sleep } from '../helpers';
+import { retry, sleep, isAxiosError } from '../helpers';
 import { S2MapHeader } from '../entity/S2MapHeader';
 import { MapResolver, reprocessMapHeader, MapHeaderDataRaw, AttributeValue } from './mapResolver';
 import { MessageKind, MessageMapRevisionResult, MessageMapDiscoverResult, MapVersionInfo } from '../server/executiveServer';
@@ -19,6 +19,7 @@ export class MapIndexer {
         concurrency: Number(process.env.STARC_DHOST_MR_QUEUE_LIMIT) || 8,
     });
     protected mapCategories: S2MapCategory[];
+    protected currentlyProcessing = new Set<string>();
 
     constructor(public conn: orm.Connection) {
     }
@@ -42,7 +43,7 @@ export class MapIndexer {
         },
     })
     protected async populateMapHeader(mhead: S2MapHeader) {
-        logger.verbose(`resolving header.. map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} hash=${mhead.headerHash}`);
+        logger.verbose(`resolving header.. map=${mhead.linkVer} hash=${mhead.headerHash}`);
         const rcode = GameRegion[mhead.regionId];
 
         const headerRawData = await this.resolver.getMapHeader(rcode, mhead.headerHash);
@@ -52,14 +53,28 @@ export class MapIndexer {
             mhead.uploadedAt = new Date(s2mhResponse.headers['last-modified']);
         }
         if (!mhead.archiveSize) {
-            const s2maResponse = await this.resolver.depot.retrieveHead(rcode, `${headerRawData.archiveHandle.hash}.${headerRawData.archiveHandle.type}`);
-            if (s2maResponse.headers['content-length']) {
-                mhead.archiveSize = Number(s2maResponse.headers['content-length']);
+            try {
+                const s2maResponse = await this.resolver.depot.retrieveHead(rcode, `${headerRawData.archiveHandle.hash}.${headerRawData.archiveHandle.type}`);
+                if (s2maResponse.headers['content-length']) {
+                    mhead.archiveSize = Number(s2maResponse.headers['content-length']);
+                }
+                else {
+                    // most likely means it's invalid archive, such as:
+                    // http://us.depot.battle.net:1119/02374236dc17df4e4e0ee7dd85662c2dca06a666795cec665ef37fad9187d593.s2ma
+                    mhead.archiveSize = null;
+                }
             }
-            else {
-                // most likely means it's invalid archive, such as:
-                // http://us.depot.battle.net:1119/02374236dc17df4e4e0ee7dd85662c2dca06a666795cec665ef37fad9187d593.s2ma
-                mhead.archiveSize = null;
+            catch (err) {
+                // CN depot, specificaly, might repeatedly return 503 for non cached s2ma and possibly other files (?)
+                // just give up in that case - it probably affects only old revisions of s2ma's
+                // example: http://cn.depot.battlenet.com.cn:1119/54c06a38ab2eb96811742cd0bf4107d9be7b58019ca21b73936338b4df378a7e.s2ma
+                if (isAxiosError(err) && err.response?.status === 503) {
+                    mhead.archiveSize = null;
+                    logger.verbose(`failed to obtain archiveSize of ${mhead.linkVer} due to 503`);
+                }
+                else {
+                    throw err;
+                }
             }
         }
         mhead.archiveHash = headerRawData.archiveHandle.hash;
@@ -90,7 +105,7 @@ export class MapIndexer {
             mhead.isExtensionMod = revision.isExtensionMod;
 
             const rawHeaderData = await this.populateMapHeader(mhead);
-            logger.verbose(`processed header map=${mhead.regionId}/${mhead.bnetId} v${mhead.majorVersion}.${mhead.minorVersion} name=${rawHeaderData.filename} uploadTime=${mhead.uploadedAt.toUTCString()}`);
+            logger.verbose(`processed header map=${mhead.linkVer} name=${rawHeaderData.filename} uploadTime=${mhead.uploadedAt.toUTCString()}`);
 
             return {
                 mhead,
@@ -104,28 +119,28 @@ export class MapIndexer {
     }
 
     async updateMapDataFromHeader(map: S2Map, mhead: S2MapHeader, rawHeaderData?: MapHeaderDataRaw, forceUpdate = false) {
-        const rcode = GameRegion[mhead.regionId];
-        if (!rawHeaderData) {
-            rawHeaderData = await this.resolver.getMapHeader(rcode, mhead.headerHash);
-        }
-        const mainLocaleTable = rawHeaderData.workingSet.localeTable.find(x => x.locale === GameLocale.enUS)
-            ?? rawHeaderData.workingSet.localeTable[0]
-        ;
-        const localizationData = await this.resolver.getMapLocalization(rcode, mainLocaleTable.stringTable[0].hash, true);
-        const mapHeader = reprocessMapHeader(rawHeaderData, localizationData);
-        const mapIcon = (
-            mapHeader.arcadeInfo?.mapIcon ??
-            mapHeader.workingSet.thumbnail ??
-            mapHeader.workingSet.bigMap ??
-            null
-        );
-
         if (
             !map.currentVersion ||
             (mhead.majorVersion > map.currentVersion.majorVersion) ||
-            (mhead.majorVersion === map.currentVersion.majorVersion && mhead.minorVersion >= map.currentVersion.minorVersion) ||
+            (mhead.majorVersion === map.currentVersion.majorVersion && mhead.minorVersion > map.currentVersion.minorVersion) ||
             forceUpdate
         ) {
+            const rcode = GameRegion[mhead.regionId];
+            if (!rawHeaderData) {
+                rawHeaderData = await this.resolver.getMapHeader(rcode, mhead.headerHash);
+            }
+            const mainLocaleTable = rawHeaderData.workingSet.localeTable.find(x => x.locale === GameLocale.enUS)
+                ?? rawHeaderData.workingSet.localeTable[0]
+            ;
+            const localizationData = await this.resolver.getMapLocalization(rcode, mainLocaleTable.stringTable[0].hash, true);
+            const mapHeader = reprocessMapHeader(rawHeaderData, localizationData);
+            const mapIcon = (
+                mapHeader.arcadeInfo?.mapIcon ??
+                mapHeader.workingSet.thumbnail ??
+                mapHeader.workingSet.bigMap ??
+                null
+            );
+
             const mainCategory = this.mapCategories.find(x => x.id === mapHeader.variants[mapHeader.defaultVariantIndex].categoryId);
             if (mapHeader.mapSize) {
                 if (mainCategory.isMelee) {
@@ -170,7 +185,11 @@ export class MapIndexer {
                     map.variants.push(mVariant);
                 }
             }
+
+            return true;
         }
+
+        return false;
     }
 
     @retry({
@@ -185,16 +204,42 @@ export class MapIndexer {
             }
         },
     })
-    async saveMap(map: S2Map) {
-        if (this.conn.getRepository(S2Map).hasId(map)) {
-            await this.conn.getRepository(S2MapVariant).delete({
-                mapId: map.id,
-            });
-            if (map.variants) {
-                await this.conn.getRepository(S2MapVariant).insert(map.variants);
+    async saveMap(map: S2Map, dateQuery?: Date) {
+        await this.conn.transaction(async tsManager => {
+            if (tsManager.getRepository(S2Map).hasId(map)) {
+                await tsManager.getRepository(S2MapVariant).delete({
+                    mapId: map.id,
+                });
             }
-        }
-        await this.conn.getRepository(S2Map).save(map, { transaction: false });
+            await tsManager.getRepository(S2Map).save(map, { transaction: false });
+            if (map.variants) {
+                await tsManager.getRepository(S2MapVariant).insert(map.variants);
+            }
+
+            if (dateQuery) {
+                let mtrack = await tsManager.getRepository(S2MapTracking).findOne({
+                    where: {
+                        regionId: map.regionId,
+                        bnetId: map.bnetId,
+                    },
+                });
+                if (!mtrack) {
+                    mtrack = new S2MapTracking();
+                    mtrack.regionId = map.regionId;
+                    mtrack.bnetId = map.bnetId;
+                    mtrack.lastCheckedAt = dateQuery;
+                    mtrack.lastSeenAvailableAt = dateQuery;
+                }
+                else if (dateQuery > mtrack.lastCheckedAt) {
+                    mtrack.lastCheckedAt = dateQuery;
+                    mtrack.lastSeenAvailableAt = dateQuery;
+                    mtrack.firstSeenUnvailableAt = null;
+                    mtrack.unavailabilityCounter = 0;
+                }
+
+                await tsManager.getRepository(S2MapTracking).save(mtrack, { transaction: false });
+            }
+        });
     }
 
     @retry({
@@ -233,35 +278,7 @@ export class MapIndexer {
             updatedMap = true;
         }
 
-        let mtrack = await this.conn.getRepository(S2MapTracking).findOne({
-            where: {
-                regionId: currentRevision.mhead.regionId,
-                bnetId: currentRevision.mhead.bnetId,
-            },
-        });
-        if (!mtrack) {
-            mtrack = new S2MapTracking();
-            mtrack.regionId = currentRevision.mhead.regionId;
-            mtrack.bnetId = currentRevision.mhead.bnetId;
-            mtrack.lastCheckedAt = dateQuery;
-            mtrack.lastSeenAvailableAt = dateQuery;
-        }
-        else if (dateQuery > mtrack.lastCheckedAt) {
-            mtrack.lastCheckedAt = dateQuery;
-            mtrack.lastSeenAvailableAt = dateQuery;
-            mtrack.firstSeenUnvailableAt = null;
-            mtrack.unavailabilityCounter = 0;
-        }
-
-        if (
-            !map.currentVersion ||
-            (currentRevision.mhead.majorVersion > map.currentVersion.majorVersion) ||
-            (
-                currentRevision.mhead.majorVersion === map.currentVersion.majorVersion &&
-                currentRevision.mhead.minorVersion >= map.currentVersion.minorVersion
-            )
-        ) {
-            await this.updateMapDataFromHeader(map, currentRevision.mhead, currentRevision.rawHeaderData);
+        if ((await this.updateMapDataFromHeader(map, currentRevision.mhead, currentRevision.rawHeaderData))) {
             updatedMap = true;
         }
 
@@ -309,25 +326,19 @@ export class MapIndexer {
         }
 
         if (updatedMap) {
-            await this.saveMap(map);
-            await this.conn.getRepository(S2MapTracking).save(mtrack, { transaction: false });
+            await this.saveMap(map, dateQuery);
         }
     }
 
     protected async processMapRevision(msg: MessageMapRevisionResult) {
         const mapRevision = await this.prepareMapRevision(msg.regionId, msg.mapId, msg);
-        if (!this.conn.getRepository(S2MapHeader).hasId(mapRevision.mhead)) {
-            try {
-                await this.conn.getRepository(S2MapHeader).insert(mapRevision.mhead);
-            }
-            catch (err) {
-                throwErrIfNotDuplicateEntry(err);
-            }
-        }
-        else {
+        if (this.conn.getRepository(S2MapHeader).hasId(mapRevision.mhead)) {
             logger.debug(`skpping map revision ${msg.regionId}/${msg.mapId},${msg.mapVersion}`);
             return;
         }
+
+        logger.verbose(`processing map revision ${msg.regionId}/${msg.mapId},${msg.mapVersion}`);
+        await this.conn.getRepository(S2MapHeader).insert(mapRevision.mhead);
 
         const map = await this.conn.getRepository(S2Map).findOne({
             relations: [
@@ -338,30 +349,28 @@ export class MapIndexer {
                 bnetId: mapRevision.mhead.bnetId,
             },
         });
-        if (!map) return;
 
-        if (
-            !map.currentVersion ||
-            (mapRevision.mhead.majorVersion > map.currentVersion.majorVersion) ||
+        const dateQuery = new Date(msg.queriedAt * 1000);
+        if (map && (await this.updateMapDataFromHeader(map, mapRevision.mhead, mapRevision.rawHeaderData))) {
+            await this.saveMap(map, dateQuery);
+        }
+        else if (
+            !map ||
             (
-                mapRevision.mhead.majorVersion === map.currentVersion.majorVersion &&
-                mapRevision.mhead.minorVersion >= map.currentVersion.minorVersion
+                map.currentVersion.majorVersion === mapRevision.mhead.majorVersion &&
+                map.currentVersion.minorVersion === mapRevision.mhead.minorVersion
             )
         ) {
-            await this.updateMapDataFromHeader(map, mapRevision.mhead, mapRevision.rawHeaderData);
-            await this.saveMap(map);
-
             const mtrack = await this.conn.getRepository(S2MapTracking).findOne({
                 where: {
                     regionId: mapRevision.mhead.regionId,
                     bnetId: mapRevision.mhead.bnetId,
                 },
             });
-            const checkedAt = new Date(msg.queriedAt * 1000);
-            if (mtrack && (checkedAt > mtrack.lastCheckedAt || mtrack.unavailabilityCounter > 0)) {
-                this.conn.getRepository(S2MapTracking).update(mtrack.id, {
-                    lastCheckedAt: checkedAt,
-                    lastSeenAvailableAt: checkedAt,
+            if (mtrack && (dateQuery > mtrack.lastCheckedAt || mtrack.unavailabilityCounter > 0)) {
+                await this.conn.getRepository(S2MapTracking).update(mtrack.id, {
+                    lastCheckedAt: dateQuery,
+                    lastSeenAvailableAt: dateQuery,
                     firstSeenUnvailableAt: null,
                     unavailabilityCounter: 0,
                 });
@@ -371,18 +380,32 @@ export class MapIndexer {
 
     async add(msg: MessageMapDiscoverResult | MessageMapRevisionResult) {
         return this.taskQueue.add(async () => {
-            switch (msg.$id) {
-                case MessageKind.MapDiscoverResult: {
-                    return this.processMapDiscover(msg);
-                    break;
+            const key = `${msg.regionId}/${msg.mapId}`;
+            while (this.currentlyProcessing.has(key)) {
+                logger.debug(`waiting for ${key}..`);
+                await sleep(100);
+            }
+            try {
+                this.currentlyProcessing.add(key);
+                switch (msg.$id) {
+                    case MessageKind.MapDiscoverResult: {
+                        return await this.processMapDiscover(msg);
+                        break;
+                    }
+                    case MessageKind.MapRevisionResult: {
+                        return await this.processMapRevision(msg);
+                        break;
+                    }
                 }
-                case MessageKind.MapRevisionResult: {
-                    return this.processMapRevision(msg);
-                    break;
-                }
+            }
+            finally {
+                this.currentlyProcessing.delete(key);
             }
         }, {
             priority: msg.$id === MessageKind.MapDiscoverResult ? 10 : 5,
         });
+        if (this.taskQueue.size > 100) {
+            logger.debug(`queue=${this.taskQueue.size} pending=${this.taskQueue.pending}`);
+        }
     }
 }

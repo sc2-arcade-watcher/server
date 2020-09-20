@@ -68,7 +68,7 @@ program.command('map:update-maps')
             const newestVersion = map.currentVersion;
             logger.info([
                 `Processing [${map.id}/${listMapIds[listMapIds.length - 1]}]`,
-                ` /${map.regionId}/${map.bnetId} v${newestVersion.majorVersion}.${newestVersion.minorVersion}`,
+                ` /${newestVersion.linkVer}`,
             ].join(''));
             await mIndexer.updateMapDataFromHeader(map, newestVersion, void 0, true);
             await mIndexer.saveMap(map);

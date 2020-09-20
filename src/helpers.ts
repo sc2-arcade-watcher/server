@@ -3,6 +3,7 @@ import * as childProc from 'child_process';
 import * as pRetry from 'p-retry';
 import * as orm from 'typeorm';
 import { isPromise, logger } from './logger';
+import { AxiosError } from 'axios';
 
 export const sleep = util.promisify(setTimeout);
 
@@ -180,6 +181,14 @@ export function btoa(value: string): string {
 
 export function deepCopy(a: any) {
     return JSON.parse(JSON.stringify(a));
+}
+
+//
+// axios stuff
+//
+
+export function isAxiosError(err: any): err is AxiosError {
+    return err instanceof Error && (err as AxiosError).isAxiosError === true;
 }
 
 //
