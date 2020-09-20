@@ -28,7 +28,12 @@ export class NestedHashDir {
 }
 
 function getDepotURL(region: string, filename?: string) {
-    return `http://${region.toLowerCase()}.depot.battle.net:1119/${filename ?? ''}`;
+    if (region.toLowerCase() === 'cn') {
+        return `http://${region.toLowerCase()}.depot.battlenet.com.cn:1119/${filename ?? ''}`;
+    }
+    else {
+        return `http://${region.toLowerCase()}.depot.battle.net:1119/${filename ?? ''}`;
+    }
 }
 
 export class BattleDepot {

@@ -3,10 +3,12 @@ import { TypedEvent, sleep } from './helpers';
 import { JournalFeed, JournalFeedCursor } from './journal/feed';
 import { logger, logIt } from './logger';
 
+// TODO: replace with GameRegion from common.ts
 export enum GameRegion {
     US = 1,
     EU = 2,
     KR = 3,
+    CN = 5,
 }
 
 interface GameLobbyPreview {

@@ -2,9 +2,10 @@ export enum GameRegion {
     US = 1,
     EU = 2,
     KR = 3,
+    CN = 5,
 }
 
-export type DepotRegion = 'us' | 'eu' | 'kr';
+export type DepotRegion = 'us' | 'eu' | 'kr' | 'cn';
 
 export enum GameLocale {
     deDE = 'deDE',

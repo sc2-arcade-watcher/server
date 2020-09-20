@@ -78,7 +78,7 @@ export default fp(async (server, opts, next) => {
                 properties: {
                     region: {
                         type: 'string',
-                        enum: ['us', 'eu', 'kr'],
+                        enum: ['us', 'eu', 'kr', 'cn'],
                     },
                     hash: {
                         type: 'string',
