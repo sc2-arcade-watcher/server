@@ -1,9 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, Unique, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, Unique, JoinColumn, OneToMany } from 'typeorm';
 import { S2Region } from './S2Region';
 import { GameLocale } from '../common';
 import { S2MapHeader } from './S2MapHeader';
 import { S2MapCategory } from './S2MapCategory';
 import { S2Profile } from './S2Profile';
+import { S2MapVariant } from './S2MapVariant';
 
 export enum S2MapType {
     MeleeMap = 'melee_map',
@@ -129,6 +130,12 @@ export class S2Map {
     })
     @Index('published_at_idx')
     publishedAt: Date;
+
+    @OneToMany(type => S2MapVariant, variant => variant.map, {
+        persistence: false,
+        cascade: false,
+    })
+    variants: S2MapVariant[];
 
     revisions?: S2MapHeader[];
 }

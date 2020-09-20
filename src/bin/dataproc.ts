@@ -12,6 +12,7 @@ import { SysFeedPosition } from '../entity/SysFeedPosition';
 import { S2Profile } from '../entity/S2Profile';
 import { S2GameLobbyPlayerJoin } from '../entity/S2GameLobbyPlayerJoin';
 import { S2GameLobbyMap, S2GameLobbyMapKind } from '../entity/S2GameLobbyMap';
+import { S2MapVariant } from '../entity/S2MapVariant';
 
 class DataProc {
     protected conn: orm.Connection;
@@ -23,6 +24,7 @@ class DataProc {
 
     protected lobbiesCache = new Map<number, S2GameLobby>();
     protected profilesCache = new Map<string, S2Profile>();
+    protected mapVariantsCache = new Map<string, S2MapVariant>();
 
     protected lobbiesReopenCandidates = new Set();
 
@@ -355,8 +357,30 @@ class DataProc {
         return s2profile;
     }
 
+    async fetchMapVariant(regionId: number, mapId: number, variantIndex: number) {
+        const key = `${regionId}/${mapId}:${variantIndex}`;
+        let mapVariant = this.mapVariantsCache.get(key);
+        if (!mapVariant) {
+            mapVariant = await this.conn.getRepository(S2MapVariant).createQueryBuilder('mapVariant')
+                .innerJoin('mapVariant.map', 'map')
+                .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId AND mapVariant.variantIndex = :variantIndex', {
+                    regionId: regionId,
+                    bnetId: mapId,
+                    variantIndex: variantIndex,
+                })
+                .getOne()
+            ;
+            if (mapVariant) {
+                this.mapVariantsCache.set(key, mapVariant);
+            }
+        }
+        return mapVariant;
+    }
+
     async onNewLobby(ev: JournalEventNewLobby) {
         const info = ev.lobby.initInfo;
+
+        const mapVariant = await this.fetchMapVariant(this.s2region.id, info.mapHandle[0], info.mapVariantIndex);
 
         let s2lobby = new S2GameLobby();
         Object.assign(s2lobby, <S2GameLobby>{
@@ -371,7 +395,7 @@ class DataProc {
             multiModBnetId: info.multiModHandle[0] !== 0 ? info.multiModHandle[0] : null,
 
             mapVariantIndex: info.mapVariantIndex,
-            mapVariantMode: info.mapVariantMode,
+            mapVariantMode: mapVariant?.name ?? '',
 
             lobbyTitle: ev.lobby.lobbyName,
             hostName: ev.lobby.hostName,
@@ -409,7 +433,7 @@ class DataProc {
             });
             s2lobby.slots = [];
             this.lobbiesCache.set(info.lobbyId, s2lobby);
-            logger.info(`NEW src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} map="${info.mapName}"`);
+            logger.info(`NEW src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} map=${s2lobby.mapBnetId}`);
         }
         catch (err) {
             if (isErrDuplicateEntry(err)) {

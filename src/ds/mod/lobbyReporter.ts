@@ -663,6 +663,9 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
     if (s2gm.mapVariantMode.trim().length) {
         em.footer.text = s2gm.mapVariantMode;
     }
+    else {
+        em.footer.text = `${s2gm.mapVariantIndex}`;
+    }
 
     if (s2gm.lobbyTitle) {
         em.fields.push({

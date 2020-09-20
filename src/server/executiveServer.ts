@@ -7,7 +7,7 @@ import { sleep, throwErrIfNotDuplicateEntry } from '../helpers';
 import { S2Region } from '../entity/S2Region';
 import { PlayerProfile } from '../common';
 import { RunnerFeedCtrl } from './feedCtrl';
-import { MapIndexer } from './mapIndexer';
+import { MapIndexer } from '../map/mapIndexer';
 import { S2MapTracking } from '../entity/S2MapTracking';
 
 // ===

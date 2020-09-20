@@ -16,7 +16,7 @@ import * as https from 'https';
 import * as http2 from 'http2';
 import { execAsync } from '../helpers';
 import { stripIndents } from 'common-tags';
-import { MapResolver } from '../task/mapResolver';
+import { MapResolver } from '../map/mapResolver';
 
 dotenv.config();
 setupFileLogger('webapi');

@@ -1,15 +1,17 @@
 import * as orm from 'typeorm';
 import PQueue from 'p-queue';
 import { logger } from '../logger';
-import { retry, throwErrIfNotDuplicateEntry } from '../helpers';
+import { retry, throwErrIfNotDuplicateEntry, sleep } from '../helpers';
 import { S2MapHeader } from '../entity/S2MapHeader';
-import { MapResolver, reprocessMapHeader, MapHeaderDataRaw } from '../task/mapResolver';
-import { MessageKind, MessageMapRevisionResult, MessageMapDiscoverResult, MapVersionInfo } from './executiveServer';
+import { MapResolver, reprocessMapHeader, MapHeaderDataRaw, AttributeValue } from './mapResolver';
+import { MessageKind, MessageMapRevisionResult, MessageMapDiscoverResult, MapVersionInfo } from '../server/executiveServer';
 import { decodeMapVersion, GameRegion, GameLocale } from '../common';
 import { S2Map, S2MapType } from '../entity/S2Map';
 import { S2MapCategory } from '../entity/S2MapCategory';
 import { S2Profile } from '../entity/S2Profile';
 import { S2MapTracking } from '../entity/S2MapTracking';
+import { S2MapVariant } from '../entity/S2MapVariant';
+import { AttributeSystemNamespaceId, AttributeId, lobbyDelayValues } from './attributes';
 
 export class MapIndexer {
     public readonly resolver = new MapResolver(this.conn);
@@ -101,7 +103,7 @@ export class MapIndexer {
         };
     }
 
-    async updateMapDataFromHeader(map: S2Map, mhead: S2MapHeader, rawHeaderData?: MapHeaderDataRaw) {
+    async updateMapDataFromHeader(map: S2Map, mhead: S2MapHeader, rawHeaderData?: MapHeaderDataRaw, forceUpdate = false) {
         const rcode = GameRegion[mhead.regionId];
         if (!rawHeaderData) {
             rawHeaderData = await this.resolver.getMapHeader(rcode, mhead.headerHash);
@@ -121,7 +123,8 @@ export class MapIndexer {
         if (
             !map.currentVersion ||
             (mhead.majorVersion > map.currentVersion.majorVersion) ||
-            (mhead.majorVersion === map.currentVersion.majorVersion && mhead.minorVersion >= map.currentVersion.minorVersion)
+            (mhead.majorVersion === map.currentVersion.majorVersion && mhead.minorVersion >= map.currentVersion.minorVersion) ||
+            forceUpdate
         ) {
             const mainCategory = this.mapCategories.find(x => x.id === mapHeader.variants[mapHeader.defaultVariantIndex].categoryId);
             if (mapHeader.mapSize) {
@@ -148,7 +151,50 @@ export class MapIndexer {
             map.mainLocaleHash = mainLocaleTable.stringTable[0].hash;
             map.updatedAt = mhead.uploadedAt;
             map.currentVersion = mhead;
+
+            // variants
+            if (map.type === S2MapType.ArcadeMap || map.type === S2MapType.MeleeMap) {
+                map.variants = [];
+                for (const [index, rawVariant] of mapHeader.variants.entries()) {
+                    const mVariant = new S2MapVariant();
+                    mVariant.map = map;
+                    mVariant.name = rawVariant.modeName ?? '';
+                    mVariant.variantIndex = index;
+                    mVariant.lobbyDelay = 10;
+                    const dvalue = rawVariant.attributeDefaults.find(x => {
+                        return x.attribute.namespace === AttributeSystemNamespaceId && x.attribute.id === AttributeId.LobbyDelay;
+                    });
+                    if (dvalue) {
+                        mVariant.lobbyDelay = Number(lobbyDelayValues[(dvalue.value as AttributeValue).index]);
+                    }
+                    map.variants.push(mVariant);
+                }
+            }
         }
+    }
+
+    @retry({
+        onFailedAttempt: async (err) => {
+            if (!(err instanceof orm.QueryFailedError)) throw err;
+            if ((<any>err).code === 'ER_LOCK_DEADLOCK') {
+                logger.verbose(`saveMap: got ${(<any>err).code}, retrying..`);
+                await sleep(100);
+            }
+            else {
+                throw err;
+            }
+        },
+    })
+    async saveMap(map: S2Map) {
+        if (this.conn.getRepository(S2Map).hasId(map)) {
+            await this.conn.getRepository(S2MapVariant).delete({
+                mapId: map.id,
+            });
+            if (map.variants) {
+                await this.conn.getRepository(S2MapVariant).insert(map.variants);
+            }
+        }
+        await this.conn.getRepository(S2Map).save(map, { transaction: false });
     }
 
     @retry({
@@ -263,7 +309,7 @@ export class MapIndexer {
         }
 
         if (updatedMap) {
-            await this.conn.getRepository(S2Map).save(map, { transaction: false });
+            await this.saveMap(map);
             await this.conn.getRepository(S2MapTracking).save(mtrack, { transaction: false });
         }
     }
@@ -303,7 +349,7 @@ export class MapIndexer {
             )
         ) {
             await this.updateMapDataFromHeader(map, mapRevision.mhead, mapRevision.rawHeaderData);
-            await this.conn.getRepository(S2Map).save(map, { transaction: false });
+            await this.saveMap(map);
 
             const mtrack = await this.conn.getRepository(S2MapTracking).findOne({
                 where: {

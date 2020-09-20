@@ -2,10 +2,10 @@ import * as util from 'util';
 import * as orm from 'typeorm';
 import * as program from 'commander';
 import * as pMap from 'p-map';
-import { MapResolver, reprocessMapHeader } from '../task/mapResolver';
+import { MapResolver, reprocessMapHeader } from '../map/mapResolver';
 import { S2Map } from '../entity/S2Map';
 import { logger } from '../logger';
-import { MapIndexer } from '../server/mapIndexer';
+import { MapIndexer } from '../map/mapIndexer';
 import { S2MapHeader } from '../entity/S2MapHeader';
 
 program.command('map:dump-header <region> <hash>')
@@ -66,12 +66,12 @@ program.command('map:update-maps')
             //     return;
             // }
             const newestVersion = map.currentVersion;
-            await mIndexer.updateMapDataFromHeader(
-                map,
-                newestVersion,
-            );
-            await conn.getRepository(S2Map).save(map, { transaction: false });
-            logger.verbose(`Completed ${map.id} from ${listMapIds[listMapIds.length - 1]}`);
+            logger.info([
+                `Processing [${map.id}/${listMapIds[listMapIds.length - 1]}]`,
+                ` /${map.regionId}/${map.bnetId} v${newestVersion.majorVersion}.${newestVersion.minorVersion}`,
+            ].join(''));
+            await mIndexer.updateMapDataFromHeader(map, newestVersion, void 0, true);
+            await mIndexer.saveMap(map);
         }, {
             concurrency: cmd.concurrency,
         });

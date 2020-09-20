@@ -2,7 +2,7 @@ import * as fp from 'fastify-plugin';
 import { S2Map } from '../../../entity/S2Map';
 import { S2MapHeader } from '../../../entity/S2MapHeader';
 import { GameLocale, GameRegion } from '../../../common';
-import { MapLocalizationTable, reprocessMapHeader } from '../../../task/mapResolver';
+import { MapLocalizationTable, reprocessMapHeader } from '../../../map/mapResolver';
 
 export default fp(async (server, opts, next) => {
     server.get('/maps/:regionId/:mapId/details', {
