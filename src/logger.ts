@@ -46,6 +46,7 @@ export const logger = createLogger({
 });
 
 export function setupFileLogger(appName: string) {
+    if (process.env['STARC_FILE_LOG_DISABLE'] === '1') return;
     logger.add(new DailyRotateFile({
         level: 'debug',
         filename: `${appName}-%DATE%.log`,

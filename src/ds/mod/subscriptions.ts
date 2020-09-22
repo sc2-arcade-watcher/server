@@ -158,7 +158,7 @@ class SubscriptionConfigCommand extends AbstractSubscriptionCommand {
                 {
                     key: 'region',
                     type: 'string',
-                    prompt: 'Designate game region [`US` | `EU` | `KR` | `ANY`]',
+                    prompt: 'Designate game region [`US` | `EU` | `KR` | `CN`] or use [`ANY`]',
                     validate: (val: string): boolean => {
                         val = val.toUpperCase();
                         if (val === 'ANY') return true;

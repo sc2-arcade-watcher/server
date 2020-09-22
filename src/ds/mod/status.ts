@@ -34,9 +34,11 @@ export class StatusTask extends BotTask {
             lobbyCountUS: string;
             lobbyCountEU: string;
             lobbyCountKR: string;
+            lobbyCountCN: string;
             playerCountUS: string;
             playerCountEU: string;
             playerCountKR: string;
+            playerCountCN: string;
         };
         const result: rType = await this.conn.getRepository(S2GameLobby)
             .createQueryBuilder('lobby')
@@ -45,16 +47,18 @@ export class StatusTask extends BotTask {
             .addSelect('SUM(CASE WHEN region.code = \'US\' THEN 1 ELSE 0 END)', 'lobbyCountUS')
             .addSelect('SUM(CASE WHEN region.code = \'EU\' THEN 1 ELSE 0 END)', 'lobbyCountEU')
             .addSelect('SUM(CASE WHEN region.code = \'KR\' THEN 1 ELSE 0 END)', 'lobbyCountKR')
+            .addSelect('SUM(CASE WHEN region.code = \'CN\' THEN 1 ELSE 0 END)', 'lobbyCountCN')
             .addSelect('SUM(CASE WHEN region.code = \'US\' THEN lobby.slotsHumansTaken ELSE 0 END)', 'playerCountUS')
             .addSelect('SUM(CASE WHEN region.code = \'EU\' THEN lobby.slotsHumansTaken ELSE 0 END)', 'playerCountEU')
             .addSelect('SUM(CASE WHEN region.code = \'KR\' THEN lobby.slotsHumansTaken ELSE 0 END)', 'playerCountKR')
+            .addSelect('SUM(CASE WHEN region.code = \'CN\' THEN lobby.slotsHumansTaken ELSE 0 END)', 'playerCountCN')
             .where('status = :status', { status: GameLobbyStatus.Open })
             .getRawOne()
         ;
 
         await this.client.user.setActivity([
-            `Open lobbies:\n  US:${result.lobbyCountUS} EU:${result.lobbyCountEU} KR:${result.lobbyCountKR}`,
-            `Awaiting players:\n  US:${result.playerCountUS} EU:${result.playerCountEU} KR:${result.playerCountKR}`,
+            `Open lobbies:\n  US:${result.lobbyCountUS} EU:${result.lobbyCountEU} KR:${result.lobbyCountKR} CN:${result.lobbyCountCN}`,
+            `Awaiting players:\n  US:${result.playerCountUS} EU:${result.playerCountEU} KR:${result.playerCountKR} CN:${result.playerCountCN}`,
             `Send .help command to learn about the bot.`,
         ].join('\n'), { type: 'WATCHING' });
     }

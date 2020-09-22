@@ -10,6 +10,7 @@ import { S2GameLobby } from '../entity/S2GameLobby';
 import { GameLobbyStatus } from '../gametracker';
 import { S2StatsPeriodRegion } from '../entity/S2StatsPeriodRegion';
 import { S2GameLobbyMap } from '../entity/S2GameLobbyMap';
+import { GameRegion } from '../common';
 
 function hasProfileIds(statPeriod: S2StatsPeriod) {
     return statPeriod.dateFrom >= new Date('2020-04-27');
@@ -26,7 +27,7 @@ interface MapStatTmp {
     pendingTime: number[];
 }
 
-async function generateMapStats(conn: orm.Connection, statPeriod: S2StatsPeriod) {
+async function generateMapStats(conn: orm.Connection, statPeriod: S2StatsPeriod, includedRegions: Set<GameRegion>) {
     const mapStats = new Map<string, MapStatTmp>();
 
     let lrecords = await conn.getRepository(S2GameLobbyMap)
@@ -39,6 +40,7 @@ async function generateMapStats(conn: orm.Connection, statPeriod: S2StatsPeriod)
         .addSelect('lobby.status', 'status')
         .addSelect('UNIX_TIMESTAMP(lobby.closedAt) - UNIX_TIMESTAMP(lobby.createdAt)', 'pendingTime')
         .andWhere('lobby.closedAt >= :from AND lobby.closedAt < :to', { from: statPeriod.dateFrom, to: statPeriod.dateTo })
+        .andWhere('lobby.regionId IN (:includedRegions)', { includedRegions: Array.from(includedRegions.values()) })
         .getRawMany()
     ;
     logger.verbose(`LobbyMap records=${lrecords.length}`);
@@ -125,7 +127,7 @@ async function generateMapStats(conn: orm.Connection, statPeriod: S2StatsPeriod)
     await conn.getRepository(S2StatsPeriodMap).insert(inserts);
 }
 
-async function generateRegionStats(conn: orm.Connection, statPeriod: S2StatsPeriod) {
+async function generateRegionStats(conn: orm.Connection, statPeriod: S2StatsPeriod, includedRegions: Set<GameRegion>) {
     const regRecords = await conn.getRepository(S2GameLobby)
         .createQueryBuilder('lobby')
         .select([])
@@ -136,6 +138,7 @@ async function generateRegionStats(conn: orm.Connection, statPeriod: S2StatsPeri
         .addSelect('COUNT(DISTINCT slot.id)', 'participantsTotal')
         .addSelect('COUNT(DISTINCT slot.profile)', 'participantsUniqueTotal')
         .andWhere('lobby.closedAt >= :from AND lobby.closedAt < :to', { from: statPeriod.dateFrom, to: statPeriod.dateTo })
+        .andWhere('lobby.regionId IN (:includedRegions)', { includedRegions: Array.from(includedRegions.values()) })
         .groupBy('lobby.regionId')
         .getRawMany()
     ;
@@ -214,10 +217,21 @@ export async function buildStatsForPeriod(conn: orm.Connection, statKind: S2Stat
         statPeriod.dateTo = incDate(currDate);
         await conn.getRepository(S2StatsPeriod).save(statPeriod);
 
+        const includedRegions = new Set<GameRegion>([
+            GameRegion.US,
+            GameRegion.EU,
+            GameRegion.KR,
+        ]);
+
+        // TODO: put a date in condition once it'll be stable
+        if (false) {
+            includedRegions.add(GameRegion.CN);
+        }
+
         logger.info('generating region stats..');
-        await generateRegionStats(conn, statPeriod);
+        await generateRegionStats(conn, statPeriod, includedRegions);
         logger.info('generating map stats..');
-        await generateMapStats(conn, statPeriod);
+        await generateMapStats(conn, statPeriod, includedRegions);
 
         statPeriod.completed = true;
         await conn.getRepository(S2StatsPeriod).save(statPeriod);

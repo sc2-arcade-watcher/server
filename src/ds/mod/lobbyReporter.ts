@@ -616,6 +616,10 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
             em.footer.icon_url = 'https://i.imgur.com/YbFsB42.png';
             break;
         }
+        case GameRegion.KR: {
+            em.footer.icon_url = 'https://i.imgur.com/UrIuIjZ.png';
+            break;
+        }
     }
 
     let statusm: string[] = [];

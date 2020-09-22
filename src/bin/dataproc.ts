@@ -572,10 +572,11 @@ async function run() {
         GameRegion.US,
         GameRegion.EU,
         GameRegion.KR,
+        GameRegion.CN,
     ];
     if (process.argv.length > 2) {
         const regionId = Number(process.argv[2]);
-        if (regionId < 1 || regionId > 3) {
+        if (!GameRegion[regionId]) {
             logger.error(`provided invalid region`);
             return;
         }
