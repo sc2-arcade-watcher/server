@@ -1,16 +1,22 @@
 import * as fp from 'fastify-plugin';
 import { GameRegion } from '../../../common';
 import { S2Map } from '../../../entity/S2Map';
+import { stripIndents } from 'common-tags';
 
 export default fp(async (server, opts, next) => {
     server.get('/maps/:regionId/:mapId/dependencies', {
         config: {
             rateLimit: {
-                max: 25,
-                timeWindow: 300,
+                max: 10,
+                timeWindow: 1000 * 60,
             },
         },
         schema: {
+            tags: ['Maps'],
+            summary: `List of map's dependencies`,
+            description: stripIndents`
+                NOTICE: This endpoint is not yet stable and might be changed in the future.
+            `,
             params: {
                 type: 'object',
                 required: ['regionId', 'mapId'],

@@ -5,7 +5,14 @@ import { GameLobbyStatus } from '../../../gametracker';
 import { S2Map } from '../../../entity/S2Map';
 
 export default fp(async (server, opts, next) => {
-    server.get('/open-games', async (request, reply) => {
+    server.get('/open-games', {
+        config: {
+            rateLimit: {
+                max: 5,
+                timeWindow: 1000 * 15,
+            },
+        },
+    }, async (request, reply) => {
         const result = await server.conn.getRepository(S2GameLobby)
             .createQueryBuilder('lobby')
             .select([
@@ -28,12 +35,14 @@ export default fp(async (server, opts, next) => {
             .leftJoinAndSelect('slot.joinInfo', 'joinInfo')
             .andWhere('slot.kind = :kind', { kind: S2GameLobbySlotKind.Human })
             .andWhere('lobby.status = :status OR lobby.closedAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 20 SECOND)', { status: GameLobbyStatus.Open })
+            .andWhere('lobby.regionId IN (1, 2, 3)')
             .addOrderBy('lobby.createdAt', 'ASC')
             .addOrderBy('slot.slotNumber', 'ASC')
             .getMany()
         ;
 
         result.map(s2lobby => {
+            (<any>s2lobby)._DEPRECATED = 'THIS ENDPOINT IS DEPRACATED AND SHOULD NO LONGER BE USED';
             if (s2lobby.status === GameLobbyStatus.Abandoned) {
                 (<any>s2lobby).status = 'disbanded';
             }
@@ -66,7 +75,7 @@ export default fp(async (server, opts, next) => {
             delete s2lobby.slots;
         });
 
-        reply.header('Cache-control', 'public, s-maxage=1');
+        reply.header('Cache-control', 'public, s-maxage=3');
         return reply.type('application/json').code(200).send(result);
     });
 });

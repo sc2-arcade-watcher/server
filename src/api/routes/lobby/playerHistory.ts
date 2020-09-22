@@ -1,12 +1,16 @@
 import * as fp from 'fastify-plugin';
 import { S2GameLobbySlot } from '../../../entity/S2GameLobbySlot';
 import { S2GameLobbyRepository } from '../../../repository/S2GameLobbyRepository';
+import { stripIndents } from 'common-tags';
 
 export default fp(async (server, opts, next) => {
     server.get('/lobbies/history/player/:regionId/:realmId/:profileId', {
         schema: {
             tags: ['Lobbies'],
             summary: 'History of started lobbies where given player was present. Basically a "match history", limited to public games.',
+            description: stripIndents`
+                NOTICE: This endpoint is not yet stable and might be changed in the future.
+            `,
             params: {
                 type: 'object',
                 required: ['regionId', 'realmId', 'profileId'],

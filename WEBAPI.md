@@ -8,6 +8,8 @@ Current limits are: up to 500 requests in the span of 5 minutes.
 
 If the limit is exceeded `429` HTTP response will be given, instead of what was requested.
 
+Certain (unoptimized) endpoints might use harsher limits on amount of requests, but with lower reset window. An example of this is `/lobbies/active`.
+
 ### Pagination
 
 Some of the endpoints are paginated. Depending on the endpoint it might be either cursor based pagination (for big data sets), or *classic* offset based pagination (currently not in use anywhere).
@@ -78,6 +80,11 @@ If we wanted to go back, the correct URL would be `http://sc2arcade.talv.space/a
 etc.
 
 * Default `limit` of returned records per page is `50`, but it can be increased up to `500`.
+
+### Other
+
+- Timestamps are in UTC, given in ISO format with precision up to 3 decimal places.
+- For everything else not covered by the docs above, [consult the source code](https://github.com/sc2-arcade-watcher/server/tree/master/src/api).
 
 ---
 

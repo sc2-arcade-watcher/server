@@ -12,6 +12,8 @@ export default fp(async (server, opts, next) => {
                 Currently it only returns list of known versions - those which have been indexed, for most maps it won't include all ever uploaded to Arcade.
 
                 However, in future there might be a way to either request a full index of specific map via API. Or the service itself will try to keep the list fully up to date for maps which have been publicly hosted at least once - if it proves to be feasible.
+
+                NOTICE: This endpoint is not yet stable and might be changed in the future.
             `,
             params: {
                 type: 'object',
