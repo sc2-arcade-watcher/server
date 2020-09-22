@@ -30,6 +30,9 @@ export default fp(async (server, opts, next) => {
             querystring: {
                 type: 'object',
                 properties: {
+                    regionId: {
+                        type: 'number',
+                    },
                     includeMapInfo: {
                         type: 'boolean',
                         default: false,
@@ -78,14 +81,16 @@ export default fp(async (server, opts, next) => {
             lobbyRepo.addJoinHistory(qb);
         }
 
+        qb.andWhere('lobby.status = :status', { status: GameLobbyStatus.Open });
+
         if (request.query.recentlyClosedThreshold) {
-            qb.andWhere('lobby.status = :status OR lobby.closedAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL :threshold SECOND)', {
-                status: GameLobbyStatus.Open,
+            qb.andWhere('(lobby.closedAt IS NULL OR lobby.closedAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL :threshold SECOND))', {
                 threshold: request.query.recentlyClosedThreshold
             });
         }
-        else {
-            qb.andWhere('lobby.status = :status', { status: GameLobbyStatus.Open });
+
+        if (request.query.regionId !== void 0) {
+            qb.andWhere('lobby.regionId = :regionId', { regionId: request.query.regionId });
         }
 
         qb.addSelect([
@@ -103,6 +108,10 @@ export default fp(async (server, opts, next) => {
             'lobby.lobbyTitle',
             'lobby.hostName',
             'lobby.slotsUpdatedAt',
+            // these below might be removed in the future
+            'lobby.slotsHumansTaken',
+            'lobby.slotsHumansTotal',
+            'lobby.snapshotUpdatedAt',
         ]);
 
         const result = await qb.getMany();
