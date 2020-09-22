@@ -84,12 +84,13 @@ export default fp(async (server, opts, next) => {
             lobbyRepo.addJoinHistory(qb);
         }
 
-        qb.andWhere('lobby.status = :status', { status: GameLobbyStatus.Open });
-
         if (request.query.recentlyClosedThreshold) {
             qb.andWhere('(lobby.closedAt IS NULL OR lobby.closedAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL :threshold SECOND))', {
                 threshold: request.query.recentlyClosedThreshold
             });
+        }
+        else {
+            qb.andWhere('lobby.status = :status', { status: GameLobbyStatus.Open });
         }
 
         if (request.query.regionId !== void 0) {
