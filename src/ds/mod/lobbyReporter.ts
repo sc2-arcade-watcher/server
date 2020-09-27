@@ -57,7 +57,6 @@ export class LobbyReporterTask extends BotTask {
     async reloadSubscriptions() {
         this.trackRules.clear();
         for (const rule of await this.conn.getRepository(DsGameLobbySubscription).find({
-            relations: ['region'],
             where: { enabled: true },
         })) {
             this.trackRules.set(rule.id, rule);
@@ -190,10 +189,10 @@ export class LobbyReporterTask extends BotTask {
                 )
             ) &&
             (!sub.variant || sub.variant === s2gm.mapVariantMode) &&
-            (!sub.region || sub.region.id === s2gm.region.id)
+            (!sub.regionId || sub.regionId === s2gm.regionId)
         ) {
             trackedLobby.candidates.add(sub);
-            logger.info(`New lobby ${s2gm.region.code}#${s2gm.bnetRecordId} for "${s2gm.map?.name}". subId=${sub.id}`);
+            logger.info(`New lobby ${GameRegion[s2gm.regionId]}#${s2gm.bnetRecordId} for "${s2gm.map?.name}". subId=${sub.id}`);
         }
     }
 
@@ -303,7 +302,7 @@ export class LobbyReporterTask extends BotTask {
                     await this.updateLobbyMessage(trackedLobby);
                 }
                 if (!trackedLobby.postedMessages.size) {
-                    logger.debug(`Stopped tracking ${lobbyInfo.region.code}#${lobbyInfo.bnetRecordId} candidates=${trackedLobby.candidates.size}`);
+                    logger.debug(`Stopped tracking ${GameRegion[lobbyInfo.regionId]}#${lobbyInfo.bnetRecordId} candidates=${trackedLobby.candidates.size}`);
                 }
             }
             if (trackedLobby.isClosedStatusConcluded() && !trackedLobby.postedMessages.size) {
@@ -603,7 +602,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
         };
     }
 
-    switch (s2gm.region.id) {
+    switch (s2gm.regionId) {
         case GameRegion.US: {
             em.footer.icon_url = 'https://i.imgur.com/K584M0K.png';
             break;

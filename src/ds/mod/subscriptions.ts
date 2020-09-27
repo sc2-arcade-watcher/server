@@ -227,10 +227,10 @@ class SubscriptionConfigCommand extends AbstractSubscriptionCommand {
 
         sub.isMapNamePartial = !args.isMapNameExact;
         if (args.region) {
-            sub.region = await this.client.conn.getRepository(S2Region).findOneOrFail({ code: args.region });
+            sub.regionId = GameRegion[args.region];
         }
         else {
-            sub.region = null;
+            sub.regionId = null;
         }
         sub.variant = args.variant;
         sub.timeDelay = args.timeDelay;
@@ -322,7 +322,7 @@ class SubscriptionListCommand extends AbstractSubscriptionCommand {
                     formatObjectAsMessage({
                         'Name of the map/mod': rsub.mapName,
                         'Partial match of the name': rsub.isMapNamePartial,
-                        'Region': rsub?.region?.code ?? 'ANY',
+                        'Region': rsub.regionId === null ? 'ANY' : GameRegion[rsub.regionId],
                         'Map variant': rsub?.variant ?? 'ANY',
                         'Delay before posting (in seconds)': Number(rsub.timeDelay),
                         'Minimum number of human slots': Number(rsub.humanSlotsMin),

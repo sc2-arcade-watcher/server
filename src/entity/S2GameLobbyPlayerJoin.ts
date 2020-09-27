@@ -7,18 +7,18 @@ export class S2GameLobbyPlayerJoin {
     @PrimaryGeneratedColumn()
     id: number;
 
-    @ManyToOne(type => S2GameLobby, {
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
+    @ManyToOne(type => S2GameLobby, lobby => lobby.joinHistory, {
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
     })
-    @Index('lobby')
+    @Index('lobby_idx')
     lobby: S2GameLobby;
 
     @ManyToOne(type => S2Profile, {
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
     })
-    @Index('profile')
+    @Index('profile_idx')
     profile: S2Profile;
 
     @Column({

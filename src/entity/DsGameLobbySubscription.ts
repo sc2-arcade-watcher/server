@@ -48,12 +48,12 @@ export class DsGameLobbySubscription {
     })
     isMapNameRegex: boolean;
 
-    @ManyToOne(type => S2Region, {
+    @Column({
         nullable: true,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
+        unsigned: true,
+        type: 'tinyint',
     })
-    region: S2Region;
+    regionId: number | null;
 
     @Column({
         nullable: true,

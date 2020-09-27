@@ -9,9 +9,6 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
         return this
             .createQueryBuilder('lobby')
 
-            // region
-            .innerJoinAndSelect('lobby.region', 'region')
-
             // map & ext mod
             .leftJoinAndMapOne('lobby.map', S2Map, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId')
             .leftJoinAndMapOne('lobby.extMod', S2Map, 'extMod', 'extMod.regionId = lobby.regionId AND extMod.bnetId = lobby.extModBnetId')

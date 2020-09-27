@@ -9,16 +9,23 @@ export enum S2GameLobbySlotKind {
     Human = 'human',
 }
 
+const slotKindMap = {
+    [S2GameLobbySlotKind.Open]: 1,
+    [S2GameLobbySlotKind.AI]: 2,
+    [S2GameLobbySlotKind.Human]: 3,
+};
+
 @Entity()
 export class S2GameLobbySlot {
     @PrimaryGeneratedColumn()
     id: number;
 
     @ManyToOne(type => S2GameLobby, lobby => lobby.slots, {
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
+        nullable: false,
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
     })
-    @Index('lobby')
+    @Index('lobby_idx')
     lobby: S2GameLobby;
 
     @Column()
@@ -44,16 +51,17 @@ export class S2GameLobbySlot {
     kind: S2GameLobbySlotKind;
 
     @ManyToOne(type => S2Profile, {
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
+        nullable: true,
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
     })
-    @Index('profile')
+    @Index('profile_idx')
     profile: S2Profile;
 
     @ManyToOne(type => S2GameLobbyPlayerJoin, {
         nullable: true,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE',
     })
     joinInfo: S2GameLobbyPlayerJoin;
 
@@ -65,11 +73,6 @@ export class S2GameLobbySlot {
     name: string;
 
     get slotKindPriority(): number {
-        const slotKindMap = {
-            [S2GameLobbySlotKind.Open]: 1,
-            [S2GameLobbySlotKind.AI]: 2,
-            [S2GameLobbySlotKind.Human]: 3,
-        };
         return slotKindMap[this.kind];
     }
 }

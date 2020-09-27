@@ -143,7 +143,6 @@ class DataProc {
         if (!s2lobby) {
             s2lobby = await this.em.getRepository(S2GameLobby)
                 .createQueryBuilder('lobby')
-                .leftJoinAndSelect('lobby.region', 'region')
                 .leftJoinAndSelect('lobby.slots', 'slots')
                 .leftJoinAndSelect('slots.profile', 'profile')
                 .leftJoinAndSelect('slots.joinInfo', 'joinInfo')
@@ -384,7 +383,7 @@ class DataProc {
 
         let s2lobby = new S2GameLobby();
         Object.assign(s2lobby, <S2GameLobby>{
-            region: this.s2region,
+            regionId: this.s2region.id,
             bnetBucketId: info.bucketId,
             bnetRecordId: info.lobbyId,
             createdAt: ev.lobby.createdAt,

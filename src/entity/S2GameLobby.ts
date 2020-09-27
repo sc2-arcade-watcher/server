@@ -11,15 +11,10 @@ export class S2GameLobby {
     @PrimaryGeneratedColumn()
     id: number;
 
-    @ManyToOne(type => S2Region, {
-        nullable: false,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
+    @Column({
+        unsigned: true,
+        type: 'tinyint',
     })
-    @Index()
-    region: S2Region;
-
-    @Column()
     regionId: number;
 
     @Column()

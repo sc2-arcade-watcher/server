@@ -3,6 +3,7 @@ import { S2GameLobby } from '../../../entity/S2GameLobby';
 import { S2GameLobbySlotKind } from '../../../entity/S2GameLobbySlot';
 import { GameLobbyStatus } from '../../../gametracker';
 import { S2Map } from '../../../entity/S2Map';
+import { S2Region } from '../../../entity/S2Region';
 
 export default fp(async (server, opts, next) => {
     server.get('/open-games', {
@@ -16,6 +17,7 @@ export default fp(async (server, opts, next) => {
         const result = await server.conn.getRepository(S2GameLobby)
             .createQueryBuilder('lobby')
             .select([
+                'lobby.regionId',
                 'lobby.bnetBucketId',
                 'lobby.bnetRecordId',
                 'lobby.createdAt',
@@ -29,7 +31,7 @@ export default fp(async (server, opts, next) => {
                 'lobby.slotsHumansTaken',
                 'lobby.multiModBnetId',
             ])
-            .innerJoinAndSelect('lobby.region', 'region')
+            .innerJoinAndMapOne('lobby.region', S2Region, 'region', 'region.id = lobby.regionId')
             .innerJoinAndMapOne('lobby.map', S2Map, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId')
             .leftJoinAndSelect('lobby.slots', 'slot')
             .leftJoinAndSelect('slot.joinInfo', 'joinInfo')
