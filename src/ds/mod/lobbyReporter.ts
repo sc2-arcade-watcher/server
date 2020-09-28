@@ -96,7 +96,7 @@ export class LobbyReporterTask extends BotTask {
     protected async restore() {
         const lobbyMessages = await this.conn.getRepository(DsGameLobbyMessage)
             .createQueryBuilder('lmsg')
-            .innerJoinAndSelect('lmsg.rule', 'rule')
+            .leftJoinAndSelect('lmsg.rule', 'rule')
             .innerJoinAndSelect('lmsg.lobby', 'lobby')
             .andWhere('lmsg.completed = false')
             .getMany()
@@ -758,7 +758,9 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
         else {
             const occupiedSlots = s2gm.getSlots({ kinds: [S2GameLobbySlotKind.Human, S2GameLobbySlotKind.AI] });
             const formattedSlots = formatSlotRows(occupiedSlots, {
-                includeTeamNumber: teamsNumber > 1 && Math.max(...teamSizes) > 1,
+                // displaying teamNumber seems to be useless with this setup (non even teams).
+                // often times it just shows dummy computer players which are forced from map variant
+                // includeTeamNumber: teamsNumber > 1 && Math.max(...teamSizes) > 1,
             });
             em.fields.push({
                 name: `Players` + (s2gm.status === GameLobbyStatus.Open ? ` [${occupiedSlots.length}/${s2gm.slots.length}]` : ''),
@@ -773,9 +775,10 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
 
         let rowCount = 0;
         let columnLimit = 2;
-        if ((teamFields.length % 3) === 0) {
-            columnLimit = 3;
-        }
+        // don't use more than 2 columns - doesn't look good most of the times
+        // if ((teamFields.length % 3) === 0) {
+        //     columnLimit = 3;
+        // }
         while (teamFields.length) {
             ++rowCount;
             const sectionTeamFields = teamFields.splice(0, columnLimit);
