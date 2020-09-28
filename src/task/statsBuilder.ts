@@ -223,8 +223,7 @@ export async function buildStatsForPeriod(conn: orm.Connection, statKind: S2Stat
             GameRegion.KR,
         ]);
 
-        // TODO: put a date in condition once it'll be stable
-        if (false) {
+        if (currDate >= new Date('2020-09-21')) {
             includedRegions.add(GameRegion.CN);
         }
 
