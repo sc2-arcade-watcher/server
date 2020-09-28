@@ -2,6 +2,7 @@ import * as fp from 'fastify-plugin';
 import { GameRegion } from '../../../common';
 import { S2Map } from '../../../entity/S2Map';
 import { stripIndents } from 'common-tags';
+import { MapAccessAttributes } from '../../plugins/accessManager';
 
 export default fp(async (server, opts, next) => {
     server.get('/maps/:regionId/:mapId/dependencies', {
@@ -50,17 +51,23 @@ export default fp(async (server, opts, next) => {
         if (!map) {
             return reply.type('application/json').code(404).send();
         }
-        if (map.currentVersion.isPrivate) {
+
+        const [canDetails, canDownload] = await server.accessManager.isMapAccessGranted(
+            [MapAccessAttributes.Details, MapAccessAttributes.Download],
+            map,
+            request.userAccount
+        );
+
+        if (!canDetails) {
             return reply.type('application/json').code(403).send();
         }
 
         const depMap = await server.mapResolver.resolveMapDependencies(map.regionId, map.bnetId);
         const depList = Array.from(depMap.values()).map(x => {
-            if (x.mapHeader.isPrivate) {
-                x.map.mainLocaleHash = null;
-                x.mapHeader.headerHash = null;
-                // if the map itself is public, there's no reason to hide archive hash of a dependency
-                // x.mapHeader.archiveHash = null;
+            x.mapHeader.headerHash = null;
+            // this is flawed - since we're asuming all depndencies belong to the same author
+            if (!canDownload) {
+                x.mapHeader.archiveHash = null;
             }
 
             return {
@@ -77,7 +84,7 @@ export default fp(async (server, opts, next) => {
             list: depList,
         };
 
-        reply.header('Cache-control', 'public, max-age=300, s-maxage=300');
+        reply.header('Cache-control', 'private, max-age=300');
         return reply.type('application/json').code(200).send(result);
     });
 });

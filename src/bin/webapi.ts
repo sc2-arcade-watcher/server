@@ -63,8 +63,9 @@ server.register(fastifyCors, {
     origin: process.env.ENV === 'dev' ? '*' : process.env.STARC_WEBAPI_HOSTNAME_WHITELIST.split(' ').map(x => `https://${x}`),
 });
 
-server.register(require('../api/cursorPagination').default);
-server.register(require('../api/authManager').default);
+server.register(require('../api/plugins/cursorPagination').default);
+server.register(require('../api/plugins/authManager').default);
+server.register(require('../api/plugins/accessManager').default);
 
 // @ts-ignore
 server.register(fastifyPagination, {
@@ -151,8 +152,9 @@ server.register(fastifyOAS, <fastifyOAS.FastifyOASOptions>{
 });
 
 server.register(require('../api/routes/account/auth/bnet').default);
-server.register(require('../api/routes/account/info').default);
 server.register(require('../api/routes/account/logout').default);
+server.register(require('../api/routes/account/info').default);
+server.register(require('../api/routes/account/settings').default);
 
 server.register(require('../api/routes/lobby/openGames').default);
 server.register(require('../api/routes/lobby/active').default);

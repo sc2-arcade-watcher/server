@@ -1,5 +1,6 @@
 import * as fp from 'fastify-plugin';
 import { S2Map } from '../../../entity/S2Map';
+import { MapAccessAttributes } from '../../plugins/accessManager';
 
 export default fp(async (server, opts, next) => {
     server.get('/maps/:regionId/:mapId', {
@@ -35,9 +36,10 @@ export default fp(async (server, opts, next) => {
         if (!map) {
             return reply.type('application/json').code(404).send();
         }
-        if (map.currentVersion.isPrivate) {
-            map.author = null;
-            map.mainLocaleHash = null;
+
+        // TODO: don't provide these attributes in this endpoint to avoid this check?
+        const canDownload = await server.accessManager.isMapAccessGranted(MapAccessAttributes.Download, map, request.userAccount);
+        if (!canDownload) {
             map.currentVersion.headerHash = null;
             map.currentVersion.archiveHash = null;
         }
@@ -78,7 +80,6 @@ export default fp(async (server, opts, next) => {
         delete result.mainCategory;
         // end
 
-        reply.header('Cache-control', 'public, s-maxage=60');
         return reply.type('application/json').code(200).send(result);
     });
 });

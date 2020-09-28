@@ -2,13 +2,13 @@ import { createHash } from 'crypto';
 import * as orm from 'typeorm';
 import * as http from 'http';
 import * as fp from 'fastify-plugin';
-import { AppAccountToken, AppAccountTokenKind } from '../entity/AppAccountToken';
+import { AppAccountToken, AppAccountTokenKind } from '../../entity/AppAccountToken';
 import { addSeconds } from 'date-fns';
-import { logger } from '../logger';
-import { AppAccount } from '../entity/AppAccount';
-import { BattleAPI, BattleAuthScope, BattleAuthResponse, BattleUserInfo, BattleErrorResponse } from '../bnet/battleAPI';
-import { isAxiosError } from '../helpers';
-import { BattleDataUpdater } from '../bnet/battleData';
+import { logger } from '../../logger';
+import { AppAccount } from '../../entity/AppAccount';
+import { BattleAPI, BattleAuthScope, BattleAuthResponse, BattleUserInfo, BattleErrorResponse } from '../../bnet/battleAPI';
+import { isAxiosError } from '../../helpers';
+import { BattleDataUpdater } from '../../bnet/battleData';
 
 class AuthManager {
     protected tokenLengthInit = 14;

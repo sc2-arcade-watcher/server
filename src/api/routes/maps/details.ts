@@ -3,6 +3,7 @@ import { S2Map } from '../../../entity/S2Map';
 import { S2MapHeader } from '../../../entity/S2MapHeader';
 import { GameLocale, GameRegion } from '../../../common';
 import { MapLocalizationTable, reprocessMapHeader } from '../../../map/mapResolver';
+import { MapAccessAttributes } from '../../plugins/accessManager';
 
 export default fp(async (server, opts, next) => {
     server.get('/maps/:regionId/:mapId/details', {
@@ -57,7 +58,9 @@ export default fp(async (server, opts, next) => {
         if (!map) {
             return reply.type('application/json').code(404).send();
         }
-        if (map.currentVersion.isPrivate) {
+
+        const canDetails = await server.accessManager.isMapAccessGranted(MapAccessAttributes.Details, map, request.userAccount);
+        if (!canDetails) {
             return reply.type('application/json').code(403).send();
         }
 
@@ -99,11 +102,22 @@ export default fp(async (server, opts, next) => {
             }
             localeTableHash = localeTable.stringTable[0].hash;
         }
-        mapLocalizationTable = await server.mapResolver.getMapLocalization(rcode, localeTableHash);
 
-        reply.header('Cache-control', 'public, max-age=300, s-maxage=300');
-        return reply.type('application/json').code(200).send(Object.assign(mhead, {
-            info: reprocessMapHeader(mapHeaderData, mapLocalizationTable),
-        }));
+        mapLocalizationTable = await server.mapResolver.getMapLocalization(rcode, localeTableHash);
+        const mapDetails = reprocessMapHeader(mapHeaderData, mapLocalizationTable);
+
+        const canDownload = await server.accessManager.isMapAccessGranted(MapAccessAttributes.Download, map, request.userAccount);
+        if (!canDownload) {
+            mhead.headerHash = null;
+            mhead.archiveHash = null;
+            mapDetails.archiveHandle = null;
+        }
+
+        return reply.type('application/json').code(200).send(Object.assign({},
+            mhead,
+            {
+                info: mapDetails,
+            },
+        ));
     });
 });

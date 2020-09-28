@@ -2,7 +2,7 @@ import * as http from 'http';
 import * as fastify from 'fastify';
 import * as fp from 'fastify-plugin';
 import * as orm from 'typeorm';
-import { atob, btoa } from '../helpers';
+import { atob, btoa } from '../../helpers';
 
 export interface CursorPaginationQuery {
     before: {[k: string]: string} | undefined;

@@ -1,6 +1,7 @@
 import { Entity, PrimaryColumn, Column, OneToOne, OneToMany } from 'typeorm';
 import { AppAccount } from './AppAccount';
 import { S2Profile } from './S2Profile';
+import { BnAccountSettings } from './BnAccountSettings';
 
 @Entity()
 export class BnAccount {
@@ -27,4 +28,7 @@ export class BnAccount {
         persistence: false,
     })
     profiles: S2Profile[];
+
+    @OneToOne(type => BnAccountSettings, settings => settings.account)
+    settings: BnAccountSettings;
 }

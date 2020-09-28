@@ -2,6 +2,7 @@ import * as fp from 'fastify-plugin';
 import { S2MapHeader } from '../../../entity/S2MapHeader';
 import { stripIndents } from 'common-tags';
 import { S2Map } from '../../../entity/S2Map';
+import { MapAccessAttributes } from '../../plugins/accessManager';
 
 export default fp(async (server, opts, next) => {
     server.get('/maps/:regionId/:mapId/versions', {
@@ -29,8 +30,11 @@ export default fp(async (server, opts, next) => {
             },
         },
     }, async (request, reply) => {
+        // TODO: pagination
+        // TODO: first fetch map and first revision, then if client can access it fetch the revisions?
         const map = await server.conn.getRepository(S2Map)
             .createQueryBuilder('map')
+            .select([])
             .innerJoinAndSelect('map.currentVersion', 'mapHead')
             .innerJoinAndMapMany(
                 'map.revisions',
@@ -39,10 +43,9 @@ export default fp(async (server, opts, next) => {
                 'revision.regionId = :regionId AND revision.bnetId = :bnetId'
             )
             .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId')
-            .select([
+            .addSelect([
                 'map.regionId',
                 'map.bnetId',
-                'mapHead.isPrivate',
                 'revision.majorVersion',
                 'revision.minorVersion',
                 'revision.headerHash',
@@ -64,8 +67,22 @@ export default fp(async (server, opts, next) => {
         if (!map) {
             return reply.type('application/json').code(404).send();
         }
-        if (map.currentVersion.isPrivate) {
+
+        const [canDetails, canDownload] = await server.accessManager.isMapAccessGranted(
+            [MapAccessAttributes.Details, MapAccessAttributes.Download],
+            map,
+            request.userAccount
+        );
+
+        if (!canDetails) {
             return reply.type('application/json').code(403).send();
+        }
+
+        if (!canDownload) {
+            map.revisions.forEach(rev => {
+                rev.headerHash = null;
+                rev.archiveHash = null;
+            });
         }
 
         return reply.type('application/json').code(200).send({
