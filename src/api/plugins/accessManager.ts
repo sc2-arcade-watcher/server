@@ -1,7 +1,7 @@
 import * as orm from 'typeorm';
 import * as http from 'http';
 import * as fp from 'fastify-plugin';
-import { AppAccount } from '../../entity/AppAccount';
+import { AppAccount, AccountPrivileges } from '../../entity/AppAccount';
 import { S2Map } from '../../entity/S2Map';
 import { S2Profile } from '../../entity/S2Profile';
 import { logger, logIt } from '../../logger';
@@ -84,6 +84,11 @@ class AccessManager implements IAccessManager {
         const results: boolean[] = [];
         const kinds = Array.isArray(kind) ? kind : [kind];
         for (const currKind of kinds) {
+            if (userAccount?.privileges & AccountPrivileges.SuperAdmin) {
+                results.push(true);
+                continue;
+            }
+
             if (!authorProfile) {
                 logger.warn(`couldn't fetch authorProfile of ${map.currentVersion.linkVer}`);
                 results.push(false);

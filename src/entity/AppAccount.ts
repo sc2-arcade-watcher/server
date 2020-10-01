@@ -1,6 +1,10 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToOne, Index, JoinColumn } from 'typeorm';
 import { BnAccount } from './BnAccount';
 
+export enum AccountPrivileges {
+    SuperAdmin = 1 << 0,
+}
+
 @Entity()
 export class AppAccount {
     @PrimaryGeneratedColumn()
@@ -28,4 +32,10 @@ export class AppAccount {
         unsigned: true,
     })
     bnAccountId: number;
+
+    @Column({
+        unsigned: true,
+        default: 0,
+    })
+    privileges: AccountPrivileges;
 }
