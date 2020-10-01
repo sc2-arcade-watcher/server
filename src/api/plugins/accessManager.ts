@@ -6,6 +6,7 @@ import { S2Map } from '../../entity/S2Map';
 import { S2Profile } from '../../entity/S2Profile';
 import { logger, logIt } from '../../logger';
 import { defaultAccountSettings, MapAuthorPreferences } from '../../entity/BnAccountSettings';
+import { BnAccount } from '../../entity/BnAccount';
 
 // TODO: temporary restrictive settings, to be replaced with `defaultAccountSettings`
 export const publicAccountSettings: Required<MapAuthorPreferences> = {
@@ -27,6 +28,7 @@ export enum ProfileAccessAttributes {
 interface IAccessManager {
     isMapAccessGranted(kind: MapAccessAttributes, map: S2Map, userAccount?: AppAccount): Promise<boolean>;
     isMapAccessGranted(kind: MapAccessAttributes[], map: S2Map, userAccount?: AppAccount): Promise<boolean[]>;
+    isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile, userAccount?: AppAccount): Promise<boolean>;
 }
 
 class AccessManager implements IAccessManager {
@@ -96,7 +98,7 @@ class AccessManager implements IAccessManager {
             }
 
             // allow access to author's own content
-            if (userAccount && userAccount.id === authorProfile?.account?.id) {
+            if (userAccount && userAccount.bnAccountId === authorProfile?.account?.id) {
                 results.push(true);
                 continue;
             }
@@ -118,6 +120,36 @@ class AccessManager implements IAccessManager {
         }
 
         return Array.isArray(kind) ? results : results.shift();
+    }
+
+    async isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile, userAccount?: AppAccount) {
+        if (typeof profile.account === 'undefined') {
+            throw Error('profile.account undefined');
+        }
+
+        if (userAccount?.privileges & AccountPrivileges.SuperAdmin) {
+            return true;
+        }
+
+        // allow access to author's own content
+        if (userAccount && userAccount.bnAccountId === profile.account?.id) {
+            return true;
+        }
+
+        // try to get configured prefs and fallback to defaults
+        const authorSettings = profile?.account?.settings ?? publicAccountSettings;
+
+        switch (kind) {
+            case ProfileAccessAttributes.PrivateMapList: {
+                return authorSettings.mapPrivListed;
+                break;
+            }
+
+            default: {
+                return false;
+                break;
+            }
+        }
     }
 }
 

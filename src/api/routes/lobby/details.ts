@@ -39,6 +39,10 @@ export default fp(async (server, opts, next) => {
         lobbyRepo.addJoinHistory(qb);
 
         qb.addSelect([
+            'profile.avatarUrl',
+        ]);
+
+        qb.addSelect([
             'lobby.regionId',
             'lobby.bnetBucketId',
             'lobby.bnetRecordId',
@@ -53,6 +57,9 @@ export default fp(async (server, opts, next) => {
             'lobby.lobbyTitle',
             'lobby.hostName',
             'lobby.slotsUpdatedAt',
+            // these below might be removed in the future
+            'lobby.slotsHumansTaken',
+            'lobby.slotsHumansTotal',
             'lobby.snapshotUpdatedAt',
         ]);
 

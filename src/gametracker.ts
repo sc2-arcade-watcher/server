@@ -2,6 +2,7 @@ import { LobbyPreviewSlot, DataLobbyCreate, JournalDecoder, SignalBase, SignalLo
 import { TypedEvent, sleep } from './helpers';
 import { JournalFeed, JournalFeedCursor } from './journal/feed';
 import { logger, logIt } from './logger';
+import { parseProfileHandle } from './bnet/common';
 
 // TODO: replace with GameRegion from common.ts
 export enum GameRegion {
@@ -15,22 +16,6 @@ interface GameLobbyPreview {
     lastUpdateAt: Date;
     slots: LobbyPreviewSlot[];
     teamsNumber: number;
-}
-
-interface PlayerProfile {
-    region: GameRegion;
-    realm: number;
-    profileId: number;
-}
-
-function parsePlayerProfile(s: string): PlayerProfile {
-    const m = s.match(/^(\d+)-S2-(\d+)-(\d+)$/);
-    if (!m) return;
-    return {
-        region: Number(m[1]) as GameRegion,
-        realm: Number(m[2]),
-        profileId: Number(m[3]),
-    };
 }
 
 interface PreviewRequestStatus {
@@ -232,9 +217,9 @@ export class JournalReader {
     protected handleInit(ev: SignalInit) {
         this.initEntry = ev;
         this.bucketId = ev.bucketId;
-        const mprofile = parsePlayerProfile(ev.playerHandle);
-        if (mprofile.region !== this.region) {
-            throw new Error(`sess=${this.jfeed.currCursor} region missmatch ${mprofile.region} !== ${this.region}`);
+        const mprofile = parseProfileHandle(ev.playerHandle);
+        if (mprofile.regionId !== this.region) {
+            throw new Error(`sess=${this.jfeed.currCursor} region missmatch ${mprofile.regionId} !== ${this.region}`);
         }
 
         if (ev.$version === 1) {

@@ -2,6 +2,9 @@ import * as fp from 'fastify-plugin';
 import { S2Map, S2MapType } from '../../../entity/S2Map';
 import { S2StatsPeriodMap } from '../../../entity/S2StatsPeriodMap';
 import { S2StatsPeriod } from '../../../entity/S2StatsPeriod';
+import { parseProfileHandle } from '../../../bnet/common';
+import { S2Profile } from '../../../entity/S2Profile';
+import { ProfileAccessAttributes } from '../../plugins/accessManager';
 
 export default fp(async (server, opts, next) => {
     const fulltextStopWords = ['a', 'about', 'an', 'are', 'as', 'at', 'be', 'by', 'com', 'de', 'en', 'for', 'from', 'how', 'i', 'in', 'is', 'it', 'la', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'was', 'what', 'when', 'where', 'who', 'will', 'with', 'und', 'the', 'www'];
@@ -14,6 +17,9 @@ export default fp(async (server, opts, next) => {
             querystring: {
                 type: 'object',
                 properties: {
+                    authorHandle: {
+                        type: 'string',
+                    },
                     regionId: {
                         type: 'number',
                     },
@@ -127,6 +133,60 @@ export default fp(async (server, opts, next) => {
             ;
             qb.innerJoin(S2StatsPeriodMap, 'stMap', 'stMap.regionId = map.regionId AND stMap.bnetId = map.bnetId AND stMap.period = ' + stMapQuery);
             qb.addSelect('stMap.participantsUniqueTotal');
+        }
+
+        if (request.query.authorHandle !== void 0) {
+            const requestedAuthor = parseProfileHandle(request.query.authorHandle);
+            if (!requestedAuthor) {
+                return reply.code(400).send();
+            }
+
+            // const authorQuery = qb.subQuery()
+            //     .from(S2Profile, 'profile')
+            //     .select('profile.id')
+            //     .andWhere('profile.regionId = :authorRegionId AND profile.realmId = :authorRealmId AND profile.profileId = :authorProfileId')
+            //     .limit(1)
+            //     .getQuery()
+            // ;
+
+            // qb.andWhere('map.author = ' + authorQuery, {
+            //     authorRegionId: requestedAuthor.regionId,
+            //     authorRealmId: requestedAuthor.realmId,
+            //     authorProfileId: requestedAuthor.profileId,
+            // });
+
+            const mapAuthorProfile = await server.conn.getRepository(S2Profile).findOne({
+                relations: [
+                    'account',
+                    'account.settings',
+                ],
+                where: {
+                    regionId: requestedAuthor.regionId,
+                    realmId: requestedAuthor.realmId,
+                    profileId: requestedAuthor.profileId,
+                },
+            });
+
+            if (!mapAuthorProfile) {
+                return reply.code(404).send({
+                    message: `Couldn't find a profile matching given handle.`,
+                });
+            }
+
+            if (request.query.showPrivate) {
+                const canListPrivate = await server.accessManager.isProfileAccessGranted(
+                    ProfileAccessAttributes.PrivateMapList,
+                    mapAuthorProfile,
+                    request.userAccount
+                );
+                if (!canListPrivate) {
+                    return reply.code(403).send({
+                        message: `Privately published maps cannot be shown for this profile.`
+                    });
+                }
+            }
+
+            qb.andWhere('map.author = :authorProfileId', { authorProfileId: mapAuthorProfile.id });
         }
 
         if (request.query.type !== void 0) {
