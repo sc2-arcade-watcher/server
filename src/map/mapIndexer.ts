@@ -381,9 +381,11 @@ export class MapIndexer {
     async add(msg: MessageMapDiscoverResult | MessageMapRevisionResult) {
         return this.taskQueue.add(async () => {
             const key = `${msg.regionId}/${msg.mapId}`;
-            while (this.currentlyProcessing.has(key)) {
+            if (this.currentlyProcessing.has(key)) {
                 logger.debug(`waiting for ${key}..`);
-                await sleep(100);
+                while (this.currentlyProcessing.has(key)) {
+                    await sleep(100);
+                }
             }
             try {
                 this.currentlyProcessing.add(key);

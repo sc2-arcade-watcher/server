@@ -589,7 +589,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
 
     const em: RichEmbedOptions = {
         title: s2gm.map?.name ?? `#${s2gm.mapBnetId}`,
-        url: `https://sc2arcade.talv.space/lobby/${s2gm.regionId}/${s2gm.bnetBucketId}/${s2gm.bnetRecordId}`,
+        url: `https://sc2arcade.com/lobby/${s2gm.regionId}/${s2gm.bnetBucketId}/${s2gm.bnetRecordId}`,
         fields: [],
         timestamp: s2gm.createdAt,
         footer: {
@@ -598,7 +598,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
 
     if (cfg.showThumbnail && s2gm.map) {
         em.thumbnail = {
-            url: `http://sc2arcade.talv.space/bnet/${s2gm.map.iconHash}.jpg`,
+            url: `http://static.sc2arcade.com/dimg/${s2gm.map.iconHash}.jpg?region=${GameRegion[s2gm.regionId].toLowerCase()}`,
         };
     }
 

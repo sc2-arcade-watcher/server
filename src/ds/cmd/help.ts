@@ -63,7 +63,7 @@ export class HelpCommand extends GeneralCommand {
             }
             else {
                 messages.push(<Message>await msg.direct(stripIndents`
-                    Website: <https://sc2arcade.talv.space>
+                    Website: <https://sc2arcade.com>
                     Support: <https://discord.gg/VxAJYjF> (SC2Mapster server, \`#arcade-watcher\` channel)
                     Issue tracker: <${this.client.issueTracker}>
 

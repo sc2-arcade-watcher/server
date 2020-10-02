@@ -14,16 +14,3 @@ export class InviteCommand extends GeneralCommand {
         return msg.reply(`<https://discord.com/oauth2/authorize?client_id=${this.client.user.id}&scope=bot&permissions=379968>`);
     }
 }
-
-export class ApiCommand extends GeneralCommand {
-    constructor(client: DsBot) {
-        super(client, {
-            name: 'api',
-            description: 'Link to the documentation of the SC2 Arcade API.',
-        });
-    }
-
-    public async exec(msg: CommandMessage) {
-        return msg.reply(`<http://sc2arcade.talv.space/docs/api/>`);
-    }
-}

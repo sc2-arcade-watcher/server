@@ -5,7 +5,7 @@ import { setupFileLogger, logger } from '../logger';
 import { CommandoClient, CommandoClientOptions, FriendlyError, SQLiteProvider } from 'discord.js-commando';
 import { BotTask } from '../ds/dscommon';
 import { LobbyReporterTask } from '../ds/mod/lobbyReporter';
-import { InviteCommand, ApiCommand } from '../ds/cmd/general';
+import { InviteCommand } from '../ds/cmd/general';
 import { StatusTask } from '../ds/mod/status';
 import { DMChannel } from 'discord.js';
 import { sleep, execAsync } from '../helpers';
@@ -14,7 +14,7 @@ import { LobbyPublishCommand } from '../ds/cmd/lobbyPublish';
 import { HelpCommand } from '../ds/cmd/help';
 
 export class DsBot extends CommandoClient {
-    issueTracker: string;
+    readonly issueTracker: string;
     conn: orm.Connection;
     slitedb: sqlite.Database;
     tasks: {
@@ -32,13 +32,13 @@ export class DsBot extends CommandoClient {
             unknownCommandResponse: false,
             nonCommandEditable: true,
             // commandEditableDuration: 300,
-            messageCacheMaxSize: 50,
-            messageCacheLifetime: 60 * 30,
+            messageCacheMaxSize: 30,
+            messageCacheLifetime: 60 * 20,
             messageSweepInterval: 600,
             disabledEvents: ['TYPING_START', 'VOICE_SERVER_UPDATE', 'VOICE_STATE_UPDATE']
         } as CommandoClientOptions, options);
         super(options);
-        this.issueTracker = 'https://github.com/SC2-Arcade-Watcher/server/issues';
+        this.issueTracker = 'https://github.com/sc2-arcade-watcher/server/issues';
         this.doShutdown = false;
 
         this.on('error', (e) => logger.error(e.message, e));
@@ -94,7 +94,6 @@ export class DsBot extends CommandoClient {
         });
         this.registry.registerCommand(HelpCommand);
         this.registry.registerCommand(InviteCommand);
-        this.registry.registerCommand(ApiCommand);
         this.registry.registerCommand(LobbyPublishCommand);
     }
 

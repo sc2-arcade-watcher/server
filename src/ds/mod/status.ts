@@ -6,6 +6,8 @@ import { GameLobbyStatus } from '../../gametracker';
 import { S2GameLobbySlotKind } from '../../entity/S2GameLobbySlot';
 
 export class StatusTask extends BotTask {
+    readonly customMessage = String(process.env.DS_BOT_STATUS_MESSAGE).trim();
+
     async load() {
         setTimeout(this.update.bind(this), 500).unref();
     }
@@ -17,11 +19,14 @@ export class StatusTask extends BotTask {
         this.running = true;
         while (await this.waitUntilReady()) {
             await this.showOpenLobbyCount();
-            await sleepUnless(8000, () => !this.client.doShutdown);
+            await sleepUnless(10000, () => !this.client.doShutdown);
             await this.showNumberOfRecentGames();
-            await sleepUnless(8000, () => !this.client.doShutdown);
-            await this.client.user.setActivity('Visit sc2arcade.talv.space', { type: 'WATCHING' });
-            await sleepUnless(8000, () => !this.client.doShutdown);
+            await sleepUnless(10000, () => !this.client.doShutdown);
+
+            if (this.customMessage.length) {
+                await this.client.user.setActivity(this.customMessage, { type: 'PLAYING' });
+                await sleepUnless(8000, () => !this.client.doShutdown);
+            }
         }
         this.running = false;
     }
@@ -58,7 +63,6 @@ export class StatusTask extends BotTask {
         await this.client.user.setActivity([
             `Open lobbies:\n  US:${result.lobbyCountUS} EU:${result.lobbyCountEU} KR:${result.lobbyCountKR} CN:${result.lobbyCountCN}`,
             `Awaiting players:\n  US:${result.playerCountUS} EU:${result.playerCountEU} KR:${result.playerCountKR} CN:${result.playerCountCN}`,
-            `Send .help command to learn about the bot.`,
         ].join('\n'), { type: 'WATCHING' });
     }
 

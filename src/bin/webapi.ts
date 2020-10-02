@@ -61,6 +61,7 @@ server.register(fastifyRateLimit, {
 
 server.register(fastifyCors, {
     origin: process.env.ENV === 'dev' ? '*' : process.env.STARC_WEBAPI_HOSTNAME_WHITELIST.split(' ').map(x => `https://${x}`),
+    maxAge: 3600 * 24,
 });
 
 server.register(require('../api/plugins/cursorPagination').default);
@@ -127,11 +128,13 @@ server.register(fastifyOAS, <fastifyOAS.FastifyOASOptions>{
         },
         servers: [
             {
-                url: process.env.ENV === 'dev' ? `http://localhost:${webapiPort}` : `http://sc2arcade.talv.space/api`,
+                url: process.env.ENV === 'dev' ? `http://localhost:${webapiPort}` : `https://api.sc2arcade.com`,
                 description: process.env.ENV ?? ''
             },
         ],
-        schemes: ['http'],
+        schemes: [
+            process.env.ENV === 'dev' ? 'http' : 'https'
+        ],
         consumes: ['application/json'],
         produces: ['application/json'],
         tags: [
