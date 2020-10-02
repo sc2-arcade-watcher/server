@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneToMany } from 'typeorm';
 import { S2Region } from './S2Region';
 import { BnAccount } from './BnAccount';
+import { S2ProfileTracking } from './S2ProfileTracking';
 
 @Entity()
 @Unique('bnet_id', ['regionId', 'realmId', 'profileId'])
@@ -68,4 +69,6 @@ export class S2Profile {
         nullable: true,
     })
     avatarUrl: string | null;
+
+    tracking?: S2ProfileTracking;
 }

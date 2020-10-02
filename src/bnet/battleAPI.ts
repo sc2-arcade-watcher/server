@@ -1,13 +1,19 @@
 import * as qs from 'querystring';
+import * as fs from 'fs-extra';
+import * as http from 'http';
+import * as https from 'https';
 import Axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosTransformer } from 'axios';
 import applyCaseMiddleware from 'axios-case-converter';
 import * as snakecaseKeys from 'snakecase-keys';
 import { GameRegion, regionCode } from '../common';
+import { isAxiosError } from '../helpers';
+import { logger } from '../logger';
 
 export interface BattleAPIClientConfig {
     region: GameRegion;
     clientId: string;
     clientSecret: string;
+    accessToken?: string;
 }
 
 interface BattleAPIModuleConfig {
@@ -16,15 +22,24 @@ interface BattleAPIModuleConfig {
 }
 
 abstract class BattleAPIBase {
-    protected axios: AxiosInstance;
+    readonly axios: AxiosInstance;
 
     constructor(protected readonly config: BattleAPIModuleConfig) {
         this.axios = this.createAxios();
     }
 
     protected createAxios() {
-        return Axios.create(Object.assign({
+        return Axios.create(Object.assign<AxiosRequestConfig, AxiosRequestConfig>({
             baseURL: `https://${regionCode(this.config.client.region).toLowerCase()}.api.blizzard.com`,
+            httpAgent: new http.Agent({
+                keepAlive: true,
+            }),
+            httpsAgent: new https.Agent({
+                keepAlive: true,
+            }),
+            headers: {
+                'Accept-Encoding': 'gzip',
+            },
         }, this.config.axios));
     }
 
@@ -135,13 +150,31 @@ interface BattleSC2ProfileParams {
     realmId: number;
 }
 
-export interface BattleSC2Profile {
+export interface BattleSC2ProfileBase {
     name: string;
     profileUrl: string;
     avatarUrl: string;
     profileId: number;
     regionId: number;
     realmId: number;
+}
+
+export interface BattleSC2ProfileSummary {
+    id: string;
+    realm: number;
+    displayName: string;
+    clanName?: string;
+    clanTag?: string;
+    portrait: string;
+    decalTerran: string;
+    decalProtoss: string;
+    decalZerg: string;
+    totalSwarmLevel: number;
+    totalAchievementPoints: number;
+}
+
+export interface BattleSC2ProfileFull {
+    summary: BattleSC2ProfileSummary;
 }
 
 export enum BattleSC2Decision {
@@ -181,10 +214,10 @@ class BattleSC2 extends BattleAPIBase {
         let customAxios = super.createAxios();
         Object.assign(customAxios.defaults, <AxiosRequestConfig>{
             baseURL: `https://${regionCode(this.config.client.region).toLowerCase()}.api.blizzard.com/sc2`,
-            headers: {
-                'Authorization': `Bearer ${'USh4cFd9D37u4h26ntoDP4AT7ZBShYHrPT'}`,
-            }
         });
+        if (this.config.client.accessToken) {
+            customAxios.defaults.headers['Authorization'] = `Bearer ${this.config.client.accessToken}`;
+        }
         return customAxios;
     }
 
@@ -198,7 +231,7 @@ class BattleSC2 extends BattleAPIBase {
             return data;
         }
 
-        return this.axios.get<BattleSC2Profile[]>(`player/${accountId}`, {
+        return this.axios.get<BattleSC2ProfileBase[]>(`player/${accountId}`, {
             transformResponse: [].concat(
                 this.axios.defaults.transformResponse,
                 fixProfileId
@@ -206,8 +239,12 @@ class BattleSC2 extends BattleAPIBase {
         });
     }
 
+    async getProfile(params: BattleSC2ProfileParams) {
+        return this.axios.get<BattleSC2ProfileFull>(`profile/${params.regionId}/${params.realmId}/${params.profileId}`);
+    }
+
     async getMatchHistory(params: BattleSC2ProfileParams) {
-        return this.axios.get<BattleSC2Profile[]>(`legacy/profile/${params.regionId}/${params.realmId}/${params.profileId}/matches`);
+        return this.axios.get<BattleSC2MatchHistory[]>(`legacy/profile/${params.regionId}/${params.realmId}/${params.profileId}/matches`);
     }
 }
 
@@ -215,6 +252,14 @@ const defaultConfig: BattleAPIClientConfig = {
     region: GameRegion.EU,
     clientId: process.env.STARC_BNET_API_CLIENT_ID,
     clientSecret: process.env.STARC_BNET_API_CLIENT_SECRET,
+    accessToken: (function() {
+        try {
+            return fs.readFileSync('data/.battle_token', 'utf8');
+        }
+        catch (err) {
+            return void 0;
+        }
+    })(),
 };
 
 export class BattleAPI {
@@ -229,5 +274,28 @@ export class BattleAPI {
         };
         this.oauth = new BattleOAuth(modConfig);
         this.sc2 = new BattleSC2(modConfig);
+
+        this.sc2.axios.interceptors.response.use(function (response) {
+            return response;
+        }, async (error) => {
+            if (isAxiosError(error)) {
+                if (error.response!.status === 401) {
+                    logger.warn(`Battle accessToken expired? reqUrl=${error.config.url}`);
+                    const tokenInfo = await this.refreshToken();
+                    error.config.headers['Authorization'] = `Bearer ${tokenInfo.accessToken}`;
+                    return this.sc2.axios.request(error.config);
+                }
+            }
+            throw error;
+        });
+    }
+
+    async refreshToken() {
+        logger.verbose(`Refreshing Battle token..`);
+        const tokenInfo = (await this.oauth.acquireToken({ grantType: 'client_credentials' })).data;
+        this.sc2.axios.defaults.headers['Authorization'] = `Bearer ${tokenInfo.accessToken}`;
+        logger.verbose(`Refreshed Battle token, accessToken=${tokenInfo.accessToken} expiresIn=${tokenInfo.expiresIn}`);
+        await fs.writeFile('data/.battle_token', tokenInfo.accessToken, { encoding: 'utf8' });
+        return tokenInfo;
     }
 }

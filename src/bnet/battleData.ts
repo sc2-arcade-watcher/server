@@ -3,6 +3,9 @@ import { BattleAPI, BattleUserInfo } from './battleAPI';
 import { BnAccount } from '../entity/BnAccount';
 import { profileHandle } from './common';
 import { S2Profile } from '../entity/S2Profile';
+import { S2ProfileTracking } from '../entity/S2ProfileTracking';
+import { isAxiosError } from '../helpers';
+import { logger } from '../logger';
 
 export class BattleDataUpdater {
     protected bAPI = new BattleAPI();
@@ -88,5 +91,49 @@ export class BattleDataUpdater {
             await this.conn.getRepository(BnAccount).save(bAccount);
         }
         return bAccount;
+    }
+
+    async updateProfileData(profile: S2Profile) {
+        if (profile.tracking === null) {
+            profile.tracking = new S2ProfileTracking();
+            profile.tracking.regionId = profile.regionId;
+            profile.tracking.realmId = profile.realmId;
+            profile.tracking.profileId = profile.profileId;
+            await this.conn.getRepository(S2ProfileTracking).insert(profile.tracking);
+        }
+
+        try {
+            const bCurrProfile = (await this.bAPI.sc2.getProfile(profile)).data;
+
+            const updatedData: Partial<S2Profile> = {};
+            if (profile.avatarUrl !== bCurrProfile.summary.portrait) {
+                updatedData.avatarUrl = bCurrProfile.summary.portrait;
+            }
+
+            if (Object.keys(updatedData).length) {
+                Object.assign(profile, updatedData);
+                await this.conn.getRepository(S2Profile).update(profile.id, updatedData);
+            }
+        }
+        catch (err) {
+            if (isAxiosError(err)) {
+                if (err.response.status === 404 || err.response.status === 500) {
+                    logger.verbose(`Profile "${profile.name}" ${profileHandle(profile)}: got ${err.response.status}`);
+                }
+                else if (err.response.status === 504) {
+                    return;
+                }
+                else {
+                    throw err;
+                }
+            }
+            else {
+                throw err;
+            }
+        }
+
+        await this.conn.getRepository(S2ProfileTracking).update(profile.tracking.id, {
+            profileInfoUpdatedAt: new Date(),
+        });
     }
 }
