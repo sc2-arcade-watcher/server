@@ -3,32 +3,51 @@ import * as fs from 'fs-extra';
 import * as fp from 'fastify-plugin';
 import { BattleDepot, NestedHashDir, convertImage } from '../../depot';
 import { logger } from '../../logger';
-import { S2Map } from '../../entity/S2Map';
 import { GameRegion } from '../../common';
+import { isAxiosError } from '../../helpers';
 
 const bnDepot = new BattleDepot('data/depot');
 const pubBnetDir = new NestedHashDir('data/bnet');
 
 export default fp(async (server, opts, next) => {
-    async function getDepotImage(region: GameRegion, hash: string) {
+    async function getDepotImage(hash: string, region?: GameRegion) {
         const jpgPath = pubBnetDir.pathTo(`${hash}.jpg`);
+
         if (!(await fs.pathExists(jpgPath))) {
-            const s2mvPath = await bnDepot.getPathOrRetrieve(
-                GameRegion[region].toLowerCase(),
-                `${hash}.s2mv`
-            );
+            if (!region) return 400;
+
+            let s2mvPath: string;
+            try {
+                s2mvPath = await bnDepot.getPathOrRetrieve(
+                    GameRegion[region].toLowerCase(),
+                    `${hash}.s2mv`
+                );
+            }
+            catch (err) {
+                try {
+                    const res = await bnDepot.retrieveHead(
+                        GameRegion[region].toLowerCase(),
+                        `${hash}.s2mv`
+                    );
+                }
+                catch (secErr) {
+                    if (isAxiosError(secErr)) {
+                        return secErr.response.status;
+                    }
+                }
+
+                throw err;
+            }
+
             await convertImage(s2mvPath, jpgPath, ['-format', 'jpg', '-quality', '80', '-strip']);
             await fs.unlink(s2mvPath);
         }
         return jpgPath;
     }
 
-    server.get('/bnet/:hash(^\\w+).jpg', {
+    server.get('/dimg/:hash(^\\w+).jpg', {
         config: {
-            rateLimit: {
-                max: 2000,
-                timeWindow: 1000 * 60 * 10,
-            },
+            rateLimit: false,
         },
         schema: {
             params: {
@@ -39,62 +58,34 @@ export default fp(async (server, opts, next) => {
                     },
                 },
             },
-        },
-    }, async (request, reply) => {
-        const jpgPath = pubBnetDir.pathTo(`${request.params.hash}.jpg`);
-        if (!(await fs.pathExists(jpgPath))) {
-            try {
-                const result = await server.conn.getRepository(S2Map)
-                    .createQueryBuilder('map')
-                    .select(['map.regionId'])
-                    .andWhere('map.iconHash = :hash', { hash: request.params.hash })
-                    .getOne()
-                ;
-                if (!result) {
-                    return reply.callNotFound();
-                }
-
-                await getDepotImage(result.regionId, request.params.hash);
-            }
-            catch (err) {
-                logger.error(err);
-                return reply.code(500);
-            }
-        }
-        reply.header('Cache-control', 'public, max-age=604800, s-maxage=604800');
-        return reply.sendFile(jpgPath, path.resolve('.'));
-    });
-
-    server.get('/depot/:region/:hash(^\\w+).jpg', {
-        config: {
-            rateLimit: {
-                max: 2000,
-                timeWindow: 1000 * 60 * 10,
-            },
-        },
-        schema: {
-            params: {
+            querystring: {
                 type: 'object',
                 properties: {
                     region: {
                         type: 'string',
                         enum: ['us', 'eu', 'kr', 'cn'],
                     },
-                    hash: {
-                        type: 'string',
-                    },
                 },
             },
         },
     }, async (request, reply) => {
+        let regionCode: GameRegion;
+        if (request.query.region) {
+            regionCode = (GameRegion as any)[request.query.region.toUpperCase()];
+        }
+
         try {
-            const jpgPath = await getDepotImage((GameRegion as any)[request.params.region.toUpperCase()], request.params.hash);
-            reply.header('Cache-control', 'public, max-age=604800, s-maxage=604800');
-            return reply.sendFile(jpgPath, path.resolve('.'));
+            const dpResult = await getDepotImage(request.params.hash, regionCode);
+            if (typeof dpResult === 'number') {
+                return reply.code(dpResult).send();
+            }
+
+            reply.header('Cache-control', 'public, max-age=2592000, s-maxage=2592000');
+            return reply.sendFile(dpResult, path.resolve('.'));
         }
         catch (err) {
             logger.error(err);
-            return reply.code(500);
+            return reply.code(500).send();
         }
     });
 });
