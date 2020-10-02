@@ -4,7 +4,7 @@ Anyone with intentions to utilize it to build something for a wider audience sho
 
 ### Rate limiting
 
-Current limits are: up to 500 requests in the span of 5 minutes.
+Current limits are: up to 100 requests in the span of 40 seconds.
 
 If the limit is exceeded `429` HTTP response will be given, instead of what was requested.
 

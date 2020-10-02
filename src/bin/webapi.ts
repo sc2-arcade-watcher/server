@@ -55,8 +55,8 @@ server.register(fastifyStatic, {
 
 server.register(fastifyRateLimit, {
     global: true,
-    max: 500,
-    timeWindow: 1000 * 60 * 5,
+    max: 100,
+    timeWindow: 1000 * 40 * 1,
 });
 
 server.register(fastifyCors, {
