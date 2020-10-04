@@ -1,4 +1,6 @@
 import * as orm from 'typeorm';
+import type lruFactory from 'tiny-lru';
+const lru: typeof lruFactory = require('tiny-lru');
 import { JournalReader, GameRegion, JournalMultiProcessor, JournalEventKind, JournalEventNewLobby, JournalEventCloseLobby, GameLobbyStatus, JournalEventUpdateLobbySnapshot, JournalEventUpdateLobbyList, GameLobbyDesc, JournalEventUpdateLobbySlots, JournalEventBase } from '../gametracker';
 import { JournalFeed } from '../journal/feed';
 import { S2GameLobby } from '../entity/S2GameLobby';
@@ -23,9 +25,9 @@ class DataProc {
     protected feedProviders = new Map<string, SysFeedProvider>();
     protected closed = false;
 
-    protected lobbiesCache = new Map<number, S2GameLobby>();
-    protected profilesCache = new Map<string, S2Profile>();
-    protected mapVariantsCache = new Map<string, S2MapVariant>();
+    protected lobbiesCache = lru<S2GameLobby>(0);
+    protected profilesCache = lru<S2Profile>(2000, 1000 * 3600 * 24);
+    protected mapVariantsCache = lru<string>(4000, 1000 * 3600);
 
     protected lobbiesReopenCandidates = new Set();
 
@@ -140,7 +142,7 @@ class DataProc {
     }
 
     protected async getLobby(lobby: GameLobbyDesc) {
-        let s2lobby = this.lobbiesCache.get(lobby.initInfo.lobbyId);
+        let s2lobby = this.lobbiesCache.get(lobby.initInfo.lobbyId.toString());
         if (!s2lobby) {
             s2lobby = await this.em.getRepository(S2GameLobby)
                 .createQueryBuilder('lobby')
@@ -163,7 +165,7 @@ class DataProc {
                 slot.joinInfo.profile = slot.profile;
             });
 
-            this.lobbiesCache.set(lobby.initInfo.lobbyId, s2lobby);
+            this.lobbiesCache.set(lobby.initInfo.lobbyId.toString(), s2lobby);
         }
         return s2lobby;
     }
@@ -361,16 +363,19 @@ class DataProc {
         const key = `${regionId}/${mapId}:${variantIndex}`;
         let mapVariant = this.mapVariantsCache.get(key);
         if (!mapVariant) {
-            mapVariant = await this.conn.getRepository(S2MapVariant).createQueryBuilder('mapVariant')
+            const result = await this.conn.getRepository(S2MapVariant).createQueryBuilder('mapVariant')
+                .select('mapVariant.name', 'name')
                 .innerJoin('mapVariant.map', 'map')
                 .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId AND mapVariant.variantIndex = :variantIndex', {
                     regionId: regionId,
                     bnetId: mapId,
                     variantIndex: variantIndex,
                 })
-                .getOne()
+                .getRawOne()
             ;
-            if (mapVariant) {
+
+            if (result) {
+                mapVariant = result.name;
                 this.mapVariantsCache.set(key, mapVariant);
             }
         }
@@ -380,7 +385,7 @@ class DataProc {
     async onNewLobby(ev: JournalEventNewLobby) {
         const info = ev.lobby.initInfo;
 
-        const mapVariant = await this.fetchMapVariant(this.s2region.id, info.mapHandle[0], info.mapVariantIndex);
+        const mapVariantName = await this.fetchMapVariant(this.s2region.id, info.mapHandle[0], info.mapVariantIndex);
 
         let s2lobby = new S2GameLobby();
         Object.assign(s2lobby, <S2GameLobby>{
@@ -395,7 +400,7 @@ class DataProc {
             multiModBnetId: info.multiModHandle[0] !== 0 ? info.multiModHandle[0] : null,
 
             mapVariantIndex: info.mapVariantIndex,
-            mapVariantMode: mapVariant?.name ?? '',
+            mapVariantMode: mapVariantName ?? '',
 
             lobbyTitle: ev.lobby.lobbyName,
             hostName: ev.lobby.hostName,
@@ -432,7 +437,7 @@ class DataProc {
                 await tsManager.getRepository(S2GameLobbyMap).insert(s2LobbyMaps);
             });
             s2lobby.slots = [];
-            this.lobbiesCache.set(info.lobbyId, s2lobby);
+            this.lobbiesCache.set(info.lobbyId.toString(), s2lobby);
             logger.info(`NEW src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} map=${s2lobby.mapBnetId}`);
         }
         catch (err) {
@@ -460,7 +465,7 @@ class DataProc {
         // discard candidate and exit without altering any data
         if (this.lobbiesReopenCandidates.has(s2lobby.id)) {
             this.lobbiesReopenCandidates.delete(s2lobby.id);
-            this.lobbiesCache.delete(s2lobby.id);
+            this.lobbiesCache.delete(s2lobby.id.toString());
             return;
         }
 
@@ -484,7 +489,7 @@ class DataProc {
                 if (closeDiff !== 0) {
                     logger.verbose(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} attempted to close lobby which has its state already determined`);
                 }
-                this.lobbiesCache.delete(ev.lobby.initInfo.lobbyId);
+                this.lobbiesCache.delete(ev.lobby.initInfo.lobbyId.toString());
                 return;
             }
         }
@@ -513,7 +518,7 @@ class DataProc {
             closedAt: ev.lobby.closedAt,
             status: ev.lobby.status,
         });
-        this.lobbiesCache.delete(ev.lobby.initInfo.lobbyId);
+        this.lobbiesCache.delete(ev.lobby.initInfo.lobbyId.toString());
         logger.info(`CLOSED src=${ev.feedName} ${this.s2region.code}#${ev.lobby.initInfo.lobbyId} ${ev.lobby.closedAt.toISOString()} status=${ev.lobby.status}`);
     }
 
