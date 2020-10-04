@@ -1,12 +1,15 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { GameLobbyStatus } from '../../../gametracker';
 import { S2GameLobby } from '../../../entity/S2GameLobby';
 import { S2GameLobbyRepository } from '../../../repository/S2GameLobbyRepository';
 import { S2GameLobbyMap } from '../../../entity/S2GameLobbyMap';
 import { stripIndents } from 'common-tags';
 
-export default fp(async (server, opts, next) => {
-    server.get('/lobbies/history/map/:regionId/:mapId', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/lobbies/history/map/:regionId/:mapId', {
         schema: {
             tags: ['Lobbies'],
             summary: 'History of hosted lobbies of a specific map or mod.',

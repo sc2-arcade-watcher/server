@@ -1,12 +1,15 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { S2Map } from '../../../entity/S2Map';
 import { S2MapHeader } from '../../../entity/S2MapHeader';
 import { GameLocale, GameRegion } from '../../../common';
 import { MapLocalizationTable, reprocessMapHeader } from '../../../map/mapResolver';
 import { MapAccessAttributes } from '../../plugins/accessManager';
 
-export default fp(async (server, opts, next) => {
-    server.get('/maps/:regionId/:mapId/details', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/maps/:regionId/:mapId/details', {
         schema: {
             tags: ['Maps'],
             summary: 'Rich details about specific map in its current version or past version',

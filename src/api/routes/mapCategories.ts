@@ -1,8 +1,11 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { S2MapCategory } from '../../entity/S2MapCategory';
 
-export default fp(async (server, opts, next) => {
-    server.get('/map-categories', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/map-categories', {
         schema: {
             tags: ['Maps'],
             summary: 'List of available map categories',

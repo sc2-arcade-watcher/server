@@ -1,10 +1,13 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { S2StatsPeriod, S2StatsPeriodKind } from '../../../entity/S2StatsPeriod';
 import { S2StatsPeriodRegion } from '../../../entity/S2StatsPeriodRegion';
 import { S2Region } from '../../../entity/S2Region';
 
-export default fp(async (server, opts, next) => {
-    server.get('/stats/regions', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/stats/regions', {
         schema: {
             querystring: {
                 type: 'object',

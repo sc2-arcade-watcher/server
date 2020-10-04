@@ -1,6 +1,5 @@
 import * as orm from 'typeorm';
-import * as http from 'http';
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { AppAccount, AccountPrivileges } from '../../entity/AppAccount';
 import { S2Map } from '../../entity/S2Map';
 import { S2Profile } from '../../entity/S2Profile';
@@ -154,15 +153,11 @@ class AccessManager implements IAccessManager {
 }
 
 declare module 'fastify' {
-    export interface FastifyInstance<
-    HttpServer = http.Server,
-    HttpRequest = http.IncomingMessage,
-    HttpResponse = http.ServerResponse
-    > {
+    export interface FastifyInstance {
         accessManager: IAccessManager;
     }
 }
 
-export default fp(async (server, opts, next) => {
+export default fp(async (server, opts) => {
     server.decorate('accessManager', new AccessManager(server.conn));
 });

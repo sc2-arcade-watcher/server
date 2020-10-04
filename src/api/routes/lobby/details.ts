@@ -1,8 +1,11 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { S2GameLobbyRepository } from '../../../repository/S2GameLobbyRepository';
 
-export default fp(async (server, opts, next) => {
-    server.get('/lobbies/:regionId/:bnetBucketId/:bnetRecordId', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/lobbies/:regionId/:bnetBucketId/:bnetRecordId', {
         schema: {
             tags: ['Lobbies'],
             summary: 'Lobby details',

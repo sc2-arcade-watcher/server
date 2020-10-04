@@ -1,8 +1,12 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { AppAccountToken } from '../../../../entity/AppAccountToken';
 
-export default fp(async (server, opts, next) => {
-    server.post('/account/auth/bnet', {
+export default fp(async (server, opts) => {
+    server.post<{
+        Body: any,
+        Querystring: any,
+        Params: any,
+    }>('/account/auth/bnet', {
         schema: {
             body: {
                 type: 'object',

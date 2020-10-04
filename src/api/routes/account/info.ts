@@ -1,7 +1,10 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 
-export default fp(async (server, opts, next) => {
-    server.get('/account/info', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/account/info', {
     }, async (request, reply) => {
         if (!request.userAccount) {
             return reply.code(401).send();

@@ -1,8 +1,11 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { S2Profile } from '../../../entity/S2Profile';
 
-export default fp(async (server, opts, next) => {
-    server.get('/profiles/:regionId/:realmId/:profileId', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/profiles/:regionId/:realmId/:profileId', {
         schema: {
             params: {
                 type: 'object',

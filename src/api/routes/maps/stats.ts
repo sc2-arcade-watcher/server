@@ -1,11 +1,14 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { S2GameLobby } from '../../../entity/S2GameLobby';
 import { S2GameLobbySlotKind } from '../../../entity/S2GameLobbySlot';
 import { S2StatsPeriodMap } from '../../../entity/S2StatsPeriodMap';
 import { S2StatsPeriod, S2StatsPeriodKind } from '../../../entity/S2StatsPeriod';
 
-export default fp(async (server, opts, next) => {
-    server.get('/maps/:regionId/:mapId/stats', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/maps/:regionId/:mapId/stats', {
         schema: {
             tags: ['Maps'],
             summary: 'Map statistics',

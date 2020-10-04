@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { BattleDepot, NestedHashDir, convertImage } from '../../depot';
 import { logger } from '../../logger';
 import { GameRegion } from '../../common';
@@ -9,7 +9,7 @@ import { isAxiosError } from '../../helpers';
 const bnDepot = new BattleDepot('data/depot');
 const pubBnetDir = new NestedHashDir('data/bnet');
 
-export default fp(async (server, opts, next) => {
+export default fp(async (server, opts) => {
     async function getDepotImage(hash: string, region?: GameRegion) {
         const jpgPath = pubBnetDir.pathTo(`${hash}.jpg`);
 
@@ -45,7 +45,10 @@ export default fp(async (server, opts, next) => {
         return jpgPath;
     }
 
-    server.get('/dimg/:hash(^\\w+).jpg', {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/dimg/:hash(^\\w+).jpg', {
         config: {
             rateLimit: false,
         },

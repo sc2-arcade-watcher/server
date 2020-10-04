@@ -19,7 +19,7 @@
         "strictNullChecks": false,
         "experimentalDecorators": true,
         "removeComments": false,
-        "emitDecoratorMetadata": true
+        "emitDecoratorMetadata": true,
     },
     "include": [
         "src/**/*",

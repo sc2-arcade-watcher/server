@@ -1,9 +1,12 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { S2Map } from '../../../entity/S2Map';
 import { MapAccessAttributes } from '../../plugins/accessManager';
 
-export default fp(async (server, opts, next) => {
-    server.get('/maps/:regionId/:mapId', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/maps/:regionId/:mapId', {
         schema: {
             tags: ['Maps'],
             summary: 'Basic info about specific map',

@@ -1,8 +1,11 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { BnAccountSettings, defaultAccountSettings } from '../../../entity/BnAccountSettings';
 
-export default fp(async (server, opts, next) => {
-    server.get('/account/settings', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/account/settings', {
     }, async (request, reply) => {
         if (!request.userAccount) {
             return reply.code(401).send();
@@ -20,7 +23,10 @@ export default fp(async (server, opts, next) => {
         return reply.code(200).send(currSettings);
     });
 
-    server.post('/account/settings', {
+    server.post<{
+        Querystring: any,
+        Params: any,
+    }>('/account/settings', {
         schema: {
             body: {
                 type: 'object',

@@ -1,7 +1,6 @@
 import { createHash } from 'crypto';
 import * as orm from 'typeorm';
-import * as http from 'http';
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { AppAccountToken, AppAccountTokenKind } from '../../entity/AppAccountToken';
 import { addSeconds } from 'date-fns';
 import { logger } from '../../logger';
@@ -128,11 +127,7 @@ class AuthManager {
 }
 
 declare module 'fastify' {
-    export interface FastifyInstance<
-    HttpServer = http.Server,
-    HttpRequest = http.IncomingMessage,
-    HttpResponse = http.ServerResponse
-    > {
+    export interface FastifyInstance {
         authManager: AuthManager;
     }
 }
@@ -144,7 +139,7 @@ declare module 'fastify' {
     }
 }
 
-export default fp(async (server, opts, next) => {
+export default fp(async (server, opts) => {
     server.decorate('authManager', new AuthManager(server.conn));
 
     server.addHook('preHandler', async (request, reply) => {

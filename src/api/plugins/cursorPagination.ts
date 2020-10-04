@@ -1,6 +1,6 @@
-import * as http from 'http';
-import * as fastify from 'fastify';
-import * as fp from 'fastify-plugin';
+import { fastify, FastifyReply, FastifyRequest } from 'fastify';
+import fp from 'fastify-plugin';
+import fstatic from 'fastify-static';
 import * as orm from 'typeorm';
 import { atob, btoa } from '../../helpers';
 
@@ -31,14 +31,14 @@ type rawAndEntities<T> = {
     raw: any[];
 };
 
-type sendReplyType<T = any> = (this: fastify.FastifyReply<http.ServerResponse>, rData: rawAndEntities<T>, pQuery: CursorPaginationQuery) => CursorPaginationResponse<T>;
+type sendReplyType<T = any> = (this: FastifyReply, rData: rawAndEntities<T>, pQuery: CursorPaginationQuery) => CursorPaginationResponse<T>;
 
 declare module 'fastify' {
     interface FastifyRequest {
-        parseCursorPagination(this: fastify.FastifyRequest, opts?: { paginationKeys?: string[] | string; }): CursorPaginationQuery;
+        parseCursorPagination(this: FastifyRequest, opts?: { paginationKeys?: string[] | string; }): CursorPaginationQuery;
     }
 
-    interface FastifyReply<HttpResponse> {
+    interface FastifyReply {
         sendWithCursorPagination: sendReplyType;
     }
 }
@@ -46,8 +46,8 @@ declare module 'fastify' {
 const defaultLimit = 50;
 const maximumLimit = 500;
 
-export default fp(async (server, opts, next) => {
-    server.decorateRequest('parseCursorPagination', function (this: fastify.FastifyRequest, opts: { paginationKeys?: string[] | string; } = {}) {
+export default fp(async (server, opts) => {
+    server.decorateRequest('parseCursorPagination', function (this: FastifyRequest<{ Querystring: any }>, opts: { paginationKeys?: string[] | string; } = {}) {
         let limit = parseInt(this.query.limit);
         if (Number.isNaN(limit)) {
             limit = defaultLimit;
@@ -126,7 +126,7 @@ export default fp(async (server, opts, next) => {
         return pq;
     });
 
-    server.decorateReply('sendWithCursorPagination', function<T> (this: fastify.FastifyReply<http.ServerResponse>, rData: rawAndEntities<T>, pQuery: CursorPaginationQuery) {
+    server.decorateReply('sendWithCursorPagination', function<T> (this: FastifyReply, rData: rawAndEntities<T>, pQuery: CursorPaginationQuery) {
         function encodeKeyValues(entry: T) {
             const kvals: string[] = [];
             const rawKeys = pQuery.paginationKeys.map(pQuery.toRawKey);

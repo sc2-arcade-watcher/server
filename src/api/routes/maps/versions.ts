@@ -1,11 +1,14 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { S2MapHeader } from '../../../entity/S2MapHeader';
 import { stripIndents } from 'common-tags';
 import { S2Map } from '../../../entity/S2Map';
 import { MapAccessAttributes } from '../../plugins/accessManager';
 
-export default fp(async (server, opts, next) => {
-    server.get('/maps/:regionId/:mapId/versions', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/maps/:regionId/:mapId/versions', {
         schema: {
             tags: ['Maps'],
             summary: 'List of all versions of specific map.',

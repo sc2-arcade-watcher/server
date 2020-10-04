@@ -1,11 +1,14 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { GameRegion } from '../../../common';
 import { S2Map } from '../../../entity/S2Map';
 import { stripIndents } from 'common-tags';
 import { MapAccessAttributes } from '../../plugins/accessManager';
 
-export default fp(async (server, opts, next) => {
-    server.get('/maps/:regionId/:mapId/dependencies', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/maps/:regionId/:mapId/dependencies', {
         config: {
             rateLimit: {
                 max: 10,

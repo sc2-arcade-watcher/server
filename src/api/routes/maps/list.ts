@@ -1,4 +1,4 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { S2Map, S2MapType } from '../../../entity/S2Map';
 import { S2StatsPeriodMap } from '../../../entity/S2StatsPeriodMap';
 import { S2StatsPeriod } from '../../../entity/S2StatsPeriod';
@@ -6,11 +6,14 @@ import { parseProfileHandle } from '../../../bnet/common';
 import { S2Profile } from '../../../entity/S2Profile';
 import { ProfileAccessAttributes } from '../../plugins/accessManager';
 
-export default fp(async (server, opts, next) => {
+export default fp(async (server, opts) => {
     const fulltextStopWords = ['a', 'about', 'an', 'are', 'as', 'at', 'be', 'by', 'com', 'de', 'en', 'for', 'from', 'how', 'i', 'in', 'is', 'it', 'la', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'was', 'what', 'when', 'where', 'who', 'will', 'with', 'und', 'the', 'www'];
     const fulltextMinLength = 3;
 
-    server.get('/maps', {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/maps', {
         schema: {
             tags: ['Maps'],
             summary: 'List of maps',

@@ -1,10 +1,13 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { stripIndents } from 'common-tags';
 import { GameLobbyStatus } from '../../../gametracker';
 import { S2GameLobbyRepository } from '../../../repository/S2GameLobbyRepository';
 
-export default fp(async (server, opts, next) => {
-    server.get('/lobbies/active', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/lobbies/active', {
         config: {
             rateLimit: {
                 max: 15,

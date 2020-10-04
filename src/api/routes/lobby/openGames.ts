@@ -1,12 +1,15 @@
-import * as fp from 'fastify-plugin';
+import fp from 'fastify-plugin';
 import { S2GameLobby } from '../../../entity/S2GameLobby';
 import { S2GameLobbySlotKind } from '../../../entity/S2GameLobbySlot';
 import { GameLobbyStatus } from '../../../gametracker';
 import { S2Map } from '../../../entity/S2Map';
 import { S2Region } from '../../../entity/S2Region';
 
-export default fp(async (server, opts, next) => {
-    server.get('/open-games', {
+export default fp(async (server, opts) => {
+    server.get<{
+        Querystring: any,
+        Params: any,
+    }>('/open-games', {
         config: {
             rateLimit: {
                 max: 5,

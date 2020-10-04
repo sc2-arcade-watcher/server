@@ -2,18 +2,13 @@ import * as path from 'path';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs-extra';
 import * as orm from 'typeorm';
-import * as fastify from 'fastify';
-import * as fp from 'fastify-plugin';
-import * as fastifyStatic from 'fastify-static';
-import * as fastifyRateLimit from 'fastify-rate-limit';
-import * as fastifyPagination from 'fastify-pagination';
-import * as limitOffsetPaginationStrategy from 'fastify-pagination/dist/strategies/limit-offset';
+import { fastify } from 'fastify';
+import fp from 'fastify-plugin';
+import fastifyStatic from 'fastify-static';
+import fastifyRateLimit from 'fastify-rate-limit';
 import * as fastifyOAS from 'fastify-oas';
-import * as fastifyCors from 'fastify-cors';
+import fastifyCors from 'fastify-cors';
 import { setupFileLogger, logger } from '../logger';
-import * as http from 'http';
-import * as https from 'https';
-import * as http2 from 'http2';
 import { execAsync } from '../helpers';
 import { stripIndents } from 'common-tags';
 import { MapResolver } from '../map/mapResolver';
@@ -38,11 +33,7 @@ server.addHook('onClose', async (instance, done) => {
 });
 
 declare module 'fastify' {
-    export interface FastifyInstance<
-    HttpServer = http.Server,
-    HttpRequest = http.IncomingMessage,
-    HttpResponse = http.ServerResponse
-    > {
+    interface FastifyInstance {
         conn: orm.Connection;
         mapResolver: MapResolver;
     }
@@ -68,47 +59,13 @@ server.register(require('../api/plugins/cursorPagination').default);
 server.register(require('../api/plugins/authManager').default);
 server.register(require('../api/plugins/accessManager').default);
 
-// @ts-ignore
-server.register(fastifyPagination, {
-    strategy: limitOffsetPaginationStrategy({
-        defaultLimit: 50,
-        maximumLimit: 500,
-    }),
-});
-
-declare module 'fastify' {
-    interface FastifyReply<HttpResponse> {
-        sendWithPagination<T>(this: fastify.FastifyReply<http.ServerResponse>, page: fastifyPagination.IPage<T>): void;
-    }
-
-    interface FastifyRequest<
-        HttpRequest = http.IncomingMessage,
-        Query = DefaultQuery,
-        Params = DefaultParams,
-        Headers = DefaultHeaders,
-        Body = DefaultBody
-    >{
-        parsePagination: fastifyPagination.PaginationParser;
-    }
-}
-
-type HttpServer = http.Server | http2.Http2Server | http2.Http2SecureServer | https.Server;
-type HttpRequest = http.IncomingMessage | http2.Http2ServerRequest;
-type HttpResponse = http.ServerResponse | http2.Http2ServerResponse;
-
-server.decorateReply('expires', function (this: fastify.FastifyReply<HttpResponse>, date: Date) {
-    if (!date) return this;
-    this.header('Expires', (Date.prototype.isPrototypeOf(date)) ? date.toUTCString() : date);
-    return this;
-});
-
 server.addHook('onRequest', (req, reply, done) => {
-    logger.verbose(`REQ #${req.id} url=${req.req.url} ip=${req.ip}`);
+    logger.verbose(`REQ #${req.id} url=${req.url} ip=${req.ip}`);
     done();
 });
 
 server.addHook('onResponse', (req, reply, done) => {
-    logger.verbose(`RES #${req.id} code=${reply.res.statusCode}`);
+    logger.verbose(`RES #${req.id} code=${reply.statusCode}`);
     done();
 });
 
