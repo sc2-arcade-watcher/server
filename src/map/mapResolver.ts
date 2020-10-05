@@ -488,6 +488,10 @@ export class MapResolver {
 
             const mapHeaderData = await this.getMapHeader(rcode, mhead.headerHash);
 
+            if (!mapHeaderData.extraDependencies) {
+                return;
+            }
+
             for (const dep of mapHeaderData.extraDependencies.reverse()) {
                 if (!deps.has(`${dep.id},${dep.version}`)) {
                     await fetchMapDependencies(regionId, dep.id, dep.version);
