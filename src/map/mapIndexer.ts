@@ -216,6 +216,13 @@ export class MapIndexer {
                 await tsManager.getRepository(S2MapVariant).insert(map.variants);
             }
 
+            if (map.author && (map.author.lastOnlineAt === null || map.updatedAt > map.author.lastOnlineAt)) {
+                map.author.lastOnlineAt = map.updatedAt;
+                await tsManager.getRepository(S2Profile).update(map.author.id, {
+                    lastOnlineAt: map.author.lastOnlineAt,
+                });
+            }
+
             if (dateQuery) {
                 let mtrack = await tsManager.getRepository(S2MapTracking).findOne({
                     where: {

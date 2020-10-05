@@ -30,6 +30,7 @@ program.command('stats')
 ;
 
 import '../cmd/map';
+import '../cmd/profile';
 import '../cmd/battle';
 
 process.on('unhandledRejection', e => { throw e; });

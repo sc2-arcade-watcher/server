@@ -14,16 +14,10 @@ export class S2Profile {
     })
     nameUpdatedAt: Date;
 
-    @ManyToOne(type => S2Region, {
-        nullable: false,
-        eager: false,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
+    @Column({
+        unsigned: true,
+        type: 'tinyint',
     })
-    @Index()
-    region: S2Region;
-
-    @Column()
     regionId: number;
 
     @Column({
@@ -69,6 +63,12 @@ export class S2Profile {
         nullable: true,
     })
     avatarUrl: string | null;
+
+    @Column({
+        nullable: true,
+    })
+    @Index('last_online_at_idx')
+    lastOnlineAt: Date;
 
     tracking?: S2ProfileTracking;
 }

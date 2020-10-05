@@ -285,6 +285,9 @@ class DataProc {
                                 s2slot.joinInfo.profile = newS2profiles[idx];
                                 s2slot.joinInfo.joinedAt = lobbyData.slotsPreviewUpdatedAt;
                                 await tsManager.getRepository(S2GameLobbyPlayerJoin).insert(s2slot.joinInfo);
+                                await tsManager.getRepository(S2Profile).update(newS2profiles[idx].id, {
+                                    lastOnlineAt: lobbyData.slotsPreviewUpdatedAt,
+                                });
                             }
                         }
                     }

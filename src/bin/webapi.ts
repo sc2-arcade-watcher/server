@@ -107,6 +107,9 @@ server.register(fastifyOAS, <fastifyOAS.FastifyOASOptions>{
                     Maps & mods published on Arcade.
                 `,
             },
+            {
+                name: 'Profiles',
+            }
         ],
     }
 });
@@ -116,6 +119,7 @@ server.register(require('../api/routes/account/logout').default);
 server.register(require('../api/routes/account/info').default);
 server.register(require('../api/routes/account/settings').default);
 
+server.register(require('../api/routes/profile/list').default);
 server.register(require('../api/routes/profile/show').default);
 
 server.register(require('../api/routes/lobby/openGames').default);

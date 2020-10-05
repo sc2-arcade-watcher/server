@@ -1,5 +1,6 @@
 import fp from 'fastify-plugin';
 import { S2Profile } from '../../../entity/S2Profile';
+import { stripIndents } from 'common-tags';
 
 export default fp(async (server, opts) => {
     server.get<{
@@ -7,6 +8,11 @@ export default fp(async (server, opts) => {
         Params: any,
     }>('/profiles/:regionId/:realmId/:profileId', {
         schema: {
+            tags: ['Profiles'],
+            summary: 'Info about player profile',
+            description: stripIndents`
+                NOTICE: This endpoint is not yet stable and might be changed in the future.
+            `,
             params: {
                 type: 'object',
                 required: ['regionId', 'realmId', 'profileId'],
