@@ -18,6 +18,7 @@ export const publicAccountSettings: Required<MapAuthorPreferences> = {
 export enum MapAccessAttributes {
     Details,
     Download,
+    DownloadPrivateRevision,
 }
 
 export enum ProfileAccessAttributes {
@@ -113,6 +114,11 @@ class AccessManager implements IAccessManager {
 
                 case MapAccessAttributes.Download: {
                     results.push(isMapPublic ? authorSettings.mapPubDownload : authorSettings.mapPrivDownload);
+                    break;
+                }
+
+                case MapAccessAttributes.DownloadPrivateRevision: {
+                    results.push(authorSettings.mapPrivDownload);
                     break;
                 }
             }

@@ -71,8 +71,8 @@ export default fp(async (server, opts) => {
             return reply.type('application/json').code(404).send();
         }
 
-        const [canDetails, canDownload] = await server.accessManager.isMapAccessGranted(
-            [MapAccessAttributes.Details, MapAccessAttributes.Download],
+        const [canDetails, canDownload, canDownloadPrivateRevision] = await server.accessManager.isMapAccessGranted(
+            [MapAccessAttributes.Details, MapAccessAttributes.Download, MapAccessAttributes.DownloadPrivateRevision],
             map,
             request.userAccount
         );
@@ -83,6 +83,13 @@ export default fp(async (server, opts) => {
 
         if (!canDownload) {
             map.revisions.forEach(rev => {
+                rev.headerHash = null;
+                rev.archiveHash = null;
+            });
+        }
+        else if (!canDownloadPrivateRevision) {
+            map.revisions.forEach(rev => {
+                if (!rev.isPrivate) return;
                 rev.headerHash = null;
                 rev.archiveHash = null;
             });
