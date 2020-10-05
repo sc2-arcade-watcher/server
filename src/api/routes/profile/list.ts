@@ -81,7 +81,7 @@ export default fp(async (server, opts) => {
                 'profile.avatarUrl',
                 'profile.lastOnlineAt',
             ])
-            .andWhere('profile.deleted = FALSE')
+            .andWhere('profile.discriminator != 0')
             .limit(pQuery.fetchLimit)
         ;
 

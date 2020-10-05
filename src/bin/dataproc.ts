@@ -346,7 +346,7 @@ class DataProc {
         ) {
             logger.verbose([
                 `Updating profile #${s2profile.id} (${profileHandle(s2profile)})`,
-                ` ${s2profile.name}#${s2profile.discriminator ?? '0'}`,
+                ` ${s2profile.name}#${s2profile.discriminator}`,
                 ` =>`,
                 ` ${infoProfile.name}#${infoProfile.discriminator}`,
             ].join(''));

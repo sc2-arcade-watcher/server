@@ -42,7 +42,7 @@ export class S2Profile {
     @Column({
         type: 'mediumint',
         unsigned: true,
-        nullable: true,
+        default: 0,
     })
     discriminator: number;
 

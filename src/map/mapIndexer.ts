@@ -310,6 +310,7 @@ export class MapIndexer {
                 authorProfile.profileId = msg.author.profileId;
                 if (msg.author.discriminator === 0) {
                     authorProfile.name = null;
+                    authorProfile.discriminator = 0;
                     authorProfile.deleted = true;
                 }
                 else {
