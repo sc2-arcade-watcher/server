@@ -52,34 +52,39 @@ export default fp(async (server, opts) => {
         ;
 
         if (!map) {
-            return reply.type('application/json').code(404).send();
+            return reply.code(404).send();
         }
 
-        const [canDetails, canDownload] = await server.accessManager.isMapAccessGranted(
-            [MapAccessAttributes.Details, MapAccessAttributes.Download],
+        const canDetails = await server.accessManager.isMapAccessGranted(
+            MapAccessAttributes.Details,
             map,
             request.userAccount
         );
 
         if (!canDetails) {
-            return reply.type('application/json').code(403).send();
+            return reply.code(403).send();
         }
 
         const depMap = await server.mapResolver.resolveMapDependencies(map.regionId, map.bnetId);
-        const depList = Array.from(depMap.values()).map(x => {
-            x.mapHeader.headerHash = null;
-            // this is flawed - since we're asuming all depndencies belong to the same author
+        const depList = await Promise.all(Array.from(depMap.values()).map(async depItem => {
+            depItem.mapHeader.headerHash = null;
+
+            const canDownload = await server.accessManager.isMapAccessGranted(
+                MapAccessAttributes.Download,
+                depItem.mapHeader,
+                request.userAccount
+            );
             if (!canDownload) {
-                x.mapHeader.archiveHash = null;
+                depItem.mapHeader.archiveHash = null;
             }
 
             return {
-                map: x.map,
-                mapHeader: x.mapHeader,
-                requestedVersion: x.requestedVersion,
-                tags: x.rawData.specialTags,
-            }
-        });
+                map: depItem.map,
+                mapHeader: depItem.mapHeader,
+                requestedVersion: depItem.requestedVersion,
+                tags: depItem.rawData.specialTags,
+            };
+        }));
 
         const result = {
             regionId: map.regionId,
@@ -88,6 +93,6 @@ export default fp(async (server, opts) => {
         };
 
         reply.header('Cache-control', 'private, max-age=300');
-        return reply.type('application/json').code(200).send(result);
+        return reply.code(200).send(result);
     });
 });

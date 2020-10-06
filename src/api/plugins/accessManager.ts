@@ -5,7 +5,7 @@ import { S2Map } from '../../entity/S2Map';
 import { S2Profile } from '../../entity/S2Profile';
 import { logger, logIt } from '../../logger';
 import { defaultAccountSettings, MapAuthorPreferences } from '../../entity/BnAccountSettings';
-import { BnAccount } from '../../entity/BnAccount';
+import { S2MapHeader } from '../../entity/S2MapHeader';
 
 // TODO: temporary restrictive settings, to be replaced with `defaultAccountSettings`
 export const publicAccountSettings: Required<MapAuthorPreferences> = {
@@ -26,8 +26,8 @@ export enum ProfileAccessAttributes {
 }
 
 interface IAccessManager {
-    isMapAccessGranted(kind: MapAccessAttributes, map: S2Map, userAccount?: AppAccount): Promise<boolean>;
-    isMapAccessGranted(kind: MapAccessAttributes[], map: S2Map, userAccount?: AppAccount): Promise<boolean[]>;
+    isMapAccessGranted(kind: MapAccessAttributes, mapOrHeadermap: S2Map | S2MapHeader, userAccount?: AppAccount): Promise<boolean>;
+    isMapAccessGranted(kind: MapAccessAttributes[], mapOrHeader: S2Map | S2MapHeader, userAccount?: AppAccount): Promise<boolean[]>;
     isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile, userAccount?: AppAccount): Promise<boolean>;
 }
 
@@ -36,8 +36,15 @@ class AccessManager implements IAccessManager {
     }
 
     // @ts-ignore
-    async isMapAccessGranted(kind: MapAccessAttributes | MapAccessAttributes[], map: S2Map, userAccount?: AppAccount) {
-        const isMapPublic = map.currentVersion.isPrivate === false;
+    async isMapAccessGranted(kind: MapAccessAttributes | MapAccessAttributes[], mapOrHeader: S2Map | S2MapHeader, userAccount?: AppAccount) {
+        let mhead: S2MapHeader;
+        if (mapOrHeader instanceof S2Map) {
+            mhead = mapOrHeader.currentVersion;
+        }
+        else {
+            mhead = mapOrHeader;
+        }
+        const isMapPublic = mhead.isPrivate === false;
 
         // exit early for public maps when only Details are wanted
         if (isMapPublic && kind === MapAccessAttributes.Details) {
@@ -53,20 +60,10 @@ class AccessManager implements IAccessManager {
             .leftJoinAndSelect('bnAccount.settings', 'bnSettings')
         ;
 
-        if (map.author) {
-            qb.andWhere('profile.id = :pid', { pid: map.author.id });
+        if (mapOrHeader instanceof S2Map && mapOrHeader.author) {
+            qb.andWhere('profile.id = :pid', { pid: mapOrHeader.author.id });
         }
-        else if (map.id) {
-            const mapAuthorQuery = qb.subQuery().select()
-                .from(S2Map, 'map')
-                .select('map.author')
-                .andWhere('map.id = :mid')
-                .limit(1)
-                .getQuery()
-            ;
-            qb.andWhere('profile.id = ' + mapAuthorQuery, { mid: map.id })
-        }
-        else if (map.regionId && map.bnetId) {
+        else if (mhead.regionId && mhead.bnetId) {
             const mapAuthorQuery = qb.subQuery().select()
                 .from(S2Map, 'map')
                 .select('map.author')
@@ -74,7 +71,7 @@ class AccessManager implements IAccessManager {
                 .limit(1)
                 .getQuery()
             ;
-            qb.andWhere('profile.id = ' + mapAuthorQuery, { regionId: map.regionId, bnetId: map.bnetId })
+            qb.andWhere('profile.id = ' + mapAuthorQuery, { regionId: mhead.regionId, bnetId: mhead.bnetId })
         }
         else {
             throw new Error(`isMapAccessGranted, missing map params`);
@@ -92,7 +89,7 @@ class AccessManager implements IAccessManager {
             }
 
             if (!authorProfile) {
-                logger.warn(`couldn't fetch authorProfile of ${map.currentVersion.linkVer}`);
+                logger.warn(`couldn't fetch authorProfile of ${mhead.linkVer}`);
                 results.push(false);
                 continue;
             }
