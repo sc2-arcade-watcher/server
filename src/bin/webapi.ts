@@ -9,7 +9,7 @@ import fastifyRateLimit from 'fastify-rate-limit';
 import * as fastifyOAS from 'fastify-oas';
 import fastifyCors from 'fastify-cors';
 import { setupFileLogger, logger } from '../logger';
-import { execAsync } from '../helpers';
+import { execAsync, systemdNotifyReady, setupProcessTerminator } from '../helpers';
 import { stripIndents } from 'common-tags';
 import { MapResolver } from '../map/mapResolver';
 
@@ -60,17 +60,20 @@ server.register(require('../api/plugins/authManager').default);
 server.register(require('../api/plugins/accessManager').default);
 
 server.addHook('onRequest', (req, reply, done) => {
-    logger.verbose(`REQ #${req.id} url=${req.url} ip=${req.ip}`);
+    (<any>req.raw).hrtime = process.hrtime();
+    logger.verbose(`REQ#${req.id} ${req.url} [${req.ip}]`);
     done();
 });
 
 server.addHook('onResponse', (req, reply, done) => {
-    logger.verbose(`RES #${req.id} code=${reply.statusCode}`);
+    const tdiff = process.hrtime((<any>req.raw).hrtime);
+    const tdiffMs = tdiff ? ((tdiff[0] * 1000) + (tdiff[1] / 1000000)).toFixed(1) : null;
+    logger.verbose(`RES#${req.id} ${req.url} [${req.ip}] ${reply.statusCode} - ${tdiffMs}ms`);
     done();
 });
 
 server.addHook('onError', (req, reply, err, done) => {
-    logger.warn(`REQ #${req.id} ERR:`, err);
+    logger.warn(`REQ#${req.id} ERR:`, err);
     done();
 });
 
@@ -145,21 +148,16 @@ server.register(require('../api/routes/depot').default);
 process.on('unhandledRejection', e => { throw e; });
 (async function() {
     if (process.env.NOTIFY_SOCKET) {
-        const r = await execAsync('systemd-notify --ready');
-        logger.verbose(`systemd-notify`, r);
+        await systemdNotifyReady();
     }
 
     server.listen(webapiPort, process.env.ENV === 'dev' ? '127.0.0.1' : '0.0.0.0', (err, address) => {
         if (err) throw err;
         logger.info(`server.listen port=${webapiPort}`);
-        logger.verbose('routes\n' + server.printRoutes());
+        // logger.verbose('routes\n' + server.printRoutes());
     });
 
-    async function terminate(sig: NodeJS.Signals) {
-        logger.info(`Received ${sig}`);
-        await server.close();
-    }
-
-    process.on('SIGTERM', terminate);
-    process.on('SIGINT', terminate);
+    setupProcessTerminator(() => {
+        server.close();
+    });
 })();
