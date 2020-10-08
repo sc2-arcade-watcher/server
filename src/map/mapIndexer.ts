@@ -351,6 +351,7 @@ export class MapIndexer {
         const map = await this.conn.getRepository(S2Map).findOne({
             relations: [
                 'currentVersion',
+                'author',
             ],
             where: {
                 regionId: mapRevision.mhead.regionId,
