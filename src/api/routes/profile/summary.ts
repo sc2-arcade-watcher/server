@@ -6,6 +6,7 @@ import { S2GameLobbyMap, S2GameLobbyMapKind } from '../../../entity/S2GameLobbyM
 import { S2GameLobbySlot } from '../../../entity/S2GameLobbySlot';
 import { S2GameLobby } from '../../../entity/S2GameLobby';
 import { GameLobbyStatus } from '../../../gametracker';
+import { ProfileAccessAttributes } from '../../plugins/accessManager';
 
 interface PlayedMapRecord {
     map: S2Map;
@@ -50,13 +51,26 @@ export default fp(async (server, opts) => {
             },
         },
     }, async (request, reply) => {
-        const profileQuery = server.conn.getRepository(S2Profile).createQueryBuilder().subQuery()
-            .from(S2Profile, 'profile')
-            .select('profile.id')
-            .andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId')
-            .limit(1)
-            .getQuery()
-        ;
+        const profile = await server.conn.getRepository(S2Profile).findOne({
+            relations: [
+                'account',
+                'account.settings',
+            ],
+            where: {
+                regionId: request.params.regionId,
+                realmId: request.params.realmId,
+                profileId: request.params.profileId,
+            },
+        });
+
+        const canAccessDetails = await server.accessManager.isProfileAccessGranted(
+            ProfileAccessAttributes.Details,
+            profile,
+            request.userAccount
+        );
+        if (!canAccessDetails) {
+            return reply.code(403).send();
+        }
 
         const rawResult = await server.conn.getRepository(S2GameLobbySlot).createQueryBuilder('lobSlot')
             .select([])
@@ -81,11 +95,7 @@ export default fp(async (server, opts) => {
             .addSelect('MAX(lob.closedAt)', 'last_played_at')
             .andWhere(`lob.status = '${GameLobbyStatus.Started}'`)
             .andWhere(`lobMap.type IN ('${S2GameLobbyMapKind.Map}', '${S2GameLobbyMapKind.ExtensionMod}')`)
-            .andWhere('lobSlot.profile = ' + profileQuery, {
-                regionId: request.params.regionId,
-                realmId: request.params.realmId,
-                profileId: request.params.profileId,
-            })
+            .andWhere('lobSlot.profile = :pid', { pid: profile.id })
             .addGroupBy('lobMap.regionId')
             .addGroupBy('lobMap.bnetId')
             .orderBy('COUNT(*)', 'DESC')
@@ -121,7 +131,7 @@ export default fp(async (server, opts) => {
             return reply.code(404).send();
         }
 
-        reply.header('Cache-control', 'public, max-age=60');
+        reply.header('Cache-control', 'private, max-age=60');
         return reply.code(200).send({
             mostPlayed: mostPlayed,
         });

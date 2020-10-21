@@ -8,6 +8,7 @@ import { S2GameLobbyMap } from '../../../entity/S2GameLobbyMap';
 import { S2GameLobbySlot } from '../../../entity/S2GameLobbySlot';
 import { parseProfileHandle } from '../../../bnet/common';
 import { S2Profile } from '../../../entity/S2Profile';
+import { ProfileAccessAttributes } from '../../plugins/accessManager';
 
 export default fp(async (server, opts) => {
     server.get<{
@@ -64,6 +65,15 @@ export default fp(async (server, opts) => {
             const requestedProfile = parseProfileHandle(request.query.profileHandle);
             if (!requestedProfile) {
                 return reply.code(400).send();
+            }
+
+            const canAccessDetails = await server.accessManager.isProfileAccessGranted(
+                ProfileAccessAttributes.Details,
+                requestedProfile,
+                request.userAccount
+            );
+            if (!canAccessDetails) {
+                return reply.code(403).send();
             }
 
             const profileQuery = server.conn.getRepository(S2Profile).createQueryBuilder().subQuery()

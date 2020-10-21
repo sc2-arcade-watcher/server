@@ -19,6 +19,13 @@ export default fp(async (server, opts) => {
         if (!currSettings) {
             currSettings = Object.assign(new BnAccountSettings(), defaultAccountSettings);
         }
+        else {
+            for (const key of Object.keys(defaultAccountSettings)) {
+                if ((currSettings as any)[key] === null) {
+                    (currSettings as any)[key] = (defaultAccountSettings as any)[key];
+                }
+            }
+        }
 
         return reply.code(200).send(currSettings);
     });
@@ -31,6 +38,9 @@ export default fp(async (server, opts) => {
             body: {
                 type: 'object',
                 properties: {
+                    profilePrivate: {
+                        type: 'boolean',
+                    },
                     mapPubDownload: {
                         type: 'boolean',
                     },

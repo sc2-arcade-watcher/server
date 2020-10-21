@@ -1,14 +1,16 @@
 import { Entity, OneToOne, JoinColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { BnAccount } from './BnAccount';
 
-export type MapAuthorPreferences = {
+export type UserPrivacyPreferences = {
+    profilePrivate: boolean | null;
     mapPubDownload: boolean | null;
     mapPrivDownload: boolean | null;
     mapPrivDetails: boolean | null;
     mapPrivListed: boolean | null;
-}
+};
 
-export const defaultAccountSettings: Required<MapAuthorPreferences> = {
+export const defaultAccountSettings: Required<UserPrivacyPreferences> = {
+    profilePrivate: false,
     mapPubDownload: true,
     mapPrivDownload: true,
     mapPrivDetails: true,
@@ -16,7 +18,7 @@ export const defaultAccountSettings: Required<MapAuthorPreferences> = {
 };
 
 @Entity()
-export class BnAccountSettings implements MapAuthorPreferences {
+export class BnAccountSettings implements UserPrivacyPreferences {
     @OneToOne(type => BnAccount, account => account.settings, {
         primary: true,
         nullable: false,
@@ -42,6 +44,11 @@ export class BnAccountSettings implements MapAuthorPreferences {
         select: false,
     })
     updatedAt: Date;
+
+    @Column({
+        nullable: true,
+    })
+    profilePrivate: boolean | null = null;
 
     @Column({
         nullable: true,

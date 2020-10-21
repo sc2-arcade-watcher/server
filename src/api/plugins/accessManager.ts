@@ -4,11 +4,14 @@ import { AppAccount, AccountPrivileges } from '../../entity/AppAccount';
 import { S2Map } from '../../entity/S2Map';
 import { S2Profile } from '../../entity/S2Profile';
 import { logger, logIt } from '../../logger';
-import { defaultAccountSettings, MapAuthorPreferences } from '../../entity/BnAccountSettings';
+import { defaultAccountSettings, UserPrivacyPreferences } from '../../entity/BnAccountSettings';
 import { S2MapHeader } from '../../entity/S2MapHeader';
+import { BnAccount } from '../../entity/BnAccount';
+import { PlayerProfileParams } from '../../bnet/common';
 
 // TODO: temporary restrictive settings, to be replaced with `defaultAccountSettings`
-export const publicAccountSettings: Required<MapAuthorPreferences> = {
+export const publicAccountSettings: Required<UserPrivacyPreferences> = {
+    profilePrivate: false,
     mapPubDownload: true,
     mapPrivDownload: false,
     mapPrivDetails: false,
@@ -22,13 +25,27 @@ export enum MapAccessAttributes {
 }
 
 export enum ProfileAccessAttributes {
+    Details,
     PrivateMapList,
 }
 
 interface IAccessManager {
     isMapAccessGranted(kind: MapAccessAttributes, mapOrHeadermap: S2Map | S2MapHeader, userAccount?: AppAccount): Promise<boolean>;
     isMapAccessGranted(kind: MapAccessAttributes[], mapOrHeader: S2Map | S2MapHeader, userAccount?: AppAccount): Promise<boolean[]>;
-    isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile, userAccount?: AppAccount): Promise<boolean>;
+    isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile | PlayerProfileParams, userAccount?: AppAccount): Promise<boolean>;
+}
+
+function getEffectiveAccountPreferences(account?: BnAccount): Required<UserPrivacyPreferences> {
+    const preferences: Required<UserPrivacyPreferences> = {} as any;
+    for (const key of Object.keys(publicAccountSettings)) {
+        if (account !== null && account?.settings && (account.settings as any)[key] !== null) {
+            (preferences as any)[key] = (account.settings as any)[key];
+        }
+        else {
+            (preferences as any)[key] = (publicAccountSettings as any)[key];
+        }
+    }
+    return preferences;
 }
 
 class AccessManager implements IAccessManager {
@@ -100,22 +117,21 @@ class AccessManager implements IAccessManager {
                 continue;
             }
 
-            // try to get configured prefs and fallback to defaults
-            const authorSettings = authorProfile?.account?.settings ?? publicAccountSettings;
+            const preferences = getEffectiveAccountPreferences(authorProfile?.account);
 
             switch (currKind) {
                 case MapAccessAttributes.Details: {
-                    results.push(isMapPublic ? true : authorSettings.mapPrivDetails);
+                    results.push(isMapPublic ? true : preferences.mapPrivDetails);
                     break;
                 }
 
                 case MapAccessAttributes.Download: {
-                    results.push(isMapPublic ? authorSettings.mapPubDownload : authorSettings.mapPrivDownload);
+                    results.push(isMapPublic ? preferences.mapPubDownload : preferences.mapPrivDownload);
                     break;
                 }
 
                 case MapAccessAttributes.DownloadPrivateRevision: {
-                    results.push(authorSettings.mapPrivDownload);
+                    results.push(preferences.mapPrivDownload);
                     break;
                 }
             }
@@ -124,9 +140,35 @@ class AccessManager implements IAccessManager {
         return Array.isArray(kind) ? results : results.shift();
     }
 
-    async isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile, userAccount?: AppAccount) {
-        if (typeof profile.account === 'undefined') {
-            throw Error('profile.account undefined');
+    async isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile | PlayerProfileParams, userAccount?: AppAccount) {
+        let profileAccount: BnAccount;
+
+        if (typeof (profile as S2Profile).account === 'undefined') {
+            const profileQuery = this.conn.getRepository(S2Profile).createQueryBuilder().subQuery()
+                .from(S2Profile, 'profile')
+                .select('profile.id')
+                .andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId')
+                .limit(1)
+                .getQuery()
+            ;
+            const result = await this.conn.getRepository(S2Profile).createQueryBuilder('profile')
+                .select([
+                    'profile.id',
+                    'profile.account'
+                ])
+                .leftJoinAndSelect('profile.account', 'bnAccount')
+                .leftJoinAndSelect('bnAccount.settings', 'bnSettings')
+                .andWhere('profile.id = ' + profileQuery, {
+                    regionId: profile.regionId,
+                    realmId: profile.realmId,
+                    profileId: profile.profileId,
+                })
+                .getOne()
+            ;
+            profileAccount = result.account;
+        }
+        else if ((profile as S2Profile).account !== null) {
+            profileAccount = (profile as S2Profile).account;
         }
 
         if (userAccount?.privileges & AccountPrivileges.SuperAdmin) {
@@ -134,16 +176,20 @@ class AccessManager implements IAccessManager {
         }
 
         // allow access to author's own content
-        if (userAccount && userAccount.bnAccountId === profile.account?.id) {
+        if (userAccount && userAccount.bnAccountId === profileAccount?.id) {
             return true;
         }
 
-        // try to get configured prefs and fallback to defaults
-        const authorSettings = profile?.account?.settings ?? publicAccountSettings;
+        const preferences = getEffectiveAccountPreferences(profileAccount);
 
         switch (kind) {
+            case ProfileAccessAttributes.Details: {
+                return !preferences.profilePrivate;
+                break;
+            }
+
             case ProfileAccessAttributes.PrivateMapList: {
-                return authorSettings.mapPrivListed;
+                return preferences.mapPrivListed;
                 break;
             }
 
