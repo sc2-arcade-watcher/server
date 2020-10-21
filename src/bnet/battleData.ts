@@ -1,5 +1,5 @@
 import * as orm from 'typeorm';
-import { BattleAPI, BattleUserInfo } from './battleAPI';
+import { BattleAPI, BattleUserInfo, BattleSC2ProfileBase } from './battleAPI';
 import { BnAccount } from '../entity/BnAccount';
 import { profileHandle } from './common';
 import { S2Profile } from '../entity/S2Profile';
@@ -14,10 +14,26 @@ export class BattleDataUpdater {
     }
 
     protected async updateAccountProfiles(bAccount: BnAccount) {
-        const bProfiles = (await this.bAPI.sc2.getAccount(bAccount.id)).data;
-        if (!bAccount.profiles) {
-            bAccount.profiles = [];
+        let bProfiles: BattleSC2ProfileBase[];
+        try {
+            bProfiles = (await this.bAPI.sc2.getAccount(bAccount.id)).data;
         }
+        catch (err) {
+            if (isAxiosError(err) && err.response!.status === 503) {
+                // supress error if there's at least one profile already associated with the account
+                // (due to <https://us.forums.blizzard.com/en/blizzard/t/starcraft-ii-account-endpoint-returning-503-repeatedly/12645>)
+                if (bAccount.profiles.length > 0) {
+                    return;
+                }
+                else {
+                    throw Error(`couldn't acquire list of SC2 profiles`);
+                }
+            }
+            else {
+                throw err;
+            }
+        }
+
         for (const bCurrProfile of bProfiles) {
             let s2profile = bAccount.profiles.find(x => profileHandle(x) === profileHandle(bCurrProfile));
             if (!s2profile) {
@@ -69,6 +85,7 @@ export class BattleDataUpdater {
         if (bAccount.profiles.length > bProfiles.length) {
             const detachedProfiles = bAccount.profiles.filter(x => !bProfiles.find(y => profileHandle(x) === profileHandle(y)))
             for (const dItem of detachedProfiles) {
+                logger.verbose(`Detaching profile ${dItem.name}#${dItem.discriminator} from account ${dItem.account.id}`);
                 dItem.account = null;
                 bAccount.profiles.splice(bAccount.profiles.findIndex(x => x === dItem), 1);
                 await this.conn.getRepository(S2Profile).update(dItem.id, { account: null });
@@ -78,18 +95,21 @@ export class BattleDataUpdater {
 
     async updateAccount(accountInfo: BattleUserInfo | number) {
         const accountId = typeof accountInfo === 'number' ? accountInfo : accountInfo.id;
-        let bAccount = await this.conn.getRepository(BnAccount).findOne(accountId);
+        let bAccount = await this.conn.getRepository(BnAccount).findOne(accountId, {
+            relations: ['profiles', 'settings'],
+        });
         if (!bAccount) {
             bAccount = new BnAccount();
             bAccount.id = accountId;
+            bAccount.profiles = [];
             await this.conn.getRepository(BnAccount).insert(bAccount);
         }
-        await this.updateAccountProfiles(bAccount);
         if (typeof accountInfo === 'object') {
             bAccount.battleTag = accountInfo.battletag;
             bAccount.updatedAt = new Date();
             await this.conn.getRepository(BnAccount).save(bAccount);
         }
+        await this.updateAccountProfiles(bAccount);
         return bAccount;
     }
 
