@@ -1,5 +1,6 @@
 import * as orm from 'typeorm';
 import fp from 'fastify-plugin';
+import { subMonths } from 'date-fns';
 import { AppAccount, AccountPrivileges } from '../../entity/AppAccount';
 import { S2Map } from '../../entity/S2Map';
 import { S2Profile } from '../../entity/S2Profile';
@@ -8,15 +9,6 @@ import { defaultAccountSettings, UserPrivacyPreferences } from '../../entity/BnA
 import { S2MapHeader } from '../../entity/S2MapHeader';
 import { BnAccount } from '../../entity/BnAccount';
 import { PlayerProfileParams } from '../../bnet/common';
-
-// TODO: temporary restrictive settings, to be replaced with `defaultAccountSettings`
-export const publicAccountSettings: Required<UserPrivacyPreferences> = {
-    profilePrivate: false,
-    mapPubDownload: true,
-    mapPrivDownload: false,
-    mapPrivDetails: false,
-    mapPrivListed: false,
-};
 
 export enum MapAccessAttributes {
     Details,
@@ -35,16 +27,30 @@ interface IAccessManager {
     isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile | PlayerProfileParams, userAccount?: AppAccount): Promise<boolean>;
 }
 
-function getEffectiveAccountPreferences(account?: BnAccount): Required<UserPrivacyPreferences> {
+function getEffectiveAccountPreferences(account: BnAccount | null, profile?: S2Profile): Required<UserPrivacyPreferences> {
+    let defaultPreferences: Required<UserPrivacyPreferences> = Object.assign({}, defaultAccountSettings);
+
+    if (profile && !(profile.name === 'blizzmaps' && profile.discriminator === 1)) {
+        // restrict access to maps on profiles where author has been active in last X months
+        if (profile.lastOnlineAt > subMonths(new Date(), 1)) {
+            defaultPreferences.mapPrivDetails = false;
+        }
+        if (profile.lastOnlineAt > subMonths(new Date(), 9)) {
+            defaultPreferences.mapPrivDownload = false;
+            defaultPreferences.mapPrivListed = false;
+        }
+    }
+
     const preferences: Required<UserPrivacyPreferences> = {} as any;
-    for (const key of Object.keys(publicAccountSettings)) {
-        if (account !== null && account?.settings && (account.settings as any)[key] !== null) {
+    for (const key of Object.keys(defaultPreferences)) {
+        if (account?.settings && (account.settings as any)[key] !== null) {
             (preferences as any)[key] = (account.settings as any)[key];
         }
         else {
-            (preferences as any)[key] = (publicAccountSettings as any)[key];
+            (preferences as any)[key] = (defaultPreferences as any)[key];
         }
     }
+
     return preferences;
 }
 
@@ -69,10 +75,6 @@ class AccessManager implements IAccessManager {
         }
 
         const qb = this.conn.getRepository(S2Profile).createQueryBuilder('profile')
-            .select([
-                'profile.id',
-                'profile.account'
-            ])
             .leftJoinAndSelect('profile.account', 'bnAccount')
             .leftJoinAndSelect('bnAccount.settings', 'bnSettings')
         ;
@@ -100,7 +102,7 @@ class AccessManager implements IAccessManager {
         const results: boolean[] = [];
         const kinds = Array.isArray(kind) ? kind : [kind];
         for (const currKind of kinds) {
-            if (userAccount?.privileges & AccountPrivileges.SuperAdmin) {
+            if (userAccount && userAccount.privileges & AccountPrivileges.SuperAdmin) {
                 results.push(true);
                 continue;
             }
@@ -117,7 +119,7 @@ class AccessManager implements IAccessManager {
                 continue;
             }
 
-            const preferences = getEffectiveAccountPreferences(authorProfile?.account);
+            const preferences = getEffectiveAccountPreferences(authorProfile?.account ?? null, authorProfile);
 
             switch (currKind) {
                 case MapAccessAttributes.Details: {
@@ -140,10 +142,13 @@ class AccessManager implements IAccessManager {
         return Array.isArray(kind) ? results : results.shift();
     }
 
-    async isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile | PlayerProfileParams, userAccount?: AppAccount) {
-        let profileAccount: BnAccount;
+    async isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile | PlayerProfileParams, userAccount?: AppAccount): Promise<boolean> {
+        let profileAccount: BnAccount | null = null;
 
-        if (typeof (profile as S2Profile).account === 'undefined') {
+        if (profile instanceof S2Profile) {
+            profileAccount = profile.account;
+        }
+        else {
             const profileQuery = this.conn.getRepository(S2Profile).createQueryBuilder().subQuery()
                 .from(S2Profile, 'profile')
                 .select('profile.id')
@@ -165,13 +170,10 @@ class AccessManager implements IAccessManager {
                 })
                 .getOne()
             ;
-            profileAccount = result.account;
-        }
-        else if ((profile as S2Profile).account !== null) {
-            profileAccount = (profile as S2Profile).account;
+            profileAccount = result?.account ?? null;
         }
 
-        if (userAccount?.privileges & AccountPrivileges.SuperAdmin) {
+        if (userAccount && userAccount.privileges & AccountPrivileges.SuperAdmin) {
             return true;
         }
 
@@ -180,7 +182,7 @@ class AccessManager implements IAccessManager {
             return true;
         }
 
-        const preferences = getEffectiveAccountPreferences(profileAccount);
+        const preferences = getEffectiveAccountPreferences(profileAccount, profile instanceof S2Profile ? profile : void 0);
 
         switch (kind) {
             case ProfileAccessAttributes.Details: {

@@ -10,7 +10,7 @@ export function profileHandle(profile: PlayerProfileParams) {
     return `${profile.regionId}-S2-${profile.realmId}-${profile.profileId}`;
 }
 
-export function parseProfileHandle(s: string): PlayerProfileParams {
+export function parseProfileHandle(s: string): PlayerProfileParams | undefined {
     const m = s.match(/^(\d+)-S2-(\d+)-(\d+)$/);
     if (!m) return;
     const regionId = Number(m[1]) as GameRegion;

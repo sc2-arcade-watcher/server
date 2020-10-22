@@ -1,15 +1,18 @@
 import { Entity, OneToOne, JoinColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Nullable } from '../macros';
 import { BnAccount } from './BnAccount';
 
 export type UserPrivacyPreferences = {
-    profilePrivate: boolean | null;
-    mapPubDownload: boolean | null;
-    mapPrivDownload: boolean | null;
-    mapPrivDetails: boolean | null;
-    mapPrivListed: boolean | null;
+    profilePrivate: boolean;
+    mapPubDownload: boolean;
+    mapPrivDownload: boolean;
+    mapPrivDetails: boolean;
+    mapPrivListed: boolean;
 };
 
-export const defaultAccountSettings: Required<UserPrivacyPreferences> = {
+export type UserPrivacyPreferencesNullable = Nullable<UserPrivacyPreferences>;
+
+export const defaultAccountSettings: UserPrivacyPreferences = {
     profilePrivate: false,
     mapPubDownload: true,
     mapPrivDownload: true,
@@ -18,7 +21,7 @@ export const defaultAccountSettings: Required<UserPrivacyPreferences> = {
 };
 
 @Entity()
-export class BnAccountSettings implements UserPrivacyPreferences {
+export class BnAccountSettings implements UserPrivacyPreferencesNullable {
     @OneToOne(type => BnAccount, account => account.settings, {
         primary: true,
         nullable: false,

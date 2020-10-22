@@ -63,6 +63,10 @@ export default fp(async (server, opts) => {
             },
         });
 
+        if (!profile) {
+            return reply.code(404).send();
+        }
+
         const canAccessDetails = await server.accessManager.isProfileAccessGranted(
             ProfileAccessAttributes.Details,
             profile,
@@ -126,10 +130,6 @@ export default fp(async (server, opts) => {
             }
             return item;
         });
-
-        if (!mostPlayed.length) {
-            return reply.code(404).send();
-        }
 
         reply.header('Cache-control', 'private, max-age=60');
         return reply.code(200).send({
