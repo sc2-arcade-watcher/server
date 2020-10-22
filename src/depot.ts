@@ -64,7 +64,7 @@ export class BattleDepot {
         const targetFilename = this.ndir.pathTo(filename);
 
         if (!(await fs.pathExists(targetFilename))) {
-            const tmpFilename = path.join(os.tmpdir(), `${filename}.${Math.floor(Math.random() * 0x7FFFFFFF).toString(16)}`)
+            const tmpFilename = path.join(os.tmpdir(), `${filename}.${Math.floor(Math.random() * 0x7FFFFFFF).toString(16)}`);
             await this.download(region, filename, tmpFilename);
             await fs.move(tmpFilename, targetFilename, { overwrite: true });
         }
@@ -87,7 +87,7 @@ export async function convertImage(src: string, dst: string, options: string[] =
         logger.warn(`Failed to identify image "${src}" rcode=${identifyResult.rcode}`);
     }
     else {
-        srcFormat = identifyResult.stdout.toLowerCase();
+        srcFormat = identifyResult.stdout!.toLowerCase();
     }
 
     await fs.ensureDir(path.dirname(dst));

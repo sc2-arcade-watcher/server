@@ -7,13 +7,16 @@ import { AxiosError } from 'axios';
 
 export const sleep = util.promisify(setTimeout);
 
-export async function sleepUnless(ms: number, condCheck: () => boolean, opts: { sleepInterval?: number } = {}) {
+export async function sleepUnless(ms: number, condCheck: () => boolean, inopts: { sleepInterval?: number } = {}) {
     return new Promise((resolve, reject) => {
-        opts = Object.assign({
+        const opts: { sleepInterval: number } = Object.assign({
             sleepInterval: 100,
-        }, opts);
+        }, inopts);
         let i = 0;
-        let tim: NodeJS.Timer = setInterval(() => {
+        // Type 'number' is not assignable to type 'Timeout'
+        // (due to DOM typings in tsconfig)
+        // @ts-ignore
+        let tim: NodeJS.Timeout = setInterval(() => {
             ++i;
             if (!condCheck()) {
                 logger.info(`sleep interval interrupted; curr=${(i * opts.sleepInterval)} target=${ms}`);
@@ -95,8 +98,8 @@ export interface SpawnWaitOptions {
 
 export interface SpawnWaitResult<T> {
     proc: T;
-    rcode: number;
-    signal: NodeJS.Signals;
+    rcode: number | null;
+    signal: NodeJS.Signals | null;
     stdout?: string;
     stderr?: string;
 }
@@ -106,14 +109,14 @@ export function spawnWaitExit<T extends childProc.ChildProcess>(proc: T, opts: S
     const stderr: string[] = [];
 
     if (opts.captureStdout) {
-        proc.stdout.on('data', buff => {
+        proc.stdout!.on('data', buff => {
             if (buff instanceof Buffer) {
                 stdout.push(buff.toString('utf8'));
             }
         });
     }
     if (opts.captureStderr) {
-        proc.stderr.on('data', buff => {
+        proc.stderr!.on('data', buff => {
             if (buff instanceof Buffer) {
                 stderr.push(buff.toString('utf8'));
             }
@@ -122,10 +125,8 @@ export function spawnWaitExit<T extends childProc.ChildProcess>(proc: T, opts: S
 
     return new Promise((resolve, reject) => {
         proc.once('exit', async (code, signal) => {
-            if (opts.captureStdout && !proc.stdout.destroyed) {
-                await new Promise(resolve => {
-                    proc.stdout.once('close', () => resolve());
-                });
+            if (opts.captureStdout && !proc.stdout!.destroyed) {
+                await new Promise(resolve => { proc.stdout!.once('close', resolve); });
             }
 
             resolve({
@@ -158,8 +159,6 @@ export async function systemdNotifyReady() {
     const r = await execAsync('systemd-notify --ready');
     logger.debug(`systemd-notify result`, r);
 }
-
-export type Partial<T> = { [P in keyof T]?: T[P] };
 
 export function retry(options?: pRetry.Options) {
     return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {

@@ -1,31 +1,7 @@
 {
+    "extends": "./tsconfig.base.json",
     "compilerOptions": {
-        "module": "commonjs",
-        "target": "es2019",
-        "rootDir": ".",
-        "outDir": "out",
-        "lib": [
-            "es2017",
-            "es2018",
-            "es2019",
-            "esnext.asynciterable",
-            "DOM", // due to axios-case-converter
-        ],
-        "preserveConstEnums": true,
-        "allowUnreachableCode": true,
-        "sourceMap": true,
-        "allowJs": false,
         "strict": true,
         "strictNullChecks": false,
-        "experimentalDecorators": true,
-        "removeComments": false,
-        "emitDecoratorMetadata": true,
     },
-    "include": [
-        "src/**/*",
-        "tests/**/*"
-    ],
-    "exclude": [
-        "node_modules"
-    ]
 }

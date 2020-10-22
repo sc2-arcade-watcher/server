@@ -1,0 +1,15 @@
+{
+    "extends": "./tsconfig.base.json",
+    "compilerOptions": {
+        "noEmit": true,
+        "strictNullChecks": true,
+    },
+    "include": [
+        "src/api/plugins/accessManager.ts",
+        "src/common.ts",
+        "src/depot.ts",
+        "src/helpers.ts",
+        "src/logger.ts",
+        "src/macros.ts",
+    ],
+}

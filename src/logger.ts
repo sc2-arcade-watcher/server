@@ -72,23 +72,23 @@ function formatMemoryUsage(mem: NodeJS.MemoryUsage) {
 }
 
 export interface LogItOptions {
-    level?: 'error' | 'warn' | 'info' | 'verbose' | 'debug';
+    level: 'error' | 'warn' | 'info' | 'verbose' | 'debug';
+    profiling: boolean;
+    profTime: boolean;
+    profMemory: boolean;
     message?: string;
-    profiling?: boolean;
-    profTime?: boolean;
-    profMemory?: boolean;
     argsDump?: ((...args: any[]) => any) | boolean;
     resDump?: ((res: any) => any) | boolean;
     scopeDump?: ((scope: any) => any);
 }
 
-export function logIt(lgOpts: LogItOptions = {}) {
-    lgOpts = Object.assign<LogItOptions, LogItOptions>({
+export function logIt(inputOptions: Partial<LogItOptions> = {}) {
+    const lgOpts = Object.assign<LogItOptions, typeof inputOptions>({
         level: 'verbose',
         profiling: true,
         profTime: false,
         profMemory: false,
-    }, lgOpts);
+    }, inputOptions);
 
     return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
         if (!(<any>logger).isLevelEnabled(lgOpts.level)) {
