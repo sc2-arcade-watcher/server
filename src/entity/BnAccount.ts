@@ -14,12 +14,12 @@ export class BnAccount {
     @Column({
         nullable: true,
     })
-    battleTag: string;
+    battleTag: string | null = null;
 
     @Column({
         nullable: true,
     })
-    updatedAt: Date;
+    updatedAt: Date | null = null;
 
     @OneToOne(type => AppAccount, appAccount => appAccount.bnAccount)
     appAccount: AppAccount;
@@ -32,4 +32,8 @@ export class BnAccount {
 
     @OneToOne(type => BnAccountSettings, settings => settings.account)
     settings: BnAccountSettings;
+
+    get nameWithId() {
+        return `${this.battleTag} [${this.id}]`;
+    }
 }

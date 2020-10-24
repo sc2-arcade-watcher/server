@@ -13,21 +13,17 @@ export class BattleDataUpdater {
     constructor (protected conn: orm.Connection) {
     }
 
-    protected async updateAccountProfiles(bAccount: BnAccount) {
+    protected async updateAccountProfiles(bnAccount: BnAccount) {
         let bProfiles: BattleSC2ProfileBase[];
         try {
-            bProfiles = (await this.bAPI.sc2.getAccount(bAccount.id)).data;
+            bProfiles = (await this.bAPI.sc2.getAccount(bnAccount.id)).data;
         }
         catch (err) {
             if (isAxiosError(err) && err.response!.status === 503) {
-                // supress error if there's at least one profile already associated with the account
+                // supress error even if we fail to obtain list of profiles
                 // (due to <https://us.forums.blizzard.com/en/blizzard/t/starcraft-ii-account-endpoint-returning-503-repeatedly/12645>)
-                if (bAccount.profiles.length > 0) {
-                    return;
-                }
-                else {
-                    throw Error(`couldn't acquire list of SC2 profiles`);
-                }
+                logger.warn(`couldn't acquire list of SC2 profiles for ${bnAccount.nameWithId}`);
+                return;
             }
             else {
                 throw err;
@@ -35,7 +31,7 @@ export class BattleDataUpdater {
         }
 
         for (const bCurrProfile of bProfiles) {
-            let s2profile = bAccount.profiles.find(x => profileHandle(x) === profileHandle(bCurrProfile));
+            let s2profile = bnAccount.profiles.find(x => profileHandle(x) === profileHandle(bCurrProfile));
             if (!s2profile) {
                 s2profile = await this.conn.getRepository(S2Profile).findOne({
                     where: {
@@ -54,8 +50,8 @@ export class BattleDataUpdater {
                 }
 
                 const updatedData: Partial<S2Profile> = {};
-                if (!s2profile.account || s2profile.account.id !== bAccount.id) {
-                    updatedData.account = bAccount;
+                if (!s2profile.account || s2profile.account.id !== bnAccount.id) {
+                    updatedData.account = bnAccount;
                     updatedData.accountVerified = true;
                 }
                 if (s2profile.avatarUrl !== bCurrProfile.avatarUrl) {
@@ -71,7 +67,7 @@ export class BattleDataUpdater {
                 else {
                     await this.conn.getRepository(S2Profile).save(s2profile);
                 }
-                bAccount.profiles.push(s2profile);
+                bnAccount.profiles.push(s2profile);
             }
             else {
                 if (s2profile.avatarUrl !== bCurrProfile.avatarUrl) {
@@ -83,11 +79,11 @@ export class BattleDataUpdater {
             }
         }
 
-        if (bAccount.profiles.length > bProfiles.length) {
-            const detachedProfiles = bAccount.profiles.filter(x => !bProfiles.find(y => profileHandle(x) === profileHandle(y)))
+        if (bnAccount.profiles.length > bProfiles.length) {
+            const detachedProfiles = bnAccount.profiles.filter(x => !bProfiles.find(y => profileHandle(x) === profileHandle(y)))
             for (const dItem of detachedProfiles) {
                 logger.verbose(`Detaching profile ${dItem.name}#${dItem.discriminator} from account ${dItem.account.id}`);
-                bAccount.profiles.splice(bAccount.profiles.findIndex(x => x === dItem), 1);
+                bnAccount.profiles.splice(bnAccount.profiles.findIndex(x => x === dItem), 1);
                 const updatedData: Partial<S2Profile> = {
                     account: null,
                     accountVerified: false,
