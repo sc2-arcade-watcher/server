@@ -56,6 +56,7 @@ export class BattleDataUpdater {
                 const updatedData: Partial<S2Profile> = {};
                 if (!s2profile.account || s2profile.account.id !== bAccount.id) {
                     updatedData.account = bAccount;
+                    updatedData.accountVerified = true;
                 }
                 if (s2profile.avatarUrl !== bCurrProfile.avatarUrl) {
                     updatedData.avatarUrl = bCurrProfile.avatarUrl;
@@ -86,9 +87,13 @@ export class BattleDataUpdater {
             const detachedProfiles = bAccount.profiles.filter(x => !bProfiles.find(y => profileHandle(x) === profileHandle(y)))
             for (const dItem of detachedProfiles) {
                 logger.verbose(`Detaching profile ${dItem.name}#${dItem.discriminator} from account ${dItem.account.id}`);
-                dItem.account = null;
                 bAccount.profiles.splice(bAccount.profiles.findIndex(x => x === dItem), 1);
-                await this.conn.getRepository(S2Profile).update(dItem.id, { account: null });
+                const updatedData: Partial<S2Profile> = {
+                    account: null,
+                    accountVerified: false,
+                };
+                await this.conn.getRepository(S2Profile).update(dItem.id, updatedData);
+                Object.assign(dItem, updatedData);
             }
         }
     }

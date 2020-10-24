@@ -28,7 +28,17 @@ export default fp(async (server, opts) => {
             .createQueryBuilder('map')
             .innerJoinAndSelect('map.currentVersion', 'mapHead')
             .innerJoinAndSelect('map.mainCategory', 'mainCat')
-            .leftJoinAndSelect('map.author', 'author')
+            .leftJoin('map.author', 'author')
+            .addSelect([
+                'author.regionId',
+                'author.realmId',
+                'author.profileId',
+                'author.name',
+                'author.discriminator',
+                'author.deleted',
+                'author.avatarUrl',
+                'author.lastOnlineAt',
+            ])
             .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId', {
                 regionId: request.params.regionId,
                 bnetId: request.params.mapId,

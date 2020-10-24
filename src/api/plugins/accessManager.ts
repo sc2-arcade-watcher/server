@@ -32,10 +32,10 @@ function getEffectiveAccountPreferences(account: BnAccount | null, profile?: S2P
 
     if (profile && !(profile.name === 'blizzmaps' && profile.discriminator === 1)) {
         // restrict access to maps on profiles where author has been active in last X months
-        if (profile.lastOnlineAt > subMonths(new Date(), 1)) {
+        if (profile.lastOnlineAt! > subMonths(new Date(), 1)) {
             defaultPreferences.mapPrivDetails = false;
         }
-        if (profile.lastOnlineAt > subMonths(new Date(), 9)) {
+        if (profile.lastOnlineAt! > subMonths(new Date(), 9)) {
             defaultPreferences.mapPrivDownload = false;
             defaultPreferences.mapPrivListed = false;
         }

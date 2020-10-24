@@ -3,6 +3,7 @@ import { TypedEvent, sleep } from './helpers';
 import { JournalFeed, JournalFeedCursor } from './journal/feed';
 import { logger, logIt } from './logger';
 import { parseProfileHandle } from './bnet/common';
+import { oneLine } from 'common-tags';
 
 // TODO: replace with GameRegion from common.ts
 export enum GameRegion {
@@ -358,11 +359,11 @@ export class JournalReader {
         else {
             const reqInfo = this.recentPreviewRequests.get(ev.lobbyId);
             if (!reqInfo) {
-                logger.warn(`haven't found matching preview request for lobid=${ev.lobbyId}`);
+                logger.debug(`haven't found matching preview request for lobid=${ev.lobbyId}`);
                 return;
             }
             if (reqInfo.basicPreview) {
-                logger.warn(`matched preview request already has "basicPreview" lobid=${ev.lobbyId}`);
+                logger.debug(`matched preview request already has "basicPreview" lobid=${ev.lobbyId}`);
                 return;
             }
             reqInfo.basicPreview = ev;
@@ -391,27 +392,27 @@ export class JournalReader {
 
     protected handleLobbyPvEx(ev: SignalLobbyPvEx) {
         if (!ev.slots.length) {
-            logger.verbose(`encountered 0 slots LBPE ${ev.$timestamp}`);
+            logger.debug(`encountered 0 slots LBPE ${ev.$timestamp}`);
             return;
         }
         const knownBattletags = new Set<string>();
         for (const slot of ev.slots) {
             if (slot.kind !== LobbyPvExSlotKind.Human) continue;
             if (!slot.profile) {
-                logger.verbose(`encountered incomplete LBPE ${ev.$timestamp} slot=${slot.slotIdx}`);
+                logger.debug(`encountered incomplete LBPE ${ev.$timestamp} slot=${slot.slotIdx}`);
                 return;
             }
             const user = `${slot.profile.name}#${slot.profile.discriminator}`;
             if (slot.profile.regionId === 0 || slot.profile.realmId === 0 || slot.profile.profileId === 0 || slot.profile.discriminator === 0) {
                 const profile = `${slot.profile.regionId}-S2-${slot.profile.realmId}-${slot.profile.profileId}`;
-                logger.warn(`encountered incomplete LBPE ${ev.$timestamp} slot=${slot.slotIdx} user=${user} profile=${profile}`);
+                logger.debug(`encountered incomplete LBPE ${ev.$timestamp} slot=${slot.slotIdx} user=${user} profile=${profile}`);
                 return;
             }
             if (knownBattletags.has(user)) {
                 // in very rare conditions the same player may appear on multiple slots - fix it up
                 slot.profile = void 0;
                 slot.kind = LobbyPvExSlotKind.Open;
-                logger.warn(`found duplicate of player LBPE ${ev.$timestamp} slot=${slot.slotIdx} user=${user}`);
+                logger.debug(`found duplicate of player LBPE ${ev.$timestamp} slot=${slot.slotIdx} user=${user}`);
                 continue;
             }
             knownBattletags.add(user);
@@ -495,7 +496,7 @@ export class JournalReader {
             }
 
             if (exPvCandidates.length > 1) {
-                logger.warn(
+                logger.debug(
                     `extra matches found for lobid=${reqInfo.lobbyId} num=${exPvCandidates.length}`,
                     Array.from(exPvCandidates.values())
                 );
@@ -541,7 +542,7 @@ export class JournalReader {
 
             if (candidates.length !== 1) {
                 const players = entryPvEx.slots.map(x => x.profile?.name).filter(x => x);
-                logger.warn(`no matches for entryPvEx l=${candidates.length} ts=${entryPvEx.$timestamp} sl=${entryPvEx.slots.length} players=${players}`);
+                logger.debug(`no matches for entryPvEx l=${candidates.length} ts=${entryPvEx.$timestamp} sl=${entryPvEx.slots.length} players=${players}`);
             }
             else {
                 const reqInfo = candidates.shift();
@@ -576,7 +577,7 @@ export class JournalReader {
                 this.forwardPreview(key);
             }
             else if (item.extendedPreview) {
-                logger.warn(`removed pending LBPR with incomplete response, lobid=${item.lobbyId} ts=${item.reqEntry.$timestamp}`, {
+                logger.debug(`removed pending LBPR with incomplete response, lobid=${item.lobbyId} ts=${item.reqEntry.$timestamp}`, {
                     extendedPreview: item.extendedPreview,
                     basicPreview: item.basicPreview,
                 });
@@ -585,7 +586,7 @@ export class JournalReader {
         }
         for (const item of this.recentExPvResponses) {
             if (this.recentExPvResponses.size <= 3) break;
-            logger.warn(`removed pending LBPE without a match, ts=${item.$timestamp}`);
+            logger.debug(`removed pending LBPE without a match, ts=${item.$timestamp}`);
             this.recentExPvResponses.delete(item);
         }
     }
@@ -617,7 +618,7 @@ export class JournalReader {
             if (!reqInfo.extendedPreview) continue;
             if (reqInfo.basicPreview && reqInfo.extendedPreview && reqInfo.basicPreview.slots.length < 16 && reqInfo.basicPreview.slots.length !== reqInfo.extendedPreview.slots.length) {
                 if (reqInfo.basicPreview.slots.length > reqInfo.extendedPreview.slots.length) {
-                    logger.warn(`preview slots count missmatch lobid=${reqInfo.reqEntry.lobbyId}`, reqInfo.basicPreview, reqInfo.extendedPreview);
+                    logger.debug(`preview slots count missmatch lobid=${reqInfo.reqEntry.lobbyId}`, reqInfo.basicPreview, reqInfo.extendedPreview);
                     reqInfo.extendedPreview = void 0;
                 }
             }
@@ -699,7 +700,13 @@ export class GameLobbyDesc {
     slotTakenSnapshotUpdatedAt: Date;
 
     lobbyName: string;
-    accountThatSetName: number;
+    lobbyNameMeta: {
+        title: string;
+        profileName: string;
+        accountId: number | null;
+        changedAt: Date;
+    } | null;
+
     hostName: string;
     slotsHumansTaken: number;
     slotsHumansTotal: number;
@@ -718,7 +725,18 @@ export class GameLobbyDesc {
         this.snapshotUpdatedAt = lobbyData.createdAt;
 
         this.lobbyName = this.initInfo.lobbyName;
-        this.accountThatSetName = this.initInfo.accountThatSetName;
+        if (this.initInfo.lobbyName) {
+            this.lobbyNameMeta = {
+                title: this.initInfo.lobbyName,
+                profileName: this.initInfo.hostName,
+                accountId: this.initInfo.accountThatSetName === 0 ? null : this.initInfo.accountThatSetName,
+                changedAt: new Date(this.createdAt),
+            };
+            this.lobbyNameMeta.changedAt.setMilliseconds(0);
+        }
+        else {
+            this.lobbyNameMeta = null;
+        }
         this.hostName = this.initInfo.hostName;
         this.slotsHumansTaken = this.initInfo.slotsHumansTaken;
         this.slotsHumansTotal = this.initInfo.slotsHumansTotal;
@@ -736,8 +754,16 @@ export class GameLobbyDesc {
     updateSnapshot(snapshot: TrackedLobbyHeadUpdate) {
         if (snapshot.updatedAt > this.snapshotUpdatedAt) {
             this.hostName = snapshot.hostName;
+            if (this.lobbyName !== snapshot.lobbyName) {
+                this.lobbyNameMeta = {
+                    title: snapshot.lobbyName,
+                    profileName: snapshot.hostName,
+                    accountId: snapshot.accountThatSetName === 0 ? null : snapshot.accountThatSetName,
+                    changedAt: new Date(snapshot.updatedAt),
+                };
+                this.lobbyNameMeta.changedAt.setMilliseconds(0);
+            }
             this.lobbyName = snapshot.lobbyName;
-            this.accountThatSetName = this.initInfo.accountThatSetName;
             this.snapshotUpdatedAt = snapshot.updatedAt;
 
             if (this.slotsHumansTaken !== snapshot.slotsHumansTaken || this.slotsHumansTotal !== snapshot.slotsHumansTotal) {
@@ -789,12 +815,22 @@ export class GameLobbyDesc {
                 }
                 else if (slBasic.length !== slExtended.length) {
                     // log it but don't do anything - this doesn't necessarily means the data is incorrect
-                    logger.verbose(`extended slot count missmatch`, slBasic, slExtended);
+                    logger.debug(`extended slot count missmatch`, slBasic, slExtended);
                 }
                 else if (slBasic.join('') !== slExtended.join('')) {
                     this.slots.forEach((slot, index) => {
                         if (slBasic[index] === slExtended[index]) return;
-                        logger.verbose(`extended slot info missing, lobid=${this.initInfo.lobbyId} idx=${index}`, this.slots[index], pendingSlots[index]);
+                        if (this.slots[index].kind === LobbyPvExSlotKind.Human && pendingSlots[index].kind === LobbyPvExSlotKind.Human) {
+                            logger.verbose(
+                                oneLine`
+                                    player slot incomplete ${this.initInfo.bucketId}/${this.initInfo.lobbyId} idx=${index}
+                                `,
+                                {
+                                    p: this.slots[index],
+                                    n: pendingSlots[index],
+                                },
+                            );
+                        }
                         this.slots[index] = pendingSlots[index];
                     });
                     this.slotsPreviewUpdatedAt = this.basicPreviewUpdatedAt;

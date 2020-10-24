@@ -4,6 +4,7 @@ import { GameLobbyStatus } from '../gametracker';
 import { S2GameLobbySlot, S2GameLobbySlotKind } from './S2GameLobbySlot';
 import { S2GameLobbyPlayerJoin } from './S2GameLobbyPlayerJoin';
 import { S2Map } from './S2Map';
+import { S2GameLobbyTitle } from './S2GameLobbyTitle';
 
 @Entity()
 @Unique('bnet_id', ['bnetBucketId', 'bnetRecordId'])
@@ -49,7 +50,6 @@ export class S2GameLobby {
     @Column({
         type: 'enum',
         enum: GameLobbyStatus,
-        default: GameLobbyStatus.Open,
     })
     @Index()
     status: GameLobbyStatus;
@@ -116,12 +116,52 @@ export class S2GameLobby {
 
     @OneToMany(type => S2GameLobbyPlayerJoin, joinInfo => joinInfo.lobby, {
         cascade: false,
+        persistence: false,
     })
     joinHistory: S2GameLobbyPlayerJoin[];
+
+    @OneToMany(type => S2GameLobbyTitle, title => title.lobby, {
+        cascade: false,
+        persistence: false,
+    })
+    titleHistory: S2GameLobbyTitle[];
 
     map?: S2Map;
     extMod?: S2Map;
     multiMod?: S2Map;
+
+    get sumSlots() {
+        const slInfo = {
+            total: this.slots.length,
+            taken: 0,
+            open: 0,
+            human: 0,
+            ai: 0,
+        };
+        this.slots.forEach(slot => {
+            switch (slot.kind) {
+                case S2GameLobbySlotKind.Open: {
+                    ++slInfo.open;
+                    break;
+                }
+                case S2GameLobbySlotKind.AI: {
+                    ++slInfo.ai;
+                    break;
+                }
+                case S2GameLobbySlotKind.Human: {
+                    ++slInfo.human;
+                    break;
+                }
+            }
+        });
+        slInfo.taken = slInfo.human + slInfo.ai;
+        return slInfo;
+    }
+
+    get statSlots() {
+        const tmp = this.sumSlots;
+        return `[${tmp.taken}/${tmp.taken + tmp.open}]`;
+    }
 
     getSlots(opts: { kinds?: S2GameLobbySlotKind[], teams?: number[] }): S2GameLobbySlot[] {
         return this.slots.filter(slot => {

@@ -42,14 +42,11 @@ export class S2Profile {
     @Column({
         type: 'mediumint',
         unsigned: true,
-        default: 0,
     })
     discriminator: number;
 
-    @Column({
-        default: false,
-    })
-    deleted: boolean;
+    @Column()
+    deleted: boolean = false;
 
     @ManyToOne(type => BnAccount, account => account.profiles, {
         nullable: true,
@@ -60,15 +57,35 @@ export class S2Profile {
     account: BnAccount;
 
     @Column({
+        unsigned: true,
         nullable: true,
     })
-    avatarUrl: string | null;
+    accountId: number | null = null;
+
+    /**
+     * determines whether profile origin has been verified through Blizzard API
+     */
+    @Column()
+    accountVerified: boolean = false;
+
+    @Column({
+        nullable: true,
+    })
+    avatarUrl: string | null = null;
 
     @Column({
         nullable: true,
     })
     @Index('last_online_at_idx')
-    lastOnlineAt: Date;
+    lastOnlineAt: Date | null = null;
 
     tracking?: S2ProfileTracking;
+
+    get fullname(): string {
+        return `${this.name}#${this.discriminator}`;
+    }
+
+    get nameAndId(): string {
+        return `${this.name} [${this.regionId}-S2-${this.realmId}-${this.profileId}]`;
+    }
 }

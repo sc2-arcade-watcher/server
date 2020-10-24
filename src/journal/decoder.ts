@@ -212,6 +212,13 @@ function myunescape(s: string) {
     return s;
 }
 
+function fixLobbyTitle(s: string) {
+    if (s.indexOf('!@#$') !== -1) {
+        return '';
+    }
+    return s;
+}
+
 export class SigDataCorruption extends Error {
     constructor(public readonly corruptedData: string, public readonly followingData: string) {
         super();
@@ -273,12 +280,17 @@ export class JournalDecoder {
         ed.mapVariantIndex = Number(popFirst(args));
 
         ed.lobbyName = myunescape(popFirst(args)).trim();
+        if (version <= 2) {
+            ed.lobbyName = fixLobbyTitle(ed.lobbyName);
+        }
+
         if (version >= 2) {
             ed.accountThatSetName = Number(popFirst(args));
         }
         else {
             ed.accountThatSetName = 0;
         }
+
         ed.hostName = popFirst(args);
         ed.slotsHumansTaken = Number(popFirst(args));
         ed.slotsHumansTotal = Number(popFirst(args));
@@ -317,13 +329,19 @@ export class JournalDecoder {
     unserializeLobbyUpdate(version: number, args: string[]): DataLobbyUpdate {
         const ed = {} as DataLobbyUpdate;
         ed.lobbyId = Number(popFirst(args));
+
         ed.lobbyName = myunescape(popFirst(args)).trim();
+        if (version <= 2) {
+            ed.lobbyName = fixLobbyTitle(ed.lobbyName);
+        }
+
         if (version >= 2) {
             ed.accountThatSetName = Number(popFirst(args));
         }
         else {
             ed.accountThatSetName = 0;
         }
+
         ed.hostName = popFirst(args);
         ed.slotsHumansTaken = Number(popFirst(args));
         ed.slotsHumansTotal = Number(popFirst(args));

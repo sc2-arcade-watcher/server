@@ -1,21 +1,39 @@
 import * as orm from 'typeorm';
 import type lruFactory from 'tiny-lru';
 const lru: typeof lruFactory = require('tiny-lru');
-import { JournalReader, GameRegion, JournalMultiProcessor, JournalEventKind, JournalEventNewLobby, JournalEventCloseLobby, GameLobbyStatus, JournalEventUpdateLobbySnapshot, JournalEventUpdateLobbyList, GameLobbyDesc, JournalEventUpdateLobbySlots, JournalEventBase } from '../gametracker';
+import { JournalReader, JournalMultiProcessor, JournalEventKind, JournalEventNewLobby, JournalEventCloseLobby, GameLobbyStatus, JournalEventUpdateLobbySnapshot, JournalEventUpdateLobbyList, GameLobbyDesc, JournalEventUpdateLobbySlots, JournalEventBase } from '../gametracker';
 import { JournalFeed } from '../journal/feed';
 import { S2GameLobby } from '../entity/S2GameLobby';
 import { S2Region } from '../entity/S2Region';
 import { logger, logIt, setupFileLogger } from '../logger';
 import { S2GameLobbySlot, S2GameLobbySlotKind } from '../entity/S2GameLobbySlot';
 import { SysFeedProvider } from '../entity/SysFeedProvider';
-import { sleep, execAsync, isErrDuplicateEntry } from '../helpers';
+import { sleep, isErrDuplicateEntry, systemdNotifyReady, setupProcessTerminator } from '../helpers';
 import { DataLobbyCreate, LobbyPvExSlotKind } from '../journal/decoder';
 import { SysFeedPosition } from '../entity/SysFeedPosition';
 import { S2Profile } from '../entity/S2Profile';
 import { S2GameLobbyPlayerJoin } from '../entity/S2GameLobbyPlayerJoin';
 import { S2GameLobbyMap, S2GameLobbyMapKind } from '../entity/S2GameLobbyMap';
 import { S2MapVariant } from '../entity/S2MapVariant';
-import { profileHandle } from '../bnet/common';
+import { S2GameLobbyTitle } from '../entity/S2GameLobbyTitle';
+import { oneLine } from 'common-tags';
+import { BnAccount } from '../entity/BnAccount';
+import { differenceInSeconds } from 'date-fns';
+import { GameRegion } from '../common';
+
+const slotKindMap = {
+    [LobbyPvExSlotKind.Computer]: S2GameLobbySlotKind.AI,
+    [LobbyPvExSlotKind.Open]: S2GameLobbySlotKind.Open,
+    [LobbyPvExSlotKind.Human]: S2GameLobbySlotKind.Human,
+};
+
+type FeedCheckpointMeta = {
+    resumeOffsetUpdatedAt: Date;
+    resumeEventPointer: JournalEventBase | null;
+
+    storageOffsetUpdatedAt: Date;
+    storageEventPointer: JournalEventBase | null;
+};
 
 class DataProc {
     protected conn: orm.Connection;
@@ -23,10 +41,12 @@ class DataProc {
     protected journalProc = new JournalMultiProcessor(this.region);
     protected s2region: S2Region;
     protected feedProviders = new Map<string, SysFeedProvider>();
+    protected feedCheckpointMeta = new Map<string, FeedCheckpointMeta>();
     protected closed = false;
 
     protected lobbiesCache = lru<S2GameLobby>(0);
-    protected profilesCache = lru<S2Profile>(2000, 1000 * 3600 * 24);
+    protected bnAccountsCache = lru<BnAccount>(200);
+    protected profilesCache = lru<S2Profile>(3000, 1000 * 3600 * 24);
     protected mapVariantsCache = lru<string>(4000, 1000 * 3600);
 
     protected lobbiesReopenCandidates = new Set();
@@ -60,16 +80,18 @@ class DataProc {
                     offset: 0,
                 },
             });
+            this.feedCheckpointMeta.set(name, {
+                resumeOffsetUpdatedAt: new Date(),
+                resumeEventPointer: null,
+                storageOffsetUpdatedAt: new Date(),
+                storageEventPointer: null,
+            });
             this.journalProc.addFeedSource(feed);
         }
     }
 
     async close() {
-        if (this.closed) {
-            logger.error(`forcing termination..`);
-            await sleep(1000);
-            process.exit(1);
-        }
+        if (this.closed) return;
         this.closed = true;
         await this.journalProc.close();
     }
@@ -79,8 +101,7 @@ class DataProc {
             const ev = await this.journalProc.proceed();
             if (!ev) break;
 
-            const feedProvider = this.feedProviders.get(ev.feedName);
-            const feedPos = feedProvider.position;
+            const feedPos = this.feedProviders.get(ev.feedName).position;
             if (ev.feedCursor.session <= feedPos.storageFile && ev.feedCursor.offset < feedPos.storageOffset) {
                 continue;
             }
@@ -104,41 +125,74 @@ class DataProc {
                     break;
                 }
                 case JournalEventKind.UpdateLobbyList: {
-                    await this.onUpdateLobbyList(ev);
+                    // await this.onUpdateLobbyList(ev);
+                    await this.updateStorageOffset(ev);
                     break;
                 }
             }
         }
+        await this.storeFeedCheckpoints();
         await this.conn.close();
     }
 
-    protected async updateStorageOffset(ev: JournalEventBase) {
+    protected async storeFeedCheckpoints() {
+        const procedures = Array.from(this.feedCheckpointMeta.entries()).map(async (item) => {
+            const [name, fcMeta] = item;
+            if (fcMeta.resumeEventPointer !== null) {
+                await this.updateResumingOffset(fcMeta.resumeEventPointer, true);
+            }
+            if (fcMeta.storageEventPointer !== null) {
+                await this.updateStorageOffset(fcMeta.storageEventPointer, true);
+            }
+        });
+        await Promise.all(procedures);
+    }
+
+    protected async updateStorageOffset(ev: JournalEventBase, force = false) {
+        const fcMeta = this.feedCheckpointMeta.get(ev.feedName);
+        fcMeta.storageEventPointer = ev;
+
+        if (!force && differenceInSeconds(new Date(), fcMeta.storageOffsetUpdatedAt) < 60) return;
+
         const feedProvider = this.feedProviders.get(ev.feedName);
         const feedPos = feedProvider.position;
 
         if (feedPos.storageFile < ev.feedCursor.session || feedPos.storageOffset < ev.feedCursor.offset) {
+            const pf = logger.startTimer();
             feedPos.storageFile = ev.feedCursor.session;
             feedPos.storageOffset = ev.feedCursor.offset;
             await this.em.getRepository(SysFeedPosition).update(feedProvider.id, {
                 storageFile: ev.feedCursor.session,
                 storageOffset: ev.feedCursor.offset,
             });
+            fcMeta.storageEventPointer = null;
+            pf.done({ level: 'verbose', message: `src=${ev.feedName} updateStorageOffset` });
         }
+        fcMeta.storageOffsetUpdatedAt = new Date();
     }
 
-    protected async updateResumingOffset(ev: JournalEventBase) {
+    protected async updateResumingOffset(ev: JournalEventBase, force = false) {
+        const fcMeta = this.feedCheckpointMeta.get(ev.feedName);
+        fcMeta.resumeEventPointer = ev;
+
+        if (!force && differenceInSeconds(new Date(), fcMeta.resumeOffsetUpdatedAt) < 100) return;
+
         const feedProvider = this.feedProviders.get(ev.feedName);
         const feedPos = feedProvider.position;
 
         const cursorResume = this.journalProc.gtracks.get(ev.feedName).cursorResumePointer;
         if (feedPos.resumingFile < cursorResume.session || feedPos.resumingOffset < cursorResume.offset) {
+            const pf = logger.startTimer();
             feedPos.resumingFile = cursorResume.session;
             feedPos.resumingOffset = cursorResume.offset;
             await this.em.getRepository(SysFeedPosition).update(feedProvider.id, {
                 resumingFile: cursorResume.session,
                 resumingOffset: cursorResume.offset,
             });
+            fcMeta.resumeEventPointer = null;
+            pf.done({ level: 'verbose', message: `src=${ev.feedName} updateResumingOffset` });
         }
+        fcMeta.resumeOffsetUpdatedAt = new Date();
     }
 
     protected async getLobby(lobby: GameLobbyDesc) {
@@ -147,22 +201,49 @@ class DataProc {
             s2lobby = await this.em.getRepository(S2GameLobby)
                 .createQueryBuilder('lobby')
                 .leftJoinAndSelect('lobby.slots', 'slots')
-                .leftJoinAndSelect('slots.profile', 'profile')
-                .leftJoinAndSelect('slots.joinInfo', 'joinInfo')
+                .leftJoinAndSelect('lobby.titleHistory', 'titleHistory')
+                .leftJoinAndSelect('lobby.joinHistory', 'joinHistory')
+                .leftJoinAndSelect('joinHistory.profile', 'joinHistoryProfile')
                 .andWhere('lobby.regionId = :regionId AND lobby.bnetBucketId = :bnetBucketId AND lobby.bnetRecordId = :bnetRecordId', {
                     regionId: this.s2region.id,
                     bnetBucketId: lobby.initInfo.bucketId,
                     bnetRecordId: lobby.initInfo.lobbyId,
                 })
                 .addOrderBy('slots.slotNumber', 'ASC')
+                .addOrderBy('titleHistory.date', 'ASC')
+                .addOrderBy('joinHistory.id', 'ASC')
                 .getOne()
             ;
 
-            // assign profile to corresponding joinInfo on human slots manually
-            // doing it directly from the typeorm could likely result in circular dependency issues
+            if (!s2lobby) return;
+
+            // populate local cache with profile instances that have been fetched
+            s2lobby.joinHistory.forEach(joinInfo => {
+                const profKey = `${joinInfo.profile.realmId}-${joinInfo.profile.profileId}`;
+                if (!this.profilesCache.has(profKey)) {
+                    this.profilesCache.set(profKey, joinInfo.profile);
+                }
+                else {
+                    // replace fetched instance with cached one
+                    joinInfo.profile = this.profilesCache.get(profKey);
+                }
+            });
+
+            // bind shared entities manually to ensure we're using the same instances within the scope of GameLobby object
             s2lobby.slots.forEach(slot => {
-                if (!slot.joinInfo) return;
-                slot.joinInfo.profile = slot.profile;
+                if (!slot.joinInfoId && !slot.profileId) return;
+
+                slot.joinInfo = s2lobby.joinHistory.find(x => x.id === slot.joinInfoId);
+                if (!slot.joinInfo) {
+                    throw new Error(`couldn't find a matching joinInfo for lobby=${s2lobby.id} slotNumer=${slot.slotNumber}`);
+                }
+                delete slot.joinInfoId;
+
+                slot.profile = slot.joinInfo.profile;
+                if (slot.profile.id !== slot.profileId) {
+                    throw new Error(`profile missmatch in joinInfo for lobby=${s2lobby.id} slotNumer=${slot.slotNumber}`);
+                }
+                delete slot.profileId;
             });
 
             this.lobbiesCache.set(lobby.initInfo.lobbyId.toString(), s2lobby);
@@ -175,14 +256,228 @@ class DataProc {
         await this.em.getRepository(S2GameLobby).update(s2lobby.id, updateData);
     }
 
-    protected async doUpdateSlots(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc, ev: JournalEventBase) {
-        if (!lobbyData.slots || lobbyData.slotsPreviewUpdatedAt <= s2lobby.slotsUpdatedAt) return;
+    protected async updateLobbyTitleOrigin(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc, tsManager: orm.EntityManager) {
+        if (!s2lobby.slots.length) {
+            // TODO: could try to determine missing profile using accountId
+            return;
+        }
 
-        const slotKindMap = {
-            [LobbyPvExSlotKind.Computer]: S2GameLobbySlotKind.AI,
-            [LobbyPvExSlotKind.Open]: S2GameLobbySlotKind.Open,
-            [LobbyPvExSlotKind.Human]: S2GameLobbySlotKind.Human,
-        };
+        const recentTitle = s2lobby.titleHistory[s2lobby.titleHistory.length - 1];
+        const tdiff = lobbyData.slotsPreviewUpdatedAt.getTime() - recentTitle.date.getTime();
+        if (
+            recentTitle.profileId === null &&
+            lobbyData.lobbyNameMeta?.title === recentTitle.title &&
+            lobbyData.lobbyNameMeta?.accountId === recentTitle.accountId
+        ) {
+            const matchedSlots = s2lobby.slots.filter(x => x.kind === S2GameLobbySlotKind.Human && x.name === recentTitle.hostName);
+            const matchedPlSlots = matchedSlots.filter(x => x.profile !== null);
+            const isInitialTitle = s2lobby.titleHistory.length === 1 && lobbyData.initInfo.lobbyName === recentTitle.title;
+
+            // pair profile with account if viable
+            if (
+                recentTitle.accountId !== null &&
+                matchedSlots.length === 1 &&
+                matchedPlSlots.length === 1 &&
+                tdiff <= 5000
+            ) {
+                const matchingProfile = matchedPlSlots[0].profile;
+                if (matchingProfile.accountId !== null && matchingProfile.accountId !== recentTitle.accountId) {
+                    logger.warn(oneLine`
+                        ${this.s2region.code}#${s2lobby.bnetRecordId}
+                        profile ${matchingProfile.nameAndId} already connected with another account
+                        curr=${matchingProfile.accountId} new=${recentTitle.accountId}
+                    `);
+                }
+                else if (matchingProfile.accountId === null) {
+                    matchingProfile.accountId = recentTitle.accountId;
+                    logger.info(oneLine`
+                        ${this.s2region.code}#${s2lobby.bnetRecordId}
+                        profile ${matchingProfile.nameAndId} connected with account=${matchingProfile.accountId}
+                    `);
+                    await tsManager.getRepository(S2Profile).update(matchingProfile.id, {
+                        accountId: matchingProfile.accountId,
+                    });
+                }
+            }
+
+            // determine profile of player who changed lobby title
+            // try by name looking in slots
+            if ((matchedPlSlots.length >= 1 && isInitialTitle) || matchedPlSlots.length === 1) {
+                recentTitle.profileId = matchedPlSlots[0].profile.id;
+            }
+            else if (recentTitle.accountId !== null) {
+                // .. this probably doens't make sense?
+                // try by accountId looking in joinHistory
+                // if (recentTitle.profileId === null) {
+                //     const accSlot = s2lobby.joinHistory.find(x => x.profile.accountId === recentTitle.accountId);
+                //     if (accSlot) {
+                //         recentTitle.profileId = accSlot.profile.id;
+                //     }
+                // }
+
+                // try by looking for profiles already associated with this account
+                if (recentTitle.profileId === null) {
+                    const accProfiles = await this.conn.getRepository(S2Profile).find({
+                        where: {
+                            accountId: recentTitle.accountId,
+                            regionId: this.region,
+                        },
+                    });
+
+                    if (accProfiles.length === 1) {
+                        const finalMatch = accProfiles[accProfiles.length - 1];
+                        recentTitle.profileId = finalMatch.id;
+                        logger.verbose(oneLine`
+                            ${this.s2region.code}#${s2lobby.bnetRecordId}
+                            determined profile ${finalMatch.nameAndId} of host "${recentTitle.hostName}" using accountId
+                        `);
+                        if (finalMatch.name === recentTitle.hostName) {
+                            // TODO: recover missing profile links on player slots if name matches?
+                            // s2lobby.slots.find(x => x.kind === S2GameLobbySlotKind.Human && !x.profile && x.name === finalMatch.name);
+                        }
+                        else {
+                            logger.warn(`${this.s2region.code}#${s2lobby.bnetRecordId} name missmatch on determined profile of a host`);
+                        }
+                    }
+                    else if (accProfiles.length > 1) {
+                        // could be just extra SEA profile
+                        logger.warn(oneLine`
+                            ${this.s2region.code}#${s2lobby.bnetRecordId}
+                            multiple profiles [${accProfiles.length}] bound to same acc=${recentTitle.accountId} ?!`,
+                            {
+                                recentTitle,
+                                accProfiles,
+                            }
+                        );
+                        // ... or a bug / something completely unknown - it's best to crash
+                        if (
+                            (accProfiles.length > 2) ||
+                            (accProfiles.length > 1 && s2lobby.regionId !== GameRegion.US)
+                        ) {
+                            throw new Error(`account=${recentTitle.accountId} has ${accProfiles.length} profiles?!`);
+                        }
+                    }
+                }
+            }
+
+            if (recentTitle.profileId) {
+                logger.verbose(oneLine`
+                    ${this.s2region.code}#${s2lobby.bnetRecordId}
+                    lobby title
+                    [${s2lobby.titleHistory.length}] T="${recentTitle.title}"
+                    A=${recentTitle.accountId} P=${recentTitle.profileId}
+                    M=${matchedSlots.map(x => x.profile ? x.profile.nameAndId : x.name).join()}
+                `);
+                await tsManager.getRepository(S2GameLobbyTitle).update({
+                    date: recentTitle.date,
+                    lobbyId: recentTitle.lobbyId,
+                }, {
+                    profileId: recentTitle.profileId,
+                });
+            }
+        }
+    }
+
+    protected hasNewSlotData(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc) {
+        const reversedHistory: S2GameLobbyPlayerJoin[] = [].concat(s2lobby.joinHistory).reverse();
+
+        // determine if there are any new players
+        for (const updatedSlot of lobbyData.slots) {
+            if (slotKindMap[updatedSlot.kind] !== S2GameLobbySlotKind.Human) continue;
+
+            const prevJoinInfo = reversedHistory.find(x => {
+                return x.profile.realmId === updatedSlot.profile.realmId && x.profile.profileId === updatedSlot.profile.profileId;
+            });
+
+            // new player that hasn't been seen in this lobby, exit early and proceed with update
+            if (!prevJoinInfo) {
+                return true;
+            }
+
+            // skip known player if they're still in the lobby
+            if (prevJoinInfo.leftAt === null) {
+                continue;
+            }
+
+            // skip known player if it matches the last join record
+            // meaning it's the same update event, just with newer timestamp - nothing to update
+            if (reversedHistory[reversedHistory.length - 1] === prevJoinInfo) {
+                continue;
+            }
+
+            // this could probably be removed
+            const tdiff = lobbyData.slotsPreviewUpdatedAt.getTime() - prevJoinInfo.leftAt.getTime();
+            const humanSlotsNumber = lobbyData.slots.filter(x => x.kind === LobbyPvExSlotKind.Human).length;
+            const openSlotsNumber = lobbyData.slots.filter(x => x.kind === LobbyPvExSlotKind.Open).length;
+            if (
+                lobbyData.slotsPreviewUpdatedAt > prevJoinInfo.joinedAt &&
+                humanSlotsNumber > 0 &&
+                (s2lobby.slots.length === 0 || s2lobby.slots.length === lobbyData.slots.length) &&
+                (
+                    (humanSlotsNumber >= 2 && tdiff > 0) ||
+                    (humanSlotsNumber === 1 && (tdiff > 30000 || openSlotsNumber === 0))
+                )
+            ) {
+                logger.verbose(`${this.s2region.code}#${s2lobby.bnetRecordId} candidate valid for reopen, data might be fresh`, {
+                    prevJoinInfo,
+                    tdiff,
+                    humanSlotsNumber,
+                    openSlotsNumber,
+                });
+                return true;
+            }
+        }
+
+        // determine if slot layout is the same
+        if (s2lobby.slots.length > 0) {
+            if (s2lobby.slots.length !== lobbyData.slots.length) {
+                logger.warn(`${this.s2region.code}#${s2lobby.bnetRecordId} candidate to re-open missmaching slots, ignoring.`, {
+                    prev: s2lobby.slots,
+                    new: lobbyData.slots,
+                });
+            }
+            else {
+                // dissect, check order of slots, team numbers and amount of slots taken by AI
+                const newSlotLayout = lobbyData.slots.map((item, index) => {
+                    return {
+                        kind: slotKindMap[item.kind],
+                        team: item.team,
+                        slotNumber: index + 1,
+                        name: item.name,
+                    };
+                });
+                const diffSlots = newSlotLayout.filter((x, index) => {
+                    return (
+                        x.kind !== s2lobby.slots[index].kind ||
+                        x.team !== s2lobby.slots[index].team ||
+                        x.slotNumber !== s2lobby.slots[index].slotNumber
+                    );
+                });
+
+                if (diffSlots.length > 0)  {
+                    logger.verbose(`${this.s2region.code}#${s2lobby.bnetRecordId} candidate valid for reopen, slot layout differs`, {
+                        newSlots: diffSlots,
+                        oldSlots: s2lobby.slots.filter(x => diffSlots.find(y => y.slotNumber === x.slotNumber)).map(x => {
+                            const o = Object.assign({}, x);
+                            delete o.joinInfo;
+                            return o;
+                        }),
+                    });
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    @logIt({ when: 'out' })
+    protected async doUpdateSlots(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc, ev: JournalEventBase) {
+        if (!lobbyData.slots || lobbyData.slotsPreviewUpdatedAt <= s2lobby.slotsUpdatedAt) return false;
+
+        if (s2lobby.closedAt !== null) {
+            if (!this.hasNewSlotData(s2lobby, lobbyData)) return false;
+        }
 
         if (s2lobby.slots.length !== lobbyData.slots.length) {
             if (s2lobby.slots.length > 0) {
@@ -217,14 +512,7 @@ class DataProc {
                     return s2slot;
                 }).filter(x => x !== void 0);
 
-                // bulk insert is fucked in current version of typeorm
-                // https://github.com/typeorm/typeorm/issues/5973
-                // https://github.com/typeorm/typeorm/issues/6025
-                // const result = await this.conn.getRepository(S2GameLobbySlot).insert(addedSlots);
-
-                // use multiple quries instead
-                await Promise.all(addedSlots.map(async x => this.conn.getRepository(S2GameLobbySlot).insert(x)));
-
+                await this.conn.getRepository(S2GameLobbySlot).insert(addedSlots);
                 s2lobby.slots.push(...addedSlots);
             }
         }
@@ -236,7 +524,7 @@ class DataProc {
                 if (infoSlot.name !== s2slot.name) return true;
                 if (infoSlot.profile?.realmId !== s2slot.profile?.realmId || infoSlot.profile?.profileId !== s2slot.profile?.profileId) return true;
             });
-            if (!affectedSlots.length) return;
+            if (!affectedSlots.length) return false;
         }
 
         const newS2profiles = await Promise.all(lobbyData.slots.map(slot => {
@@ -244,10 +532,23 @@ class DataProc {
             return this.fetchOrCreateProfile(slot.profile, lobbyData.slotsPreviewUpdatedAt);
         }));
 
+        if (newS2profiles.length > 0) {
+            const joinTime = new Date(lobbyData.slotsPreviewUpdatedAt);
+            joinTime.setMilliseconds(0);
+            const newlyJoined = newS2profiles.filter(x => x !== null && joinTime > x.lastOnlineAt);
+            if (newlyJoined.length > 0) {
+                newlyJoined.forEach(x => { x.lastOnlineAt = lobbyData.slotsPreviewUpdatedAt; });
+                await this.conn.getRepository(S2Profile).update(newlyJoined.map(x => x.id), {
+                    lastOnlineAt: lobbyData.slotsPreviewUpdatedAt,
+                });
+            }
+        }
+
+        let slotNumUpdated = 0;
         await this.conn.transaction(async tsManager => {
             const playerLeaveInfo = new Map<string, S2GameLobbyPlayerJoin>();
 
-            const updatedSlots = await Promise.all(lobbyData.slots.map(async (infoSlot, idx) => {
+            await Promise.all(lobbyData.slots.map(async (infoSlot, idx) => {
                 const s2slot = s2lobby.slots[idx];
                 if (idx !== (s2slot.slotNumber - 1)) {
                     logger.error('slotNumber missmatch - not in order?', idx, s2slot.slotNumber, s2slot, infoSlot, s2lobby, lobbyData);
@@ -284,14 +585,13 @@ class DataProc {
                                 s2slot.joinInfo.lobby = s2lobby;
                                 s2slot.joinInfo.profile = newS2profiles[idx];
                                 s2slot.joinInfo.joinedAt = lobbyData.slotsPreviewUpdatedAt;
+                                s2lobby.joinHistory.push(s2slot.joinInfo);
                                 await tsManager.getRepository(S2GameLobbyPlayerJoin).insert(s2slot.joinInfo);
-                                await tsManager.getRepository(S2Profile).update(newS2profiles[idx].id, {
-                                    lastOnlineAt: lobbyData.slotsPreviewUpdatedAt,
-                                });
                             }
                         }
                     }
 
+                    ++slotNumUpdated;
                     const changedData: Partial<S2GameLobbySlot> = {
                         team: infoSlot.team,
                         kind: newS2SlotKind,
@@ -311,13 +611,32 @@ class DataProc {
                 });
             }
 
+            if (s2lobby.titleHistory.length > 0) {
+                await this.updateLobbyTitleOrigin(s2lobby, lobbyData, tsManager);
+            }
+
             s2lobby.slotsUpdatedAt = lobbyData.slotsPreviewUpdatedAt;
             await tsManager.getRepository(S2GameLobby).update(s2lobby.id, {
                 slotsUpdatedAt: lobbyData.slotsPreviewUpdatedAt,
             });
         });
 
-        return true;
+        return slotNumUpdated;
+    }
+
+    protected async fetchOrCreateBnAccount(accountId: number) {
+        const key = accountId.toString();
+        let bnAccount = this.bnAccountsCache.get(key);
+        if (!bnAccount) {
+            bnAccount = await this.conn.getRepository(BnAccount).findOne(accountId, { select: ['id'] });
+            if (!bnAccount) {
+                bnAccount = new BnAccount();
+                bnAccount.id = accountId;
+                await this.conn.getRepository(BnAccount).insert(bnAccount);
+            }
+            this.bnAccountsCache.set(key, bnAccount);
+        }
+        return bnAccount;
     }
 
     async fetchOrCreateProfile(infoProfile: Pick<S2Profile, 'regionId' | 'realmId' | 'profileId' | 'name' | 'discriminator'>, updatedAt: Date) {
@@ -334,7 +653,9 @@ class DataProc {
             if (!s2profile) {
                 s2profile = new S2Profile();
                 s2profile.nameUpdatedAt = updatedAt;
+                s2profile.lastOnlineAt = updatedAt;
                 Object.assign(s2profile, infoProfile);
+                logger.verbose(`new profile ${s2profile.nameAndId}`);
                 await this.conn.getRepository(S2Profile).insert(s2profile);
             }
             this.profilesCache.set(profKey, s2profile);
@@ -344,12 +665,7 @@ class DataProc {
             (s2profile.name !== infoProfile.name || s2profile.discriminator !== infoProfile.discriminator) &&
             (s2profile.nameUpdatedAt === null || s2profile.nameUpdatedAt < updatedAt)
         ) {
-            logger.verbose([
-                `Updating profile #${s2profile.id} (${profileHandle(s2profile)})`,
-                ` ${s2profile.name}#${s2profile.discriminator}`,
-                ` =>`,
-                ` ${infoProfile.name}#${infoProfile.discriminator}`,
-            ].join(''));
+            logger.verbose(`updating profile ${s2profile.nameAndId} => ${infoProfile.name}#${infoProfile.discriminator}`);
             const updateData: Partial<S2Profile> = {
                 name: infoProfile.name,
                 discriminator: infoProfile.discriminator,
@@ -396,7 +712,11 @@ class DataProc {
             bnetBucketId: info.bucketId,
             bnetRecordId: info.lobbyId,
             createdAt: ev.lobby.createdAt,
+            closedAt: null,
+            status: GameLobbyStatus.Open,
+
             snapshotUpdatedAt: ev.lobby.snapshotUpdatedAt,
+            slotsUpdatedAt: null,
 
             mapBnetId: info.mapHandle[0],
             extModBnetId: info.extModHandle[0] !== 0 ? info.extModHandle[0] : null,
@@ -409,51 +729,77 @@ class DataProc {
             hostName: ev.lobby.hostName,
             slotsHumansTaken: ev.lobby.slotsHumansTaken,
             slotsHumansTotal: ev.lobby.slotsHumansTotal,
+
+            slots: [],
+            joinHistory: [],
+            titleHistory: [],
         });
+
+        const s2LobbyMaps: Partial<S2GameLobbyMap>[] = [];
+        s2LobbyMaps.push({
+            lobby: s2lobby,
+            regionId: this.s2region.id,
+            bnetId: info.mapHandle[0],
+            type: S2GameLobbyMapKind.Map,
+        });
+        if (info.extModHandle[0] !== 0) {
+            s2LobbyMaps.push({
+                lobby: s2lobby,
+                regionId: this.s2region.id,
+                bnetId: info.extModHandle[0],
+                type: S2GameLobbyMapKind.ExtensionMod,
+            });
+        }
+        if (info.multiModHandle[0] !== 0) {
+            s2LobbyMaps.push({
+                lobby: s2lobby,
+                regionId: this.s2region.id,
+                bnetId: info.multiModHandle[0],
+                type: S2GameLobbyMapKind.MultiMod,
+            });
+        }
+
+        if (ev.lobby.lobbyNameMeta !== null) {
+            const s2LobTitle = new S2GameLobbyTitle();
+            s2LobTitle.date = ev.lobby.lobbyNameMeta.changedAt;
+            s2LobTitle.title = ev.lobby.lobbyNameMeta.title;
+            s2LobTitle.hostName = ev.lobby.lobbyNameMeta.profileName;
+            s2LobTitle.profileId = null;
+            s2LobTitle.accountId = ev.lobby.lobbyNameMeta.accountId;
+            s2lobby.titleHistory.push(s2LobTitle);
+
+            if (ev.lobby.lobbyNameMeta.accountId !== null) {
+                await this.fetchOrCreateBnAccount(ev.lobby.lobbyNameMeta.accountId);
+            }
+        }
 
         try {
             await this.conn.transaction(async tsManager => {
                 await tsManager.getRepository(S2GameLobby).insert(s2lobby);
-                const s2LobbyMaps: Partial<S2GameLobbyMap>[] = [];
-                s2LobbyMaps.push({
-                    lobby: s2lobby,
-                    regionId: this.s2region.id,
-                    bnetId: info.mapHandle[0],
-                    type: S2GameLobbyMapKind.Map,
-                });
-                if (info.extModHandle[0] !== 0) {
-                    s2LobbyMaps.push({
-                        lobby: s2lobby,
-                        regionId: this.s2region.id,
-                        bnetId: info.extModHandle[0],
-                        type: S2GameLobbyMapKind.ExtensionMod,
-                    });
-                }
-                if (info.multiModHandle[0] !== 0) {
-                    s2LobbyMaps.push({
-                        lobby: s2lobby,
-                        regionId: this.s2region.id,
-                        bnetId: info.multiModHandle[0],
-                        type: S2GameLobbyMapKind.MultiMod,
-                    });
-                }
                 await tsManager.getRepository(S2GameLobbyMap).insert(s2LobbyMaps);
+                s2lobby.titleHistory.forEach(x => {
+                    x.lobbyId = s2lobby.id;
+                });
+                await tsManager.getRepository(S2GameLobbyTitle).insert(s2lobby.titleHistory);
             });
-            s2lobby.slots = [];
+
             this.lobbiesCache.set(info.lobbyId.toString(), s2lobby);
             logger.info(`NEW src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} map=${s2lobby.mapBnetId}`);
         }
         catch (err) {
             if (isErrDuplicateEntry(err)) {
                 s2lobby = await this.getLobby(ev.lobby);
+                if (!s2lobby) {
+                    throw err;
+                }
                 if (s2lobby.status !== GameLobbyStatus.Open) {
                     const snapshotTimeDiff = ev.lobby.snapshotUpdatedAt.getTime() - s2lobby.snapshotUpdatedAt.getTime();
                     this.lobbiesReopenCandidates.add(s2lobby.id);
-                    logger.verbose(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} lobby reappeared`, [
-                        [s2lobby.createdAt, ev.lobby.createdAt],
-                        [s2lobby.closedAt, ev.lobby.closedAt],
-                        [s2lobby.snapshotUpdatedAt, ev.lobby.snapshotUpdatedAt, snapshotTimeDiff],
-                    ]);
+                    logger.verbose(oneLine`
+                        src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId}
+                        reappeared ${s2lobby.createdAt.toISOString()}
+                        stdiff=${snapshotTimeDiff}
+                    `);
                 }
             }
             else {
@@ -464,6 +810,7 @@ class DataProc {
 
     async onCloseLobby(ev: JournalEventCloseLobby) {
         const s2lobby = await this.getLobby(ev.lobby);
+        if (!s2lobby) return;
 
         // discard candidate and exit without altering any data
         if (this.lobbiesReopenCandidates.has(s2lobby.id)) {
@@ -498,6 +845,9 @@ class DataProc {
         }
 
         await this.doUpdateSlots(s2lobby, ev.lobby, ev);
+        if (s2lobby.titleHistory.length > 0) {
+            await this.updateLobbyTitleOrigin(s2lobby, ev.lobby, this.conn.manager);
+        }
         if (
             (ev.lobby.status !== GameLobbyStatus.Started && s2lobby.slots.length)
         ) {
@@ -509,6 +859,7 @@ class DataProc {
                 .setParameter('lobbyId', s2lobby.id)
                 .execute()
             ;
+            // TODO: cleanup slot records instead of deleting
             await this.em.getRepository(S2GameLobbySlot).createQueryBuilder()
                 .delete()
                 .andWhere('lobby = :lobbyId')
@@ -518,6 +869,7 @@ class DataProc {
         }
 
         await this.updateLobby(s2lobby, {
+            snapshotUpdatedAt: ev.lobby.snapshotUpdatedAt,
             closedAt: ev.lobby.closedAt,
             status: ev.lobby.status,
         });
@@ -527,6 +879,8 @@ class DataProc {
 
     async onUpdateLobbySnapshot(ev: JournalEventUpdateLobbySnapshot) {
         const s2lobby = await this.getLobby(ev.lobby);
+        if (!s2lobby) return;
+
         if (s2lobby.snapshotUpdatedAt > ev.lobby.snapshotUpdatedAt) return;
 
         // do not update data from snapshots on *closed* lobbies - it may happen when data feed from one of the runners arrives too late
@@ -536,7 +890,40 @@ class DataProc {
             return;
         }
 
+        // skip if there's nothing to update
+        if (
+            ev.lobby.lobbyName === s2lobby.lobbyTitle &&
+            ev.lobby.hostName === s2lobby.hostName &&
+            ev.lobby.slotsHumansTaken === s2lobby.slotsHumansTaken &&
+            ev.lobby.slotsHumansTotal === s2lobby.slotsHumansTotal
+        ) {
+            return;
+        }
+
+        if (ev.lobby.lobbyNameMeta !== null && ev.lobby.lobbyName !== s2lobby.lobbyTitle) {
+            const matchingTitleEntry = s2lobby.titleHistory.find(x => x.date.getTime() === ev.lobby.lobbyNameMeta.changedAt.getTime());
+            if (!matchingTitleEntry) {
+                const s2LobTitle = new S2GameLobbyTitle();
+                s2LobTitle.date = ev.lobby.lobbyNameMeta.changedAt;
+                s2LobTitle.lobbyId = s2lobby.id;
+                s2LobTitle.title = ev.lobby.lobbyNameMeta.title;
+                s2LobTitle.hostName = ev.lobby.lobbyNameMeta.profileName;
+                s2LobTitle.profileId = null;
+                s2LobTitle.accountId = ev.lobby.lobbyNameMeta.accountId;
+
+                if (ev.lobby.lobbyNameMeta.accountId !== null) {
+                    await this.fetchOrCreateBnAccount(ev.lobby.lobbyNameMeta.accountId);
+                }
+
+                await this.conn.getRepository(S2GameLobbyTitle).insert(s2LobTitle);
+                s2lobby.titleHistory.push(s2LobTitle);
+
+                await this.updateLobbyTitleOrigin(s2lobby, ev.lobby, this.conn.manager);
+            }
+        }
+
         await this.updateLobby(s2lobby, {
+            snapshotUpdatedAt: ev.lobby.snapshotUpdatedAt,
             lobbyTitle: ev.lobby.lobbyName,
             hostName: ev.lobby.hostName,
             slotsHumansTaken: ev.lobby.slotsHumansTaken,
@@ -546,11 +933,17 @@ class DataProc {
 
     async onUpdateLobbySlots(ev: JournalEventUpdateLobbySlots) {
         const s2lobby = await this.getLobby(ev.lobby);
-        const changed = await this.doUpdateSlots(s2lobby, ev.lobby, ev);
-        if (changed) {
-            logger.info(`slots updated, src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId}`);
+        if (!s2lobby) return;
 
-            if (this.lobbiesReopenCandidates.has(s2lobby.id)) {
+        const slotsStatPrev = s2lobby.statSlots;
+        const changed = await this.doUpdateSlots(s2lobby, ev.lobby, ev);
+        if (changed !== false) {
+            logger.info(oneLine`
+                src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} slots updated c=${changed}
+                prev=${slotsStatPrev} curr=${s2lobby.statSlots}
+            `);
+
+            if (s2lobby.closedAt !== null) {
                 logger.info(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} lobby reopened`);
                 await this.updateLobby(s2lobby, {
                     status: GameLobbyStatus.Open,
@@ -568,7 +961,6 @@ class DataProc {
     }
 
     async onUpdateLobbyList(ev: JournalEventUpdateLobbyList) {
-        this.updateStorageOffset(ev);
     }
 }
 
@@ -598,21 +990,16 @@ async function run() {
     }));
 
     if (process.env.NOTIFY_SOCKET) {
-        const r = await execAsync('systemd-notify --ready');
-        logger.verbose(`systemd-notify`, r);
+        await systemdNotifyReady();
     }
 
-    async function terminate(sig: NodeJS.Signals) {
-        logger.info(`Received ${sig}`);
+    setupProcessTerminator(async () => {
         await Promise.all(workers.map(async x => {
             logger.info(`Closing worker ${GameRegion[x.region]}`);
             await x.close();
             logger.info(`Worker done ${GameRegion[x.region]}`);
         }));
-    }
-
-    process.on('SIGTERM', terminate);
-    process.on('SIGINT', terminate);
+    });
 
     await Promise.all(workers.map(x => x.work()));
     logger.info(`All workers exited`);

@@ -58,12 +58,22 @@ export class S2GameLobbySlot {
     @Index('profile_idx')
     profile: S2Profile;
 
+    @Column({
+        nullable: true,
+    })
+    profileId: number;
+
     @ManyToOne(type => S2GameLobbyPlayerJoin, {
         nullable: true,
         onDelete: 'CASCADE',
         onUpdate: 'CASCADE',
     })
     joinInfo: S2GameLobbyPlayerJoin;
+
+    @Column({
+        nullable: true,
+    })
+    joinInfoId: number | null;
 
     @Column({
         type: 'varchar',

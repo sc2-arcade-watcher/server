@@ -22,6 +22,11 @@ export class S2GameLobbyPlayerJoin {
     profile: S2Profile;
 
     @Column({
+        nullable: true,
+    })
+    profileId: number;
+
+    @Column({
         nullable: false,
         precision: 3,
     })

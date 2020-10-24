@@ -5,6 +5,7 @@ import { BnAccountSettings } from './BnAccountSettings';
 
 @Entity()
 export class BnAccount {
+    // TODO: this should be BigInt
     @PrimaryColumn({
         unsigned: true,
     })

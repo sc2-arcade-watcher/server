@@ -14,7 +14,7 @@ export const logger = createLogger({
         format.printf(info => {
             const out: string[] = [];
             out.push(
-                colorizer.colorize('debug', `${info.time} - `) +
+                colorizer.colorize('debug', `${info.time} `) +
                 colorizer.colorize(info.level, `${info.level.substr(0, 4)}:`) +
                 ` ${info.message}`,
             );
@@ -73,7 +73,9 @@ function formatMemoryUsage(mem: NodeJS.MemoryUsage) {
 
 export interface LogItOptions {
     level: 'error' | 'warn' | 'info' | 'verbose' | 'debug';
-    profiling: boolean;
+    when: 'in' | 'out' | 'both';
+    /** @deprecated */
+    profiling?: boolean;
     profTime: boolean;
     profMemory: boolean;
     message?: string;
@@ -84,8 +86,8 @@ export interface LogItOptions {
 
 export function logIt(inputOptions: Partial<LogItOptions> = {}) {
     const lgOpts = Object.assign<LogItOptions, typeof inputOptions>({
-        level: 'verbose',
-        profiling: true,
+        level: 'debug',
+        when: 'both',
         profTime: false,
         profMemory: false,
     }, inputOptions);
@@ -99,10 +101,12 @@ export function logIt(inputOptions: Partial<LogItOptions> = {}) {
         let msgPrefix: string;
 
         function markDone(fnResult: any, pTimeSnapshot: [number, number]) {
+            if (lgOpts.when !== 'both' && lgOpts.when !== 'out') return;
+
             const diff = process.hrtime(pTimeSnapshot);
             const diffMs = (diff[0] * 1000) + (diff[1] / 1000000);
             const out = [`-${msgPrefix.padEnd(35)} = ${diffMs.toFixed(0).padStart(4)}ms`];
-            if (lgOpts.profiling || lgOpts.profMemory) {
+            if (lgOpts.profMemory) {
                 out.push(` | ${formatMemoryUsage(process.memoryUsage())}`);
             }
 
@@ -112,11 +116,6 @@ export function logIt(inputOptions: Partial<LogItOptions> = {}) {
             }
             else if (typeof lgOpts.resDump === 'function') {
                 metaArgs = [lgOpts.resDump(fnResult)];
-            }
-            else {
-                if (!lgOpts.profiling) {
-                    return;
-                }
             }
 
             logger.log(lgOpts.level, out.join(''), ...metaArgs);
@@ -129,40 +128,43 @@ export function logIt(inputOptions: Partial<LogItOptions> = {}) {
 
             const pTimeSnapshot = process.hrtime();
 
-            const out: string[] = [` ${msgPrefix.padEnd(35 + 9)}`];
-            if (lgOpts.message) {
-                out.push(lgOpts.message);
-            }
-            else if (lgOpts.profiling || lgOpts.profMemory) {
-                out.push(` | ${formatMemoryUsage(process.memoryUsage())}`);
-            }
+            if (lgOpts.when === 'both' || lgOpts.when === 'in') {
+                const out: string[] = [` ${msgPrefix.padEnd(35 + 9)}`];
+                if (lgOpts.message) {
+                    out.push(lgOpts.message);
+                }
+                else if (lgOpts.profMemory) {
+                    out.push(` | ${formatMemoryUsage(process.memoryUsage())}`);
+                }
 
-            if (lgOpts.scopeDump) {
-                logger.log(lgOpts.level, out.join(''), lgOpts.scopeDump(this));
-            }
+                if (lgOpts.scopeDump) {
+                    logger.log(lgOpts.level, out.join(''), lgOpts.scopeDump(this));
+                }
 
-            let metaArgs: any[] = [];
-            if (lgOpts.argsDump === true) {
-                metaArgs = args;
+                let metaArgs: any[] = [];
+                if (lgOpts.argsDump === true) {
+                    metaArgs = args;
+                }
+                else if (typeof lgOpts.argsDump === 'function') {
+                    metaArgs = [lgOpts.argsDump(...args)];
+                }
+                logger.log(lgOpts.level, out.join(''), ...metaArgs);
             }
-            else if (typeof lgOpts.argsDump === 'function') {
-                metaArgs = [lgOpts.argsDump(...args)];
-            }
-            logger.log(lgOpts.level, out.join(''), ...metaArgs);
 
             let fnResult = fn.apply(this, args);
             if (isPromise(fnResult)) {
-                fnResult = fnResult
-                    .then(res => {
-                        markDone(res, pTimeSnapshot);
-                        return res;
-                    })
-                    .catch((err: Error) => {
-                        markDone(err, pTimeSnapshot);
-                        throw err;
-                    })
-                ;
-                return fnResult;
+                return new Promise((resolve, reject) => {
+                    fnResult
+                        .then((res: unknown) => {
+                            markDone(res, pTimeSnapshot);
+                            resolve(res);
+                        })
+                        .catch((err: Error) => {
+                            markDone(err, pTimeSnapshot);
+                            reject(err);
+                        })
+                    ;
+                });
             }
             else {
                 markDone(fnResult, pTimeSnapshot);
