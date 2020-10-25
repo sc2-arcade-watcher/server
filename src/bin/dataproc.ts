@@ -282,30 +282,49 @@ class DataProc {
             const matchedPlSlots = matchedSlots.filter(x => x.profile !== null);
             const isInitialTitle = s2lobby.titleHistory.length === 1 && lobbyData.initInfo.lobbyName === recentTitle.title;
 
-            // pair profile with account if viable
+            // attempt to pair profile with account
             if (
                 recentTitle.accountId !== null &&
-                matchedSlots.length === 1 &&
-                matchedPlSlots.length === 1 &&
-                tdiff <= 5000
+                isInitialTitle && lobbyData.initInfo.slotsHumansTaken === 1 &&
+                s2lobby.sumSlots.human === 1 &&
+                matchedSlots.length === 1 && matchedPlSlots.length === 1 &&
+                tdiff >= 0 && tdiff <= 3000
             ) {
+                const bnAccount = await this.fetchOrCreateBnAccount(recentTitle.accountId);
                 const matchingProfile = matchedPlSlots[0].profile;
                 if (matchingProfile.accountId !== null && matchingProfile.accountId !== recentTitle.accountId) {
                     logger.warn(oneLine`
-                        ${this.s2region.code}#${s2lobby.bnetRecordId}
-                        profile ${matchingProfile.nameAndId} already connected with another account
+                        ${s2lobby.globalId}
+                        profile ${matchingProfile.nameAndId} already paired with another account
                         curr=${matchingProfile.accountId} new=${recentTitle.accountId}
                     `);
                 }
-                else if (matchingProfile.accountId === null) {
-                    matchingProfile.accountId = recentTitle.accountId;
-                    logger.info(oneLine`
-                        ${this.s2region.code}#${s2lobby.bnetRecordId}
-                        profile ${matchingProfile.nameAndId} connected with account=${matchingProfile.accountId}
-                    `);
-                    await tsManager.getRepository(S2Profile).update(matchingProfile.id, {
-                        accountId: matchingProfile.accountId,
+                else if (matchingProfile.accountId === null && !bnAccount.isVerified) {
+                    const accProfiles = await this.conn.getRepository(S2Profile).find({
+                        where: {
+                            accountId: recentTitle.accountId,
+                            regionId: this.region,
+                        },
                     });
+
+                    if (accProfiles.length > 0) {
+                        logger.warn(oneLine`
+                            ${s2lobby.globalId}
+                            profile candidate ${matchingProfile.nameAndId}
+                            to pair with account=${recentTitle.accountId}
+                            already paired with ${accProfiles.filter(x => x.nameAndId)}
+                        `);
+                    }
+                    else {
+                        matchingProfile.accountId = recentTitle.accountId;
+                        logger.info(oneLine`
+                            ${s2lobby.globalId}
+                            profile ${matchingProfile.nameAndId} paired with account=${matchingProfile.accountId}
+                        `);
+                        await tsManager.getRepository(S2Profile).update(matchingProfile.id, {
+                            accountId: matchingProfile.accountId,
+                        });
+                    }
                 }
             }
 
@@ -315,15 +334,6 @@ class DataProc {
                 recentTitle.profileId = matchedPlSlots[0].profile.id;
             }
             else if (recentTitle.accountId !== null) {
-                // .. this probably doens't make sense?
-                // try by accountId looking in joinHistory
-                // if (recentTitle.profileId === null) {
-                //     const accSlot = s2lobby.joinHistory.find(x => x.profile.accountId === recentTitle.accountId);
-                //     if (accSlot) {
-                //         recentTitle.profileId = accSlot.profile.id;
-                //     }
-                // }
-
                 // try by looking for profiles already associated with this account
                 if (recentTitle.profileId === null) {
                     const accProfiles = await this.conn.getRepository(S2Profile).find({
@@ -345,25 +355,7 @@ class DataProc {
                             // s2lobby.slots.find(x => x.kind === S2GameLobbySlotKind.Human && !x.profile && x.name === finalMatch.name);
                         }
                         else {
-                            logger.warn(`${this.s2region.code}#${s2lobby.bnetRecordId} name missmatch on determined profile of a host`);
-                        }
-                    }
-                    else if (accProfiles.length > 1) {
-                        // could be just extra SEA profile
-                        logger.warn(oneLine`
-                            ${this.s2region.code}#${s2lobby.bnetRecordId}
-                            multiple profiles [${accProfiles.length}] bound to same acc=${recentTitle.accountId} ?!`,
-                            {
-                                recentTitle,
-                                accProfiles,
-                            }
-                        );
-                        // ... or a bug / something completely unknown - it's best to crash
-                        if (
-                            (accProfiles.length > 2) ||
-                            (accProfiles.length > 1 && s2lobby.regionId !== GameRegion.US)
-                        ) {
-                            throw new Error(`account=${recentTitle.accountId} has ${accProfiles.length} profiles?!`);
+                            logger.warn(`${s2lobby.globalId} name missmatch on determined profile of a host`);
                         }
                     }
                 }
@@ -637,10 +629,11 @@ class DataProc {
         const key = accountId.toString();
         let bnAccount = this.bnAccountsCache.get(key);
         if (!bnAccount) {
-            bnAccount = await this.conn.getRepository(BnAccount).findOne(accountId, { select: ['id'] });
+            bnAccount = await this.conn.getRepository(BnAccount).findOne(accountId);
             if (!bnAccount) {
-                bnAccount = new BnAccount();
-                bnAccount.id = accountId;
+                bnAccount = this.conn.getRepository(BnAccount).create({
+                    id: accountId,
+                });
                 await this.conn.getRepository(BnAccount).insert(bnAccount);
             }
             this.bnAccountsCache.set(key, bnAccount);
@@ -660,7 +653,7 @@ class DataProc {
                 },
             });
             if (!s2profile) {
-                s2profile = new S2Profile();
+                s2profile = S2Profile.create();
                 s2profile.nameUpdatedAt = updatedAt;
                 s2profile.lastOnlineAt = updatedAt;
                 Object.assign(s2profile, infoProfile);

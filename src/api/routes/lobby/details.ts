@@ -40,9 +40,15 @@ export default fp(async (server, opts) => {
         lobbyRepo.addSlots(qb);
         lobbyRepo.addSlotsJoinInfo(qb);
         lobbyRepo.addJoinHistory(qb);
+        lobbyRepo.addTitleHistory(qb);
 
         qb.addSelect([
             'profile.avatarUrl',
+            'joinHistoryProfile.avatarUrl',
+            'titleHistoryProfile.avatarUrl',
+            'map.updatedAt',
+            'extMod.updatedAt',
+            'multiMod.updatedAt',
         ]);
 
         qb.addSelect([

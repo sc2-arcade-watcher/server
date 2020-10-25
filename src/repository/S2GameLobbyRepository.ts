@@ -106,6 +106,25 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
         return qb;
     }
 
+    addTitleHistory(qb: SelectQueryBuilder<S2GameLobby>) {
+        qb
+            .leftJoin('lobby.titleHistory', 'titleHistory')
+            .leftJoin('titleHistory.profile', 'titleHistoryProfile')
+            .addSelect([
+                'titleHistory.date',
+                'titleHistory.title',
+                'titleHistory.hostName',
+                'titleHistoryProfile.regionId',
+                'titleHistoryProfile.realmId',
+                'titleHistoryProfile.profileId',
+                'titleHistoryProfile.name',
+                'titleHistoryProfile.discriminator',
+            ])
+            .addOrderBy('titleHistory.date', 'ASC')
+        ;
+        return qb;
+    }
+
     createQueryForEntriesInIds(recordIds: number[], orderDirection: 'ASC' | 'DESC' = 'DESC') {
         const qb = this.createQueryBuilder('lobby')
             .select([])

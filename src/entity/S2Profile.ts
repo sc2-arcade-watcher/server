@@ -92,4 +92,11 @@ export class S2Profile {
     get nameAndId(): string {
         return `${this.name} [${this.regionId}-S2-${this.realmId}-${this.profileId}]`;
     }
+
+    static create() {
+        const prof = new S2Profile();
+        prof.accountId = null;
+        prof.accountVerified = false;
+        return prof;
+    }
 }
