@@ -45,8 +45,10 @@ export class S2Profile {
     })
     discriminator: number;
 
-    @Column()
-    deleted: boolean = false;
+    @Column({
+        default: false,
+    })
+    deleted: boolean;
 
     @ManyToOne(type => BnAccount, account => account.profiles, {
         nullable: true,
@@ -60,24 +62,26 @@ export class S2Profile {
         unsigned: true,
         nullable: true,
     })
-    accountId: number | null = null;
+    accountId: number | null;
 
     /**
      * determines whether profile origin has been verified through Blizzard API
      */
-    @Column()
-    accountVerified: boolean = false;
+    @Column({
+        default: false,
+    })
+    accountVerified: boolean;
 
     @Column({
         nullable: true,
     })
-    avatarUrl: string | null = null;
+    avatarUrl: string | null;
 
     @Column({
         nullable: true,
     })
     @Index('last_online_at_idx')
-    lastOnlineAt: Date | null = null;
+    lastOnlineAt: Date | null;
 
     tracking?: S2ProfileTracking;
 

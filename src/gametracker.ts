@@ -717,7 +717,7 @@ export class GameLobbyDesc {
     pendingBasicPreview?: SignalLobbyPreview;
     extendedPreview?: SignalLobbyPvEx;
 
-    constructor(lobbyData: TrackedLobbyCreate) {
+    constructor(public region: GameRegion, lobbyData: TrackedLobbyCreate) {
         this.initInfo = Object.assign({}, lobbyData);
         delete (<any>this.initInfo as TrackedLobbyCreate).createdAt;
 
@@ -741,6 +741,10 @@ export class GameLobbyDesc {
         this.slotsHumansTaken = this.initInfo.slotsHumansTaken;
         this.slotsHumansTotal = this.initInfo.slotsHumansTotal;
         this.slotTakenSnapshotUpdatedAt = lobbyData.createdAt;
+    }
+
+    get globalId(): string {
+        return `${this.region}/${this.initInfo.bucketId}/${this.initInfo.lobbyId}`;
     }
 
     get teamsNumber(): number {
@@ -963,7 +967,7 @@ export class JournalMultiProcessor {
             });
         }
         else {
-            lobState = new GameLobbyDesc(tlob);
+            lobState = new GameLobbyDesc(this.region, tlob);
             lobState.trackedBy.add(jreader);
             this.gameLobbies.set(tlob.lobbyId, lobState);
             this.pushEvent<JournalEventNewLobby>(jreader, {

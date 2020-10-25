@@ -36,8 +36,6 @@ type FeedCheckpointMeta = {
 };
 
 class DataProc {
-    protected conn: orm.Connection;
-    protected em: orm.EntityManager;
     protected journalProc = new JournalMultiProcessor(this.region);
     protected s2region: S2Region;
     protected feedProviders = new Map<string, SysFeedProvider>();
@@ -51,14 +49,14 @@ class DataProc {
 
     protected lobbiesReopenCandidates = new Set();
 
-    constructor(public readonly region: GameRegion) {
+    constructor(
+        protected readonly conn: orm.Connection,
+        public readonly region: GameRegion
+    ) {
     }
 
     @logIt()
     async open() {
-        this.conn = await orm.createConnection();
-        this.em = this.conn.createEntityManager();
-
         this.s2region = await this.conn.getRepository(S2Region).findOne({
             where: {
                 id: this.region,
@@ -90,8 +88,13 @@ class DataProc {
         }
     }
 
+    protected async shutdown() {
+        await this.storeFeedCheckpoints();
+    }
+
     async close() {
         if (this.closed) return;
+        logger.info(`closing..`);
         this.closed = true;
         await this.journalProc.close();
     }
@@ -106,33 +109,39 @@ class DataProc {
                 continue;
             }
 
-            switch (ev.kind) {
-                case JournalEventKind.NewLobby: {
-                    await this.onNewLobby(ev);
-                    break;
+            try {
+                switch (ev.kind) {
+                    case JournalEventKind.NewLobby: {
+                        await this.onNewLobby(ev);
+                        break;
+                    }
+                    case JournalEventKind.CloseLobby: {
+                        await this.onCloseLobby(ev);
+                        await this.updateResumingOffset(ev);
+                        break;
+                    }
+                    case JournalEventKind.UpdateLobbySnapshot: {
+                        await this.onUpdateLobbySnapshot(ev);
+                        break;
+                    }
+                    case JournalEventKind.UpdateLobbySlots: {
+                        await this.onUpdateLobbySlots(ev);
+                        break;
+                    }
                 }
-                case JournalEventKind.CloseLobby: {
-                    await this.onCloseLobby(ev);
-                    await this.updateResumingOffset(ev);
-                    break;
-                }
-                case JournalEventKind.UpdateLobbySnapshot: {
-                    await this.onUpdateLobbySnapshot(ev);
-                    break;
-                }
-                case JournalEventKind.UpdateLobbySlots: {
-                    await this.onUpdateLobbySlots(ev);
-                    break;
-                }
-                case JournalEventKind.UpdateLobbyList: {
-                    // await this.onUpdateLobbyList(ev);
+                if (ev.kind === JournalEventKind.UpdateLobbyList) {
                     await this.updateStorageOffset(ev);
-                    break;
                 }
             }
+            catch (err) {
+                logger.error(`@${JournalEventKind[ev.kind]}:`, err, ev);
+                await this.close();
+                await this.storeFeedCheckpoints();
+                throw new Error(`@${JournalEventKind[ev.kind]} ${(err as Error)?.message} ${ev.feedName} ${ev.feedCursor}`);
+            }
         }
+
         await this.storeFeedCheckpoints();
-        await this.conn.close();
     }
 
     protected async storeFeedCheckpoints() {
@@ -161,7 +170,7 @@ class DataProc {
             const pf = logger.startTimer();
             feedPos.storageFile = ev.feedCursor.session;
             feedPos.storageOffset = ev.feedCursor.offset;
-            await this.em.getRepository(SysFeedPosition).update(feedProvider.id, {
+            await this.conn.getRepository(SysFeedPosition).update(feedProvider.id, {
                 storageFile: ev.feedCursor.session,
                 storageOffset: ev.feedCursor.offset,
             });
@@ -185,7 +194,7 @@ class DataProc {
             const pf = logger.startTimer();
             feedPos.resumingFile = cursorResume.session;
             feedPos.resumingOffset = cursorResume.offset;
-            await this.em.getRepository(SysFeedPosition).update(feedProvider.id, {
+            await this.conn.getRepository(SysFeedPosition).update(feedProvider.id, {
                 resumingFile: cursorResume.session,
                 resumingOffset: cursorResume.offset,
             });
@@ -198,7 +207,7 @@ class DataProc {
     protected async getLobby(lobby: GameLobbyDesc) {
         let s2lobby = this.lobbiesCache.get(lobby.initInfo.lobbyId.toString());
         if (!s2lobby) {
-            s2lobby = await this.em.getRepository(S2GameLobby)
+            s2lobby = await this.conn.getRepository(S2GameLobby)
                 .createQueryBuilder('lobby')
                 .leftJoinAndSelect('lobby.slots', 'slots')
                 .leftJoinAndSelect('lobby.titleHistory', 'titleHistory')
@@ -253,7 +262,7 @@ class DataProc {
 
     protected async updateLobby(s2lobby: S2GameLobby, updateData: Partial<S2GameLobby>) {
         Object.assign(s2lobby, updateData);
-        await this.em.getRepository(S2GameLobby).update(s2lobby.id, updateData);
+        await this.conn.getRepository(S2GameLobby).update(s2lobby.id, updateData);
     }
 
     protected async updateLobbyTitleOrigin(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc, tsManager: orm.EntityManager) {
@@ -328,7 +337,7 @@ class DataProc {
                         const finalMatch = accProfiles[accProfiles.length - 1];
                         recentTitle.profileId = finalMatch.id;
                         logger.verbose(oneLine`
-                            ${this.s2region.code}#${s2lobby.bnetRecordId}
+                            ${s2lobby.globalId}
                             determined profile ${finalMatch.nameAndId} of host "${recentTitle.hostName}" using accountId
                         `);
                         if (finalMatch.name === recentTitle.hostName) {
@@ -362,7 +371,7 @@ class DataProc {
 
             if (recentTitle.profileId) {
                 logger.verbose(oneLine`
-                    ${this.s2region.code}#${s2lobby.bnetRecordId}
+                    ${s2lobby.globalId}
                     lobby title
                     [${s2lobby.titleHistory.length}] T="${recentTitle.title}"
                     A=${recentTitle.accountId} P=${recentTitle.profileId}
@@ -418,7 +427,7 @@ class DataProc {
                     (humanSlotsNumber === 1 && (tdiff > 30000 || openSlotsNumber === 0))
                 )
             ) {
-                logger.verbose(`${this.s2region.code}#${s2lobby.bnetRecordId} candidate valid for reopen, data might be fresh`, {
+                logger.verbose(`${s2lobby.globalId} candidate valid for reopen, data might be fresh`, {
                     prevJoinInfo,
                     tdiff,
                     humanSlotsNumber,
@@ -431,7 +440,7 @@ class DataProc {
         // determine if slot layout is the same
         if (s2lobby.slots.length > 0) {
             if (s2lobby.slots.length !== lobbyData.slots.length) {
-                logger.warn(`${this.s2region.code}#${s2lobby.bnetRecordId} candidate to re-open missmaching slots, ignoring.`, {
+                logger.warn(`${s2lobby.globalId} candidate to re-open missmaching slots, ignoring.`, {
                     prev: s2lobby.slots,
                     new: lobbyData.slots,
                 });
@@ -455,7 +464,7 @@ class DataProc {
                 });
 
                 if (diffSlots.length > 0)  {
-                    logger.verbose(`${this.s2region.code}#${s2lobby.bnetRecordId} candidate valid for reopen, slot layout differs`, {
+                    logger.verbose(`${s2lobby.globalId} candidate valid for reopen, slot layout differs`, {
                         newSlots: diffSlots,
                         oldSlots: s2lobby.slots.filter(x => diffSlots.find(y => y.slotNumber === x.slotNumber)).map(x => {
                             const o = Object.assign({}, x);
@@ -471,7 +480,7 @@ class DataProc {
         return false;
     }
 
-    @logIt({ when: 'out' })
+    @logIt({ when: 'out', profTime: true })
     protected async doUpdateSlots(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc, ev: JournalEventBase) {
         if (!lobbyData.slots || lobbyData.slotsPreviewUpdatedAt <= s2lobby.slotsUpdatedAt) return false;
 
@@ -481,7 +490,7 @@ class DataProc {
 
         if (s2lobby.slots.length !== lobbyData.slots.length) {
             if (s2lobby.slots.length > 0) {
-                logger.warn(`updated available slots ${this.s2region.code}#${s2lobby.bnetRecordId} prevSlotCount=${s2lobby.slots.length} newSlotCount=${lobbyData.slots.length}`, s2lobby.slots, lobbyData.slots, ev);
+                logger.warn(`updated available slots ${s2lobby.globalId} prevSlotCount=${s2lobby.slots.length} newSlotCount=${lobbyData.slots.length}`, s2lobby.slots, lobbyData.slots, ev);
             }
             if (s2lobby.slots.length > lobbyData.slots.length) {
                 const removedSlots = s2lobby.slots.splice(lobbyData.slots.length);
@@ -701,6 +710,7 @@ class DataProc {
         return mapVariant;
     }
 
+    @logIt({ when: 'out', profTime: true })
     async onNewLobby(ev: JournalEventNewLobby) {
         const info = ev.lobby.initInfo;
 
@@ -784,7 +794,7 @@ class DataProc {
             });
 
             this.lobbiesCache.set(info.lobbyId.toString(), s2lobby);
-            logger.info(`NEW src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} map=${s2lobby.mapBnetId}`);
+            logger.info(`NEW src=${ev.feedName} ${s2lobby.globalId} map=${s2lobby.mapBnetId}`);
         }
         catch (err) {
             if (isErrDuplicateEntry(err)) {
@@ -796,7 +806,7 @@ class DataProc {
                     const snapshotTimeDiff = ev.lobby.snapshotUpdatedAt.getTime() - s2lobby.snapshotUpdatedAt.getTime();
                     this.lobbiesReopenCandidates.add(s2lobby.id);
                     logger.verbose(oneLine`
-                        src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId}
+                        src=${ev.feedName} ${s2lobby.globalId}
                         reappeared ${s2lobby.createdAt.toISOString()}
                         stdiff=${snapshotTimeDiff}
                     `);
@@ -808,6 +818,7 @@ class DataProc {
         }
     }
 
+    @logIt({ when: 'out', profTime: true })
     async onCloseLobby(ev: JournalEventCloseLobby) {
         const s2lobby = await this.getLobby(ev.lobby);
         if (!s2lobby) return;
@@ -822,7 +833,7 @@ class DataProc {
         // verify if anything has changed in a closed lobby which has reappeared
         if (s2lobby.status !== GameLobbyStatus.Open) {
             if (s2lobby.status === GameLobbyStatus.Unknown && ev.lobby.status !== GameLobbyStatus.Unknown) {
-                logger.warn(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} reopening lobby with status=${s2lobby.status}`);
+                logger.warn(`src=${ev.feedName} ${s2lobby.globalId} reopening lobby with status=${s2lobby.status}`);
                 await this.updateLobby(s2lobby, {
                     closedAt: null,
                     status: GameLobbyStatus.Open,
@@ -837,7 +848,7 @@ class DataProc {
             else {
                 const closeDiff = s2lobby.closedAt.getTime() - ev.lobby.closedAt.getTime();
                 if (closeDiff !== 0) {
-                    logger.verbose(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} attempted to close lobby which has its state already determined`);
+                    logger.verbose(`src=${ev.feedName} ${s2lobby.globalId} attempted to close lobby which has its state already determined`);
                 }
                 this.lobbiesCache.delete(ev.lobby.initInfo.lobbyId.toString());
                 return;
@@ -851,7 +862,7 @@ class DataProc {
         if (
             (ev.lobby.status !== GameLobbyStatus.Started && s2lobby.slots.length)
         ) {
-            await this.em.getRepository(S2GameLobbyPlayerJoin).createQueryBuilder()
+            await this.conn.getRepository(S2GameLobbyPlayerJoin).createQueryBuilder()
                 .update()
                 .set({ leftAt: ev.lobby.closedAt })
                 .andWhere('leftAt IS NULL')
@@ -860,7 +871,7 @@ class DataProc {
                 .execute()
             ;
             // TODO: cleanup slot records instead of deleting
-            await this.em.getRepository(S2GameLobbySlot).createQueryBuilder()
+            await this.conn.getRepository(S2GameLobbySlot).createQueryBuilder()
                 .delete()
                 .andWhere('lobby = :lobbyId')
                 .setParameter('lobbyId', s2lobby.id)
@@ -877,6 +888,7 @@ class DataProc {
         logger.info(`CLOSED src=${ev.feedName} ${this.s2region.code}#${ev.lobby.initInfo.lobbyId} ${ev.lobby.closedAt.toISOString()} status=${ev.lobby.status}`);
     }
 
+    @logIt({ when: 'out', profTime: true })
     async onUpdateLobbySnapshot(ev: JournalEventUpdateLobbySnapshot) {
         const s2lobby = await this.getLobby(ev.lobby);
         if (!s2lobby) return;
@@ -931,6 +943,7 @@ class DataProc {
         });
     }
 
+    @logIt({ when: 'out', profTime: true })
     async onUpdateLobbySlots(ev: JournalEventUpdateLobbySlots) {
         const s2lobby = await this.getLobby(ev.lobby);
         if (!s2lobby) return;
@@ -939,12 +952,12 @@ class DataProc {
         const changed = await this.doUpdateSlots(s2lobby, ev.lobby, ev);
         if (changed !== false) {
             logger.info(oneLine`
-                src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} slots updated c=${changed}
+                src=${ev.feedName} ${s2lobby.globalId} slots updated c=${changed}
                 prev=${slotsStatPrev} curr=${s2lobby.statSlots}
             `);
 
             if (s2lobby.closedAt !== null) {
-                logger.info(`src=${ev.feedName} ${this.s2region.code}#${s2lobby.bnetRecordId} lobby reopened`);
+                logger.info(`src=${ev.feedName} ${s2lobby.globalId} lobby reopened`);
                 await this.updateLobby(s2lobby, {
                     status: GameLobbyStatus.Open,
                     closedAt: null,
@@ -983,8 +996,9 @@ async function run() {
         activeRegions = [regionId];
     }
 
+    const conn = await orm.createConnection();
     const workers = await Promise.all(activeRegions.map(async region => {
-        const worker = new DataProc(region);
+        const worker = new DataProc(conn, region);
         await worker.open();
         return worker;
     }));
@@ -1003,6 +1017,8 @@ async function run() {
 
     await Promise.all(workers.map(x => x.work()));
     logger.info(`All workers exited`);
+    await conn.close();
+    logger.info(`Database connection closed`);
 }
 
 run();

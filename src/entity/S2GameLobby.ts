@@ -5,6 +5,7 @@ import { S2GameLobbySlot, S2GameLobbySlotKind } from './S2GameLobbySlot';
 import { S2GameLobbyPlayerJoin } from './S2GameLobbyPlayerJoin';
 import { S2Map } from './S2Map';
 import { S2GameLobbyTitle } from './S2GameLobbyTitle';
+import { GameRegion } from '../common';
 
 @Entity()
 @Unique('bnet_id', ['bnetBucketId', 'bnetRecordId'])
@@ -129,6 +130,14 @@ export class S2GameLobby {
     map?: S2Map;
     extMod?: S2Map;
     multiMod?: S2Map;
+
+    get globalId() {
+        return `${this.regionId}/${this.bnetBucketId}/${this.bnetRecordId}`;
+    }
+
+    get globalNameId() {
+        return `${GameRegion[this.regionId]}#${this.bnetBucketId}/${this.bnetRecordId}`;
+    }
 
     get sumSlots() {
         const slInfo = {

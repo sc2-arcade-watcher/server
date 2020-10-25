@@ -32,6 +32,15 @@ export default fp(async (server, opts) => {
     }, async (request, reply) => {
         const profile = await server.conn.getRepository(S2Profile)
             .createQueryBuilder('profile')
+            .select([
+                'profile.regionId',
+                'profile.realmId',
+                'profile.profileId',
+                'profile.name',
+                'profile.discriminator',
+                'profile.avatarUrl',
+                'profile.lastOnlineAt',
+            ])
             .andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId', {
                 regionId: request.params.regionId,
                 realmId: request.params.realmId,
@@ -45,6 +54,6 @@ export default fp(async (server, opts) => {
         }
 
         reply.header('Cache-control', 'public, max-age=60');
-        return reply.type('application/json').code(200).send(profile);
+        return reply.code(200).send(profile);
     });
 });

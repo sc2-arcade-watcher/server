@@ -14,12 +14,12 @@ export class BnAccount {
     @Column({
         nullable: true,
     })
-    battleTag: string | null = null;
+    battleTag: string | null;
 
     @Column({
         nullable: true,
     })
-    updatedAt: Date | null = null;
+    updatedAt: Date | null;
 
     @OneToOne(type => AppAccount, appAccount => appAccount.bnAccount)
     appAccount: AppAccount;
@@ -34,6 +34,10 @@ export class BnAccount {
     settings: BnAccountSettings;
 
     get nameWithId() {
-        return `${this.battleTag} [${this.id}]`;
+        return `${this?.battleTag} [${this.id}]`;
+    }
+
+    get isVerified() {
+        return typeof this.battleTag === 'string';
     }
 }

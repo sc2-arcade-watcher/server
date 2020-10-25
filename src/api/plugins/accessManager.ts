@@ -79,7 +79,7 @@ class AccessManager implements IAccessManager {
             .leftJoinAndSelect('bnAccount.settings', 'bnSettings')
         ;
 
-        if (mapOrHeader instanceof S2Map && mapOrHeader.author) {
+        if (mapOrHeader instanceof S2Map && mapOrHeader.author?.id) {
             qb.andWhere('profile.id = :pid', { pid: mapOrHeader.author.id });
         }
         else if (mhead.regionId && mhead.bnetId) {

@@ -29,4 +29,7 @@ module.exports = {
         type: 'database',
         tableName: 'tmp_query_cache',
     },
+    extra: {
+        connectionLimit: process.env.STARC_SQL_CONNECTION_LIMIT ? Number(process.env.STARC_SQL_CONNECTION_LIMIT) : 15,
+    },
 };

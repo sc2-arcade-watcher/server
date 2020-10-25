@@ -244,7 +244,7 @@ export class ExecutiveServer {
                 sclient.isAlive = false;
                 ws.ping();
             });
-        }, 30000).unref();
+        }, 60000).unref();
     }
 
     @logIt({ profiling: false })

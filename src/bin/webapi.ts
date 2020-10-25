@@ -23,6 +23,7 @@ const server = fastify({
 const webapiPort = Number(process.env.STARC_WEBAPI_PORT ?? 8090);
 
 server.register(fp(async (server, opts) => {
+    process.env.STARC_SQL_CONNECTION_LIMIT = '25';
     const conn = await orm.createConnection();
     server.decorate('conn', conn);
     server.decorate('mapResolver', new MapResolver(conn));
@@ -46,8 +47,8 @@ server.register(fastifyStatic, {
 
 server.register(fastifyRateLimit, {
     global: true,
-    max: 100,
-    timeWindow: 1000 * 40 * 1,
+    max: Number(process.env.STARC_WEBAPI_RATE_LIMIT_MAX ?? 100),
+    timeWindow: Number(process.env.STARC_WEBAPI_RATE_LIMIT_TIME_WINDOW_SEC ?? (40 * 1)) * 1000,
 });
 
 server.register(fastifyCors, {
