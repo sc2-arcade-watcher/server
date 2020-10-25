@@ -27,7 +27,6 @@ export default fp(async (server, opts) => {
         const map = await server.conn.getRepository(S2Map)
             .createQueryBuilder('map')
             .innerJoinAndSelect('map.currentVersion', 'mapHead')
-            .innerJoinAndSelect('map.mainCategory', 'mainCat')
             .leftJoin('map.author', 'author')
             .addSelect([
                 'author.regionId',
@@ -35,9 +34,7 @@ export default fp(async (server, opts) => {
                 'author.profileId',
                 'author.name',
                 'author.discriminator',
-                'author.deleted',
                 'author.avatarUrl',
-                'author.lastOnlineAt',
             ])
             .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId', {
                 regionId: request.params.regionId,
@@ -47,7 +44,7 @@ export default fp(async (server, opts) => {
         ;
 
         if (!map) {
-            return reply.type('application/json').code(404).send();
+            return reply.code(404).send();
         }
 
         // TODO: don't provide these attributes in this endpoint to avoid this check?
@@ -57,42 +54,6 @@ export default fp(async (server, opts) => {
             map.currentVersion.archiveHash = null;
         }
 
-        const result = map;
-
-        // for compatibility with older version of this endpoint, to be removed in the future
-        (<any>result).isArcade = !result.mainCategory.isMelee;
-        (<any>result).currentMajorVersion = result.currentVersion.majorVersion;
-        (<any>result).currentMinorVersion = result.currentVersion.minorVersion;
-        (<any>result).categoryId = (<any>{
-            'Melee': 1,
-            'Survival': 2,
-            'Tug Of War': 3,
-            'Tower Defense': 4,
-            'Other': 5,
-            'Hero Battle': 6,
-            'Arena': 7,
-            'Strategy': 8,
-            'Action': 9,
-            'Single Player': 10,
-            'RPG': 11,
-            'Miscellaneous': 12,
-            'Co-op VS A.I.': 13,
-            'Puzzle': 14,
-            'Archon Co-op VS A.I.': 15,
-            'Archon': 16,
-            'Trainer': 17,
-            'Melee Spectator': 18,
-            'Monobattle': 19,
-            'Campaign': 20,
-        })[result.mainCategory.name];
-        (<any>result).category = {
-            id: (<any>result).categoryId,
-            name: result.mainCategory.name,
-            description: null,
-        };
-        delete result.mainCategory;
-        // end
-
-        return reply.type('application/json').code(200).send(result);
+        return reply.code(200).send(map);
     });
 });
