@@ -13,10 +13,6 @@ export default fp(async (server, opts) => {
             tags: ['Maps'],
             summary: 'List of all versions of specific map.',
             description: stripIndents`
-                Currently it only returns list of known versions - those which have been indexed, for most maps it won't include all ever uploaded to Arcade.
-
-                However, in future there might be a way to either request a full index of specific map via API. Or the service itself will try to keep the list fully up to date for maps which have been publicly hosted at least once - if it proves to be feasible.
-
                 NOTICE: This endpoint is not yet stable and might be changed in the future.
             `,
             params: {
@@ -34,71 +30,61 @@ export default fp(async (server, opts) => {
         },
     }, async (request, reply) => {
         // TODO: pagination
-        // TODO: first fetch map and first revision, then if client can access it fetch the revisions?
-        const map = await server.conn.getRepository(S2Map)
-            .createQueryBuilder('map')
-            .select([])
-            .innerJoinAndSelect('map.currentVersion', 'mapHead')
-            .innerJoinAndMapMany(
-                'map.revisions',
-                S2MapHeader,
-                'revision',
-                'revision.regionId = :regionId AND revision.bnetId = :bnetId'
-            )
-            .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId')
-            .addSelect([
-                'map.regionId',
-                'map.bnetId',
-                'revision.majorVersion',
-                'revision.minorVersion',
-                'revision.headerHash',
-                'revision.isPrivate',
-                'revision.isExtensionMod',
-                'revision.archiveHash',
-                'revision.archiveSize',
-                'revision.uploadedAt',
+        const qb = server.conn.getRepository(S2MapHeader)
+            .createQueryBuilder('mapHead')
+            .select([
+                'mapHead.majorVersion',
+                'mapHead.minorVersion',
+                'mapHead.headerHash',
+                'mapHead.isPrivate',
+                'mapHead.isExtensionMod',
+                'mapHead.archiveHash',
+                'mapHead.archiveSize',
+                'mapHead.uploadedAt',
             ])
-            .setParameters({
+            .andWhere('mapHead.regionId = :regionId AND mapHead.bnetId = :bnetId', {
                 regionId: request.params.regionId,
                 bnetId: request.params.mapId,
             })
-            .addOrderBy('revision.majorVersion', 'DESC')
-            .addOrderBy('revision.minorVersion', 'DESC')
-            .getOne()
+            .addOrderBy('mapHead.majorVersion', 'DESC')
+            .addOrderBy('mapHead.minorVersion', 'DESC')
         ;
 
-        if (!map) {
-            return reply.type('application/json').code(404).send();
+        const mapHeaders = await qb.getMany();
+
+        if (!mapHeaders.length) {
+            return reply.code(404).send();
         }
 
-        const [canDetails, canDownload, canDownloadPrivateRevision] = await server.accessManager.isMapAccessGranted(
-            [MapAccessAttributes.Details, MapAccessAttributes.Download, MapAccessAttributes.DownloadPrivateRevision],
-            map,
+        const currentVersion = Object.assign(<S2MapHeader>{
+            regionId: request.params.regionId,
+            bnetId: request.params.mapId,
+        }, mapHeaders[0]);
+
+        const [canDownload, canDownloadPrivateRevision] = await server.accessManager.isMapAccessGranted(
+            [MapAccessAttributes.Download, MapAccessAttributes.DownloadPrivateRevision],
+            currentVersion,
             request.userAccount
         );
 
-        if (!canDetails) {
-            return reply.type('application/json').code(403).send();
-        }
-
         if (!canDownload) {
-            map.revisions.forEach(rev => {
+            mapHeaders.forEach(rev => {
                 rev.headerHash = null;
                 rev.archiveHash = null;
             });
         }
         else if (!canDownloadPrivateRevision) {
-            map.revisions.forEach(rev => {
+            mapHeaders.forEach(rev => {
                 if (!rev.isPrivate) return;
                 rev.headerHash = null;
                 rev.archiveHash = null;
             });
         }
 
-        return reply.type('application/json').code(200).send({
+        return reply.code(200).send({
             regionId: request.params.regionId,
             bnetId: request.params.mapId,
-            versions: map.revisions,
+            versions: mapHeaders,
         });
     });
 });
