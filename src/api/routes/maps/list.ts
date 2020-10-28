@@ -139,10 +139,7 @@ export default fp(async (server, opts) => {
         }
 
         if (request.query.authorHandle !== void 0) {
-            const requestedAuthor = parseProfileHandle(request.query.authorHandle);
-            if (!requestedAuthor) {
-                return reply.code(400).send();
-            }
+            const requestedAuthor = parseProfileHandle(request.query.authorHandle) ?? { regionId: 0, realmId: 0, profileId: 0 };
 
             // const authorQuery = qb.subQuery()
             //     .from(S2Profile, 'profile')
@@ -207,7 +204,7 @@ export default fp(async (server, opts) => {
             // nameQuery = nameQuery.replace(/[<>()~]/g, '').trim();
             // .. actually, strip all of them, since it currently is used unitentionally
             // and can lead to parse errors which aren't even shown on the frontend
-            nameQuery = nameQuery.replace(/[<>()~"*+-]/g, '').trim();
+            nameQuery = nameQuery.replace(/[<>()~"*+-]/g, ' ').trim();
 
             if (nameQuery.search(/[\p{L}\p{Nd}]{3}/iu) !== -1 || nameQuery.endsWith('*')) {
                 // nameQuery = nameQuery.replace(/[\+\-]+$/, '');
@@ -240,6 +237,7 @@ export default fp(async (server, opts) => {
 
         pQuery.applyQuery(qb, request.query.orderDirection?.toUpperCase());
 
-        return reply.type('application/json').code(200).sendWithCursorPagination(await qb.getRawAndEntities(), pQuery);
+        reply.header('Cache-control', 'private, max-age=60');
+        return reply.code(200).sendWithCursorPagination(await qb.getRawAndEntities(), pQuery);
     });
 });

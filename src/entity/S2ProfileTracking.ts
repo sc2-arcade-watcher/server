@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Unique, Index } from 'typeorm';
 
 @Entity()
 @Unique('region_bnet_idx', ['regionId', 'realmId', 'profileId'])
@@ -26,10 +26,32 @@ export class S2ProfileTracking {
     @Column({
         nullable: true,
     })
-    profileInfoUpdatedAt: Date;
+    profileInfoUpdatedAt: Date | null;
 
     @Column({
         nullable: true,
     })
-    matchHistoryUpdatedAt: Date;
+    matchHistoryUpdatedAt: Date | null;
+
+    @Column({
+        nullable: true,
+    })
+    matchHistoryIntegritySince: Date | null;
+
+    @Column({
+        type: 'tinyint',
+        unsigned: true,
+        default: 0,
+    })
+    battleAPIErrorCounter: number;
+
+    @Column({
+        nullable: true,
+    })
+    battleAPIErrorLast: Date | null;
+
+    @Column({
+        default: false,
+    })
+    preferPublicGateway: boolean;
 }

@@ -1,0 +1,317 @@
+{
+    "regionId": 3,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "繞行戰爭",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284981669
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284979985
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284976612
+                },
+                {
+                    "map": "AutoCast War",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1284943204
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284942828
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284940266
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284938768
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284937082
+                },
+                {
+                    "map": "堅持到底",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1284892346
+                },
+                {
+                    "map": "戰略巡洋艦戰爭",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1284891941
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284890652
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284887655
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284885266
+                },
+                {
+                    "map": "Special Forces: Elite",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284842925
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284842280
+                },
+                {
+                    "map": "Special Forces: Elite",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1284841473
+                },
+                {
+                    "map": "經典塔防",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1284834162
+                },
+                {
+                    "map": "經典塔防",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1284833239
+                },
+                {
+                    "map": "經典塔防",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1284566929
+                },
+                {
+                    "map": "雷諾保衛戰",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1284480821
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "繞行戰爭",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284981669
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284979985
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284976612
+                },
+                {
+                    "map": "AutoCast War",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1284943204
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284942828
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284940266
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284938768
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284937082
+                },
+                {
+                    "map": "堅持到底",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1284892346
+                },
+                {
+                    "map": "戰略巡洋艦戰爭",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1284891941
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284890652
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284887655
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284885266
+                },
+                {
+                    "map": "特種部隊之精英行動",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284842925
+                },
+                {
+                    "map": "繞行戰爭",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284842280
+                },
+                {
+                    "map": "特種部隊之精英行動",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1284841473
+                },
+                {
+                    "map": "經典塔防",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1284834162
+                },
+                {
+                    "map": "經典塔防",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1284833239
+                },
+                {
+                    "map": "經典塔防",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1284566929
+                },
+                {
+                    "map": "雷諾保衛戰",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1284480821
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        17270,
+        17270,
+        17270,
+        15381,
+        17270,
+        17270,
+        17270,
+        17270,
+        1055,
+        17650,
+        17270,
+        17270,
+        17270,
+        17340,
+        17270,
+        17340,
+        17128,
+        17128,
+        17128,
+        16872
+    ]
+}

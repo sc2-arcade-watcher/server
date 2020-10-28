@@ -265,6 +265,57 @@ class DataProc {
         await this.conn.getRepository(S2GameLobby).update(s2lobby.id, updateData);
     }
 
+    protected async updateProfileLastOnline(s2profiles: S2Profile[], nLastOnline: Date) {
+        const joinTime = new Date(nLastOnline);
+        joinTime.setMilliseconds(0);
+        const newlyJoined = s2profiles.filter(x => joinTime > x.lastOnlineAt);
+        if (newlyJoined.length > 0) {
+            newlyJoined.forEach(x => { x.lastOnlineAt = nLastOnline; });
+            await this.conn.getRepository(S2Profile).update(newlyJoined.map(x => x.id), {
+                lastOnlineAt: nLastOnline,
+            });
+        }
+    }
+
+    protected async profileConnectWithAcc(s2lobby: S2GameLobby, recentTitle: S2GameLobbyTitle, matchingSlot: S2GameLobbySlot, tsManager: orm.EntityManager) {
+        const bnAccount = await this.fetchOrCreateBnAccount(recentTitle.accountId);
+        const matchingProfile = matchingSlot.profile;
+        if (matchingProfile.accountId !== null && matchingProfile.accountId !== recentTitle.accountId) {
+            logger.warn(oneLine`
+                ${s2lobby.globalId}
+                profile ${matchingProfile.nameAndId} already paired with another account
+                curr=${matchingProfile.accountId} new=${recentTitle.accountId}
+            `);
+        }
+        else if (matchingProfile.accountId === null && !bnAccount.isVerified) {
+            const accProfiles = await this.conn.getRepository(S2Profile).find({
+                where: {
+                    accountId: recentTitle.accountId,
+                    regionId: this.region,
+                },
+            });
+
+            if (accProfiles.length > 0) {
+                logger.warn(oneLine`
+                    ${s2lobby.globalId}
+                    profile candidate ${matchingProfile.nameAndId}
+                    to pair with account=${recentTitle.accountId}
+                    already paired with ${accProfiles.filter(x => x.nameAndId)}
+                `);
+            }
+            else {
+                matchingProfile.accountId = recentTitle.accountId;
+                logger.info(oneLine`
+                    ${s2lobby.globalId}
+                    profile ${matchingProfile.nameAndId} paired with account=${matchingProfile.accountId}
+                `);
+                await tsManager.getRepository(S2Profile).update(matchingProfile.id, {
+                    accountId: matchingProfile.accountId,
+                });
+            }
+        }
+    }
+
     protected async updateLobbyTitleOrigin(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc, tsManager: orm.EntityManager) {
         if (!s2lobby.slots.length) {
             // TODO: could try to determine missing profile using accountId
@@ -290,42 +341,8 @@ class DataProc {
                 matchedSlots.length === 1 && matchedPlSlots.length === 1 &&
                 tdiff >= 0 && tdiff <= 3000
             ) {
-                const bnAccount = await this.fetchOrCreateBnAccount(recentTitle.accountId);
-                const matchingProfile = matchedPlSlots[0].profile;
-                if (matchingProfile.accountId !== null && matchingProfile.accountId !== recentTitle.accountId) {
-                    logger.warn(oneLine`
-                        ${s2lobby.globalId}
-                        profile ${matchingProfile.nameAndId} already paired with another account
-                        curr=${matchingProfile.accountId} new=${recentTitle.accountId}
-                    `);
-                }
-                else if (matchingProfile.accountId === null && !bnAccount.isVerified) {
-                    const accProfiles = await this.conn.getRepository(S2Profile).find({
-                        where: {
-                            accountId: recentTitle.accountId,
-                            regionId: this.region,
-                        },
-                    });
-
-                    if (accProfiles.length > 0) {
-                        logger.warn(oneLine`
-                            ${s2lobby.globalId}
-                            profile candidate ${matchingProfile.nameAndId}
-                            to pair with account=${recentTitle.accountId}
-                            already paired with ${accProfiles.filter(x => x.nameAndId)}
-                        `);
-                    }
-                    else {
-                        matchingProfile.accountId = recentTitle.accountId;
-                        logger.info(oneLine`
-                            ${s2lobby.globalId}
-                            profile ${matchingProfile.nameAndId} paired with account=${matchingProfile.accountId}
-                        `);
-                        await tsManager.getRepository(S2Profile).update(matchingProfile.id, {
-                            accountId: matchingProfile.accountId,
-                        });
-                    }
-                }
+                // as long as Battle.net API is working, this isn't needed
+                // await this.profileConnectWithAcc(s2lobby, recentTitle, matchedPlSlots[0], tsManager);
             }
 
             // determine profile of player who changed lobby title
@@ -533,19 +550,7 @@ class DataProc {
             return this.fetchOrCreateProfile(slot.profile, lobbyData.slotsPreviewUpdatedAt);
         }));
 
-        if (newS2profiles.length > 0) {
-            const joinTime = new Date(lobbyData.slotsPreviewUpdatedAt);
-            joinTime.setMilliseconds(0);
-            const newlyJoined = newS2profiles.filter(x => x !== null && joinTime > x.lastOnlineAt);
-            if (newlyJoined.length > 0) {
-                newlyJoined.forEach(x => { x.lastOnlineAt = lobbyData.slotsPreviewUpdatedAt; });
-                await this.conn.getRepository(S2Profile).update(newlyJoined.map(x => x.id), {
-                    lastOnlineAt: lobbyData.slotsPreviewUpdatedAt,
-                });
-            }
-        }
-
-        let slotNumUpdated = 0;
+        const updatedSlots: S2GameLobbySlot[] = [];
         await this.conn.transaction(async tsManager => {
             const playerLeaveInfo = new Map<string, S2GameLobbyPlayerJoin>();
 
@@ -592,7 +597,6 @@ class DataProc {
                         }
                     }
 
-                    ++slotNumUpdated;
                     const changedData: Partial<S2GameLobbySlot> = {
                         team: infoSlot.team,
                         kind: newS2SlotKind,
@@ -601,6 +605,7 @@ class DataProc {
                         joinInfo: s2slot.joinInfo,
                     };
                     Object.assign(s2slot, changedData);
+                    updatedSlots.push(s2slot);
                     return tsManager.getRepository(S2GameLobbySlot).update(s2slot.id, changedData);
                 }
             }));
@@ -622,7 +627,11 @@ class DataProc {
             });
         });
 
-        return slotNumUpdated;
+        if (updatedSlots.length > 0) {
+            await this.updateProfileLastOnline(updatedSlots.filter(x => x.profile).map(x => x.profile), lobbyData.slotsPreviewUpdatedAt);
+        }
+
+        return updatedSlots.length;
     }
 
     protected async fetchOrCreateBnAccount(accountId: number) {
@@ -871,6 +880,9 @@ class DataProc {
                 .execute()
             ;
         }
+        else {
+            await this.updateProfileLastOnline(s2lobby.slots.filter(x => x.profile).map(x => x.profile), ev.lobby.closedAt);
+        }
 
         await this.updateLobby(s2lobby, {
             snapshotUpdatedAt: ev.lobby.snapshotUpdatedAt,
@@ -878,7 +890,7 @@ class DataProc {
             status: ev.lobby.status,
         });
         this.lobbiesCache.delete(ev.lobby.initInfo.lobbyId.toString());
-        logger.info(`CLOSED src=${ev.feedName} ${this.s2region.code}#${ev.lobby.initInfo.lobbyId} ${ev.lobby.closedAt.toISOString()} status=${ev.lobby.status}`);
+        logger.info(`CLOSED src=${ev.feedName} ${s2lobby.globalId} ${ev.lobby.closedAt.toISOString()} status=${ev.lobby.status}`);
     }
 
     @logIt({ when: 'out', profTime: true })

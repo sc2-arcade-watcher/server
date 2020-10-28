@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToOne, Index, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToOne, Index, JoinColumn } from 'typeorm';
 import { BnAccount } from './BnAccount';
 
 export enum AccountPrivileges {
@@ -10,7 +10,7 @@ export class AppAccount {
     @PrimaryGeneratedColumn()
     id: number;
 
-    @CreateDateColumn()
+    @Column()
     createdAt: Date;
 
     @Column({

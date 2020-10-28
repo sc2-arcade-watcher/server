@@ -5,14 +5,13 @@ import { AppAccountToken, AppAccountTokenKind } from '../../entity/AppAccountTok
 import { addSeconds } from 'date-fns';
 import { logger } from '../../logger';
 import { AppAccount } from '../../entity/AppAccount';
-import { BattleAPI, BattleAuthScope, BattleAuthResponse, BattleUserInfo, BattleErrorResponse } from '../../bnet/battleAPI';
+import { BattleOAuth, BattleAuthScope, BattleAuthResponse, BattleUserInfo, BattleErrorResponse } from '../../bnet/battleAPI';
 import { isAxiosError } from '../../helpers';
 import { BattleDataUpdater } from '../../bnet/battleData';
 
 class AuthManager {
     protected tokenLengthInit = 14;
     protected tokenLengthExtension = 7;
-    protected bAPI = new BattleAPI();
     protected bData = new BattleDataUpdater(this.conn);
 
     constructor (protected conn: orm.Connection) {
@@ -51,18 +50,20 @@ class AuthManager {
         await this.conn.getRepository(AppAccountToken).delete(userToken);
     }
 
-    async authViaBattle(authCode: string, redirectUri: string) {
+    async authViaBattle(authCode: string, redirectUri: string, clientInfo: { ip: string, userAgent: string }) {
+        const bOAuthAPI = new BattleOAuth();
+
         let bAuthInfo: BattleAuthResponse;
         let bUserInfo: BattleUserInfo;
 
         try {
-            bAuthInfo = (await this.bAPI.oauth.acquireToken({
+            bAuthInfo = (await bOAuthAPI.acquireToken({
                 grantType: 'authorization_code',
                 scope: BattleAuthScope.SC2Profile,
                 redirectUri: redirectUri,
                 code: authCode,
             })).data;
-            bUserInfo = (await this.bAPI.oauth.userInfo(bAuthInfo.accessToken)).data;
+            bUserInfo = (await bOAuthAPI.userInfo(bAuthInfo.accessToken)).data;
         }
         catch (err) {
             if (isAxiosError(err)) {
@@ -96,6 +97,7 @@ class AuthManager {
 
         if (!userAccount) {
             userAccount = new AppAccount();
+            userAccount.createdAt = new Date();
         }
         userAccount.bnAccount = await this.bData.updateAccount(bUserInfo);
         userAccount.lastLoginAt = new Date();
@@ -103,6 +105,7 @@ class AuthManager {
 
         // battle.net token
         const bToken = new AppAccountToken();
+        bToken.createdAt = new Date();
         bToken.account = userAccount;
         bToken.type = AppAccountTokenKind.Bnet;
         bToken.expiresAt = addSeconds(new Date(), bAuthInfo.expiresIn);
@@ -111,8 +114,11 @@ class AuthManager {
 
         // app token
         const appToken = new AppAccountToken();
+        appToken.createdAt = new Date();
         appToken.account = userAccount;
         appToken.type = AppAccountTokenKind.App;
+        appToken.userIp = clientInfo.ip;
+        appToken.userAgent = clientInfo.userAgent.substr(0, 255);
         // appToken.expiresAt = addDays(new Date(), this.tokenLengthInit);
         appToken.accessToken = createHash('sha256').update(JSON.stringify([
             appToken.account.id,

@@ -37,7 +37,10 @@ export default fp(async (server, opts) => {
             });
         }
 
-        const authResult = await server.authManager.authViaBattle(request.body.code, request.body.redirectUri);
+        const authResult = await server.authManager.authViaBattle(request.body.code, request.body.redirectUri, {
+            ip: request.ip,
+            userAgent: request.headers['user-agent'],
+        });
         if (!(authResult instanceof AppAccountToken)) {
             if (authResult.error === 'invalid_grant') {
                 return reply.code(400).send({

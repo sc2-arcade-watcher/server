@@ -21,6 +21,11 @@ export class BnAccount {
     })
     updatedAt: Date | null;
 
+    @Column({
+        nullable: true,
+    })
+    profilesUpdatedAt: Date | null;
+
     @OneToOne(type => AppAccount, appAccount => appAccount.bnAccount)
     appAccount: AppAccount;
 

@@ -1,0 +1,44 @@
+{
+    "regionId": 2,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "Photon Discs",
+                    "type": "4v4",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1432324381
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "Stary Świat",
+                    "type": "4 na 4",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1432324381
+                }
+            ]
+        },
+        {
+            "locale": "ruRU",
+            "entries": [
+                {
+                    "map": "Прежний мир",
+                    "type": "4х4",
+                    "decision": "Поражение",
+                    "speed": "Очень быстро",
+                    "date": 1432324381
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        115631
+    ]
+}

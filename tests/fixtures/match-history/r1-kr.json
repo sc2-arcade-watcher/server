@@ -1,0 +1,212 @@
+{
+    "regionId": 3,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1604616588
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1604612909
+                },
+                {
+                    "map": "NEW 배틀쉽",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1604519635
+                },
+                {
+                    "map": "NEW 배틀쉽",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1604516296
+                },
+                {
+                    "map": "NEW 배틀쉽",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1604513990
+                },
+                {
+                    "map": "NEW 배틀쉽",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1604512149
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1604448089
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1604436532
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1604359090
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1604274981
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1604272948
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1604088872
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1604086121
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1604006204
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1604004195
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1603914895
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1603912791
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1603910746
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1603909662
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1603828071
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1603790861
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1603788860
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1603786720
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1603785173
+                },
+                {
+                    "map": "데저트 스트라이크 3",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1603736106
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        94606,
+        94606,
+        126840,
+        126840,
+        126840,
+        126840,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606,
+        94606
+    ]
+}

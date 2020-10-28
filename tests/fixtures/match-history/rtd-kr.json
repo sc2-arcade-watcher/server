@@ -1,0 +1,392 @@
+{
+    "regionId": 3,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "빠른무한 2020 (자동건설버전)",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1601042334
+                },
+                {
+                    "map": "Runling Run 7",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1598770262
+                },
+                {
+                    "map": "소환술사 1.03 (버그 수정판)",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1598534190
+                },
+                {
+                    "map": "Runling Run 7",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1598532557
+                },
+                {
+                    "map": "미니 게임 모음",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1598530229
+                },
+                {
+                    "map": "한마리만 막아라",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1598529452
+                },
+                {
+                    "map": "한마리만 막아라",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1598529098
+                },
+                {
+                    "map": "만들고 놀기",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1598006656
+                },
+                {
+                    "map": "금칙어 게임2",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1598000315
+                },
+                {
+                    "map": "Sludge City",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1597836248
+                },
+                {
+                    "map": "파오캐 리마스터 수정맵",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1597725795
+                },
+                {
+                    "map": "파오캐 리마스터 수정맵",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1597725399
+                },
+                {
+                    "map": "파오캐 리마스터 수정맵",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1597724602
+                },
+                {
+                    "map": "금칙어 게임2",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1597723790
+                },
+                {
+                    "map": "금칙어 게임2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1597722506
+                },
+                {
+                    "map": "금칙어 게임2",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1597722264
+                },
+                {
+                    "map": "금칙어 게임2",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1597721554
+                },
+                {
+                    "map": "금칙어 게임2",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1597720206
+                },
+                {
+                    "map": "The Shattered Temple",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1597639639
+                },
+                {
+                    "map": "Deathaura LE",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1597635925
+                },
+                {
+                    "map": "미로 만들기~!",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1597634926
+                },
+                {
+                    "map": "스타 체스",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1597455149
+                },
+                {
+                    "map": "고스트 눈치게임",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1597453940
+                },
+                {
+                    "map": "Random tower defence [RTD]",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1596955044
+                },
+                {
+                    "map": "Sengoku",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1596954326
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "빠른무한 2020 (자동건설버전)",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1601042334
+                },
+                {
+                    "map": "Runling Run 7",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1598770262
+                },
+                {
+                    "map": "소환술사 1.03 (버그 수정판)",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1598534190
+                },
+                {
+                    "map": "Runling Run 7",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1598532557
+                },
+                {
+                    "map": "미니 게임 모음",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1598530229
+                },
+                {
+                    "map": "한마리만 막아라",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1598529452
+                },
+                {
+                    "map": "한마리만 막아라",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1598529098
+                },
+                {
+                    "map": "만들고 놀기",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1598006656
+                },
+                {
+                    "map": "금칙어 게임2",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1598000315
+                },
+                {
+                    "map": "Miasto szlamu",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1597836248
+                },
+                {
+                    "map": "파오캐 리마스터 수정맵",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1597725795
+                },
+                {
+                    "map": "파오캐 리마스터 수정맵",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1597725399
+                },
+                {
+                    "map": "파오캐 리마스터 수정맵",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1597724602
+                },
+                {
+                    "map": "금칙어 게임2",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1597723790
+                },
+                {
+                    "map": "금칙어 게임2",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1597722506
+                },
+                {
+                    "map": "금칙어 게임2",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1597722264
+                },
+                {
+                    "map": "금칙어 게임2",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1597721554
+                },
+                {
+                    "map": "금칙어 게임2",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1597720206
+                },
+                {
+                    "map": "Zniszczona świątynia",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1597639639
+                },
+                {
+                    "map": "Aura Śmierci ER",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1597635925
+                },
+                {
+                    "map": "미로 만들기~!",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1597634926
+                },
+                {
+                    "map": "스타 체스",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1597455149
+                },
+                {
+                    "map": "고스트 눈치게임",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1597453940
+                },
+                {
+                    "map": "랜덤 타워 디펜스 [RTD]",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1596955044
+                },
+                {
+                    "map": "Sengoku",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1596954326
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        135201,
+        102036,
+        134898,
+        102036,
+        92404,
+        61117,
+        61117,
+        83992,
+        100241,
+        96260,
+        135581,
+        135581,
+        135581,
+        100241,
+        100241,
+        100241,
+        100241,
+        100241,
+        29746,
+        139039,
+        120692,
+        133827,
+        134254,
+        114309,
+        0
+    ]
+}

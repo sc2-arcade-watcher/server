@@ -126,6 +126,7 @@ server.register(require('../api/routes/account/settings').default);
 server.register(require('../api/routes/profile/list').default);
 server.register(require('../api/routes/profile/show').default);
 server.register(require('../api/routes/profile/summary').default);
+server.register(require('../api/routes/profile/matches').default);
 
 server.register(require('../api/routes/lobby/openGames').default);
 server.register(require('../api/routes/lobby/active').default);

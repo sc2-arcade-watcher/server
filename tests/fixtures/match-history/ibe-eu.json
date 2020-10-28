@@ -1,0 +1,392 @@
+{
+    "regionId": 2,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "Black and White LotV",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1604212030
+                },
+                {
+                    "map": "Lightshade LE",
+                    "type": "Co-Op",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1603324043
+                },
+                {
+                    "map": "Jagannatha LE",
+                    "type": "Co-Op",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1603323984
+                },
+                {
+                    "map": "Maze and Terran",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1602804369
+                },
+                {
+                    "map": "Mist Opportunities",
+                    "type": "(Unknown)",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1602801898
+                },
+                {
+                    "map": "Part and Parcel",
+                    "type": "(Unknown)",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1602799017
+                },
+                {
+                    "map": "Star Battle v3.1",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1602797442
+                },
+                {
+                    "map": "Maze and Terran",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1602795316
+                },
+                {
+                    "map": "--Wrath-- Test Version",
+                    "type": "Custom",
+                    "decision": "Tie",
+                    "speed": "Faster",
+                    "date": 1602794104
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1595029408
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1595025217
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1595020474
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1594159899
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1594157235
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1594154579
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1594152294
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1594150549
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1594148692
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1594147518
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1594072221
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1594067700
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1594062700
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1593897777
+                },
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1593897331
+                },
+                {
+                    "map": "Ice Baneling Escape - Pro",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1593808858
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "Black and White",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1604212030
+                },
+                {
+                    "map": "Jasny Cień ER",
+                    "type": "Wspólnie",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1603324043
+                },
+                {
+                    "map": "Jagannatha ER",
+                    "type": "Wspólnie",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1603323984
+                },
+                {
+                    "map": "Maze and Terran",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1602804369
+                },
+                {
+                    "map": "Stetmann w oparach",
+                    "type": "(Nieznana)",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1602801898
+                },
+                {
+                    "map": "Złomuj i rządź",
+                    "type": "(Nieznana)",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1602799017
+                },
+                {
+                    "map": "Star Battle v3.1",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1602797442
+                },
+                {
+                    "map": "Maze and Terran",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1602795316
+                },
+                {
+                    "map": "--Wrath-- Test Version",
+                    "type": "Własne",
+                    "decision": "Remis",
+                    "speed": "Szybciej",
+                    "date": 1602794104
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1595029408
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1595025217
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1595020474
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1594159899
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1594157235
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1594154579
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1594152294
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1594150549
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1594148692
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1594147518
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1594072221
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1594067700
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1594062700
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1593897777
+                },
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1593897331
+                },
+                {
+                    "map": "Ice Baneling Escape - Pro",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1593808858
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        85768,
+        228767,
+        228766,
+        227559,
+        195013,
+        204950,
+        175904,
+        227559,
+        226731,
+        136081,
+        136081,
+        136081,
+        136081,
+        136081,
+        136081,
+        136081,
+        136081,
+        136081,
+        136081,
+        136081,
+        136081,
+        136081,
+        136081,
+        136081,
+        207064
+    ]
+}

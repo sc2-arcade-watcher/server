@@ -93,8 +93,14 @@ export class S2Profile {
         return `${this.name} [${this.regionId}-S2-${this.realmId}-${this.profileId}]`;
     }
 
+    get nameAndIdPad(): string {
+        return `${this.regionId}-S2-${this.realmId}-${this.profileId.toString().padEnd(8, ' ')} ${this.name}`;
+    }
+
     static create() {
         const prof = new S2Profile();
+        prof.discriminator = 0;
+        prof.deleted = false;
         prof.accountId = null;
         prof.accountVerified = false;
         return prof;

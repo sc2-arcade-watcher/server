@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, Index } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index } from 'typeorm';
 import { AppAccount } from './AppAccount';
 
 export enum AppAccountTokenKind {
@@ -19,7 +19,7 @@ export class AppAccountToken {
     @Index('account_idx')
     account: AppAccount;
 
-    @CreateDateColumn()
+    @Column()
     createdAt: Date;
 
     @Column({

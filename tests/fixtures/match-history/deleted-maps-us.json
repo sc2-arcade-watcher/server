@@ -1,0 +1,392 @@
+{
+    "regionId": 1,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "Agria Valley",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1310013139
+                },
+                {
+                    "map": "Discord IV",
+                    "type": "2v2",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1309813601
+                },
+                {
+                    "map": "MineralZ US",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1307469090
+                },
+                {
+                    "map": "Squadron Tower Defense",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1307287780
+                },
+                {
+                    "map": "Left 4 Dead",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1305901474
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1295628510
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1294845753
+                },
+                {
+                    "map": "Raynor Defense",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294604144
+                },
+                {
+                    "map": "Vexal Tower Defense",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294601941
+                },
+                {
+                    "map": "Vexal Tower Defense",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294600600
+                },
+                {
+                    "map": "Vexal Tower Defense",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294599367
+                },
+                {
+                    "map": "Raynor Defense",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294599179
+                },
+                {
+                    "map": "LORD OF THE RINGS TD",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1294597997
+                },
+                {
+                    "map": "Standard Tower Defense (STD)",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294597807
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294597770
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1294532027
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1294529073
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1294516414
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294513226
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294511563
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294504217
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294501310
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294413107
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1294365527
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1294362166
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "Dolina Agrii",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1310013139
+                },
+                {
+                    "map": "Niezgoda IV",
+                    "type": "2 na 2",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1309813601
+                },
+                {
+                    "map": "MineralZ US",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1307469090
+                },
+                {
+                    "map": "Squadron Tower Defense",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1307287780
+                },
+                {
+                    "map": "Left 4 Dead",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1305901474
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1295628510
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1294845753
+                },
+                {
+                    "map": "Raynor Defense",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294604144
+                },
+                {
+                    "map": "Vexal Tower Defense",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294601941
+                },
+                {
+                    "map": "Vexal Tower Defense",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294600600
+                },
+                {
+                    "map": "Vexal Tower Defense",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294599367
+                },
+                {
+                    "map": "Raynor Defense",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294599179
+                },
+                {
+                    "map": "LORD OF THE RINGS TD",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1294597997
+                },
+                {
+                    "map": "Standard Tower Defense (STD)",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294597807
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294597770
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1294532027
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1294529073
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1294516414
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294513226
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294511563
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294504217
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294501310
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294413107
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1294365527
+                },
+                {
+                    "map": "EnderCraft TD",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1294362166
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        23,
+        41,
+        108982,
+        80058,
+        1674,
+        53162,
+        53162,
+        7592,
+        177,
+        177,
+        177,
+        7592,
+        0,
+        53841,
+        53162,
+        53162,
+        53162,
+        53162,
+        53162,
+        53162,
+        53162,
+        53162,
+        53162,
+        53162,
+        53162
+    ]
+}

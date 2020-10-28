@@ -2,6 +2,7 @@ import { Entity, Column, Index } from 'typeorm';
 import { GameLocale } from '../common';
 
 @Entity()
+@Index('name_region_idx', ['name', 'regionId'])
 export class S2MapLocale {
     @Column({
         type: 'tinyint',
@@ -43,7 +44,6 @@ export class S2MapLocale {
     isMain: boolean;
 
     @Column()
-    @Index('name_idx')
     name: string;
 
     @Column({

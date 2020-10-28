@@ -86,8 +86,10 @@ export default fp(async (server, opts) => {
 
         if (request.query.profileHandle !== void 0) {
             const requestedProfile = parseProfileHandle(request.query.profileHandle) ?? { regionId: 0, realmId: 0, profileId: 0 };
-
             qb.andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId', requestedProfile);
+        }
+        else {
+            qb.andWhere('profile.deleted = 0');
         }
 
         if (request.query.regionId !== void 0) {

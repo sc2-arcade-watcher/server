@@ -118,6 +118,7 @@ export default fp(async (server, opts) => {
             pQuery.getOrderDirection(request.query.orderDirection!.toUpperCase())
         );
 
+        reply.header('Cache-control', 'private, max-age=60');
         return reply.code(200).sendWithCursorPagination({
             raw: lbIds,
             entities: (await qbFinal.getRawAndEntities()).entities,

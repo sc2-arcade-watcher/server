@@ -20,6 +20,7 @@
         "experimentalDecorators": true,
         "removeComments": false,
         "emitDecoratorMetadata": true,
+        "resolveJsonModule": true,
     },
     "include": [
         "src",

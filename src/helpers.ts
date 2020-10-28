@@ -178,7 +178,7 @@ export function btoa(value: string): string {
     return Buffer.from(value).toString('base64');
 }
 
-export function deepCopy(a: any) {
+export function deepCopy<T>(a: T): T {
     return JSON.parse(JSON.stringify(a));
 }
 
@@ -187,7 +187,7 @@ export function deepCopy(a: any) {
 //
 
 export function isAxiosError(err: any): err is AxiosError {
-    return err instanceof Error && (err as AxiosError).isAxiosError === true;
+    return (err as AxiosError)?.isAxiosError === true;
 }
 
 //

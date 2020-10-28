@@ -1,0 +1,44 @@
+{
+    "regionId": 3,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "防空TD",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1282806404
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "Crush Company - The Last Hope",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1282806404
+                }
+            ]
+        },
+        {
+            "locale": "ruRU",
+            "entries": [
+                {
+                    "map": "防空TD",
+                    "type": "Своя игра",
+                    "decision": "Победа",
+                    "speed": "Очень быстро",
+                    "date": 1282806404
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        264
+    ]
+}

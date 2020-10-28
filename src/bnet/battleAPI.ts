@@ -9,10 +9,21 @@ import { GameRegion, regionCode } from '../common';
 import { isAxiosError } from '../helpers';
 import { logger } from '../logger';
 
+type BattleAPIGateway = '{region}.battle.net'
+    | '{region}.api.blizzard.com'
+    | 'gateway.battlenet.com.cn'
+    | 'starcraft2.com/en-us/api'
+;
+
 export interface BattleAPIClientConfig {
-    region: GameRegion;
-    clientId: string;
-    clientSecret: string;
+    gateway?: {
+        general?: BattleAPIGateway;
+        oauth?: BattleAPIGateway;
+        sc2?: BattleAPIGateway;
+    };
+    region?: GameRegion;
+    clientId?: string;
+    clientSecret?: string;
     accessToken?: string;
 }
 
@@ -21,16 +32,34 @@ interface BattleAPIModuleConfig {
     axios: AxiosRequestConfig;
 }
 
+function gatewayURL(gateway: BattleAPIGateway, region: GameRegion) {
+    return `https://${gateway.replace('{region}', regionCode(region).toLowerCase())}`;
+}
+
 abstract class BattleAPIBase {
+    protected mConfig: BattleAPIModuleConfig;
     readonly axios: AxiosInstance;
 
-    constructor(protected readonly config: BattleAPIModuleConfig) {
+    constructor(params: Partial<BattleAPIModuleConfig> = {}) {
+        this.mConfig = {
+            client: Object.assign(<Partial<BattleAPIClientConfig>>{
+                region: GameRegion.US,
+                gateway: {},
+            }, params?.client ?? {}),
+            axios: params?.axios ?? {},
+        };
+        this.mConfig.client.gateway = Object.assign({
+            general: '{region}.api.blizzard.com',
+            oauth: '{region}.battle.net',
+            sc2: 'gateway.battlenet.com.cn',
+        }, params.client?.gateway ?? {});
+
         this.axios = this.createAxios();
     }
 
     protected createAxios() {
         return Axios.create(Object.assign<AxiosRequestConfig, AxiosRequestConfig>({
-            baseURL: `https://${regionCode(this.config.client.region).toLowerCase()}.api.blizzard.com`,
+            baseURL: gatewayURL(this.mConfig.client.gateway.general, this.mConfig.client.region),
             httpAgent: new http.Agent({
                 keepAlive: true,
             }),
@@ -40,7 +69,7 @@ abstract class BattleAPIBase {
             headers: {
                 'Accept-Encoding': 'gzip',
             },
-        }, this.config.axios));
+        }, this.mConfig.axios ?? {}));
     }
 
     protected encodeParams(params: qs.ParsedUrlQueryInput) {
@@ -99,10 +128,10 @@ export interface BattleUserInfo {
     sub: string;
 }
 
-class BattleOAuth extends BattleAPIBase {
+export class BattleOAuth extends BattleAPIBase {
     protected createAxios() {
         let customAxios = super.createAxios();
-        customAxios.defaults.baseURL = `https://${regionCode(this.config.client.region).toLowerCase()}.battle.net/oauth`;
+        customAxios.defaults.baseURL = `${gatewayURL(this.mConfig.client.gateway.oauth, this.mConfig.client.region)}/oauth`;
         customAxios = applyCaseMiddleware(customAxios, {
             ignoreHeaders: true,
         });
@@ -177,10 +206,14 @@ export interface BattleSC2ProfileFull {
     summary: BattleSC2ProfileSummary;
 }
 
-export enum BattleSC2Decision {
+export enum BattleSC2MatchDecision {
     Left = 'Left',
     Win = 'Win',
     Loss = 'Loss',
+    Tie = 'Tie',
+    Observer = 'Observer',
+    Disagree = 'Disagree',
+    Unknown = '(Unknown)',
 }
 
 export enum BattleSC2MatchSpeed {
@@ -195,12 +228,17 @@ export enum BattleSC2MatchType {
     Custom = 'Custom',
     Unknown = '(Unknown)',
     Coop = 'Co-op',
+    OneVersusOne = '1v1',
+    TwoVersusTwo = '2v2',
+    ThreeVersusThree = '3v3',
+    FourVersusFour = '4v4',
+    FreeForAll = 'FFA',
 }
 
 export interface BattleSC2MatchEntry {
     map: string;
     type: BattleSC2MatchType;
-    decision: BattleSC2Decision;
+    decision: BattleSC2MatchDecision;
     speed: BattleSC2MatchSpeed;
     date: number;
 }
@@ -209,28 +247,31 @@ export interface BattleSC2MatchHistory {
     matches: BattleSC2MatchEntry[];
 }
 
+function fixProfileId(data: any) {
+    if (Array.isArray(data)) {
+        data.forEach(x => {
+            x.profileId = Number(x.profileId);
+        });
+    }
+    else if (typeof data === 'object' && data.profileId) {
+        data.profileId = Number(data.profileId);
+    }
+    return data;
+}
+
 class BattleSC2 extends BattleAPIBase {
     protected createAxios() {
         let customAxios = super.createAxios();
         Object.assign(customAxios.defaults, <AxiosRequestConfig>{
-            baseURL: `https://${regionCode(this.config.client.region).toLowerCase()}.api.blizzard.com/sc2`,
+            baseURL: `${gatewayURL(this.mConfig.client.gateway.sc2, this.mConfig.client.region)}/sc2`,
         });
-        if (this.config.client.accessToken) {
-            customAxios.defaults.headers['Authorization'] = `Bearer ${this.config.client.accessToken}`;
+        if (this.mConfig.client.gateway.sc2 !== 'starcraft2.com/en-us/api' && this.mConfig.client.accessToken) {
+            customAxios.defaults.headers['Authorization'] = `Bearer ${this.mConfig.client.accessToken}`;
         }
         return customAxios;
     }
 
     async getAccount(accountId: number) {
-        function fixProfileId(data: any) {
-            if (Array.isArray(data)) {
-                data.forEach(x => {
-                    x.profileId = Number(x.profileId);
-                });
-            }
-            return data;
-        }
-
         return this.axios.get<BattleSC2ProfileBase[]>(`player/${accountId}`, {
             transformResponse: [].concat(
                 this.axios.defaults.transformResponse,
@@ -239,17 +280,29 @@ class BattleSC2 extends BattleAPIBase {
         });
     }
 
-    async getProfile(params: BattleSC2ProfileParams) {
+    async getProfileSummary(params: BattleSC2ProfileParams) {
         return this.axios.get<BattleSC2ProfileFull>(`profile/${params.regionId}/${params.realmId}/${params.profileId}`);
     }
 
-    async getMatchHistory(params: BattleSC2ProfileParams) {
-        return this.axios.get<BattleSC2MatchHistory[]>(`legacy/profile/${params.regionId}/${params.realmId}/${params.profileId}/matches`);
+    async getProfileMeta(params: BattleSC2ProfileParams) {
+        return this.axios.get<BattleSC2ProfileBase>(`metadata/profile/${params.regionId}/${params.realmId}/${params.profileId}`, {
+            transformResponse: [].concat(
+                this.axios.defaults.transformResponse,
+                fixProfileId
+            ),
+        });
+    }
+
+    async getProfileMatchHistory(params: BattleSC2ProfileParams & { locale?: string }) {
+        return this.axios.get<BattleSC2MatchHistory>(`legacy/profile/${params.regionId}/${params.realmId}/${params.profileId}/matches`, {
+            params: {
+                'locale': params?.locale ?? 'en_US',
+            },
+        });
     }
 }
 
 const defaultConfig: BattleAPIClientConfig = {
-    region: GameRegion.EU,
     clientId: process.env.STARC_BNET_API_CLIENT_ID,
     clientSecret: process.env.STARC_BNET_API_CLIENT_SECRET,
     accessToken: (function() {
@@ -279,12 +332,24 @@ export class BattleAPI {
             return response;
         }, async (error) => {
             if (isAxiosError(error)) {
-                if (error.response!.status === 401) {
+                if ((error.config as any).retryAttempt && (error.config as any).retryAttempt > 3) {
+                    logger.error(`exceeded retry limit`);
+                    throw error;
+                }
+                (error.config as any).retryAttempt = ((error.config as any).retryAttempt ?? 0) + 1;
+
+                if (error.response?.status === 401) {
                     logger.warn(`Battle accessToken expired? reqUrl=${error.config.url}`);
                     const tokenInfo = await this.refreshToken();
                     error.config.headers['Authorization'] = `Bearer ${tokenInfo.accessToken}`;
-                    return this.sc2.axios.request(error.config);
                 }
+                else if (error?.code === 'ECONNRESET') {
+                    logger.warn(`req failed due to ${error?.code}, retrying..`);
+                }
+                else {
+                    throw error;
+                }
+                return this.sc2.axios.request(error.config);
             }
             throw error;
         });
