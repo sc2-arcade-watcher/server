@@ -9,6 +9,7 @@ import { S2GameLobbySlot } from '../../../entity/S2GameLobbySlot';
 import { parseProfileHandle } from '../../../bnet/common';
 import { S2Profile } from '../../../entity/S2Profile';
 import { ProfileAccessAttributes } from '../../plugins/accessManager';
+import { CursorPaginationQuery } from '../../plugins/cursorPagination';
 
 export default fp(async (server, opts) => {
     server.get<{
@@ -45,13 +46,17 @@ export default fp(async (server, opts) => {
             },
         },
     }, async (request, reply) => {
-        const pQuery = request.parseCursorPagination({
-            paginationKeys: ['id'],
-        });
-
+        let pQuery: CursorPaginationQuery;
         let qb: orm.SelectQueryBuilder<any>;
 
         if (typeof request.query.regionId === 'number' && typeof request.query.mapId === 'number') {
+            pQuery = request.parseCursorPagination({
+                paginationKeys: ['lobMap.lobby'],
+                toRawKey: (x) => 'id',
+                toQueryKey: (x) => x,
+                toFieldKey: (x) => x,
+            });
+
             qb = server.conn.getRepository(S2GameLobbyMap)
                 .createQueryBuilder('lobMap')
                 .andWhere('lobMap.regionId = :regionId AND lobMap.bnetId = :bnetId', {
@@ -62,10 +67,14 @@ export default fp(async (server, opts) => {
             ;
         }
         else if (typeof request.query.profileHandle === 'string') {
-            const requestedProfile = parseProfileHandle(request.query.profileHandle);
-            if (!requestedProfile) {
-                return reply.code(400).send();
-            }
+            pQuery = request.parseCursorPagination({
+                paginationKeys: ['lobSlot.lobby'],
+                toRawKey: (x) => 'id',
+                toQueryKey: (x) => x,
+                toFieldKey: (x) => x,
+            });
+
+            const requestedProfile = parseProfileHandle(request.query.profileHandle) ?? { regionId: 0, realmId: 0, profileId: 0 };
 
             const canAccessDetails = await server.accessManager.isProfileAccessGranted(
                 ProfileAccessAttributes.Details,

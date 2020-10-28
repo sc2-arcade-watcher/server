@@ -13,7 +13,16 @@ export interface CursorPaginationQuery {
     getOperator: (dir: 'before' | 'after', order?: 'ASC' | 'DESC') => '>' | '<';
     applyQuery: (qb: orm.SelectQueryBuilder<any>, order?: 'ASC' | 'DESC') => orm.SelectQueryBuilder<any>;
     toRawKey: (s: string) => string;
+    toFieldKey: (s: string) => string;
+    toQueryKey: (s: string) => string;
     paginationKeys?: string[];
+}
+
+export interface CursorPaginationParams {
+    paginationKeys?: string[] | string;
+    toRawKey?: (s: string) => string;
+    toFieldKey?: (s: string) => string;
+    toQueryKey?: (s: string) => string;
 }
 
 export interface CursorPaginationInfo {
@@ -35,7 +44,7 @@ type sendReplyType<T = any> = (this: FastifyReply, rData: rawAndEntities<T>, pQu
 
 declare module 'fastify' {
     interface FastifyRequest {
-        parseCursorPagination(this: FastifyRequest, opts?: { paginationKeys?: string[] | string; }): CursorPaginationQuery;
+        parseCursorPagination(this: FastifyRequest, opts?: CursorPaginationParams): CursorPaginationQuery;
     }
 
     interface FastifyReply {
@@ -47,7 +56,7 @@ const defaultLimit = 50;
 const maximumLimit = 500;
 
 export default fp(async (server, opts) => {
-    server.decorateRequest('parseCursorPagination', function (this: FastifyRequest<{ Querystring: any }>, opts: { paginationKeys?: string[] | string; } = {}) {
+    server.decorateRequest('parseCursorPagination', function (this: FastifyRequest<{ Querystring: any }>, opts: CursorPaginationParams = {}) {
         let limit = parseInt(this.query.limit);
         if (Number.isNaN(limit)) {
             limit = defaultLimit;
@@ -68,10 +77,13 @@ export default fp(async (server, opts) => {
             pq.paginationKeys = opts.paginationKeys;
         }
 
-        pq.toRawKey = function(s: string) {
+        function toRawKey(s: string) {
             const r = s.split('.');
             return [r.shift(), ...r.map(server.conn.namingStrategy.relationName)].join('_');
-        };
+        }
+        pq.toRawKey = opts.toRawKey ?? toRawKey;
+        pq.toFieldKey = opts.toFieldKey ?? pq.toRawKey;
+        pq.toQueryKey = opts.toQueryKey ?? pq.toRawKey;
 
         function decodeKeyValues(value: string) {
             if (!value) return void 0;
@@ -79,7 +91,7 @@ export default fp(async (server, opts) => {
             if (!Array.isArray(kvals)) return void 0;
             const kvmap: {[k: string]: string} = {};
             for (const k of pq.paginationKeys) {
-                kvmap[pq.toRawKey(k)] = kvals.length ? kvals.shift() : null;
+                kvmap[pq.toFieldKey(k)] = kvals.length ? kvals.shift() : null;
             }
             return kvmap;
         }
@@ -113,7 +125,7 @@ export default fp(async (server, opts) => {
             const dir = pq.before ? 'before' : pq.after ? 'after' : null;
             for (const k of pq.paginationKeys) {
                 if (dir) {
-                    qb.andWhere(k + ' ' + pq.getOperator(dir, order) + ' :' + pq.toRawKey(k));
+                    qb.andWhere(k + ' ' + pq.getOperator(dir, order) + ' :' + pq.toQueryKey(k));
                 }
                 qb.addOrderBy(k, pq.getOrderDirection(order));
             }
@@ -175,6 +187,12 @@ export default fp(async (server, opts) => {
                 presponse.results = rData.entities.slice(0, pQuery.limit);
             }
         }
+
+        // strip ids
+        if (pQuery.paginationKeys[0].split('.').pop() === 'id') {
+            presponse.results.map(x => { delete (x as any).id; });
+        }
+
         return presponse;
     });
 });

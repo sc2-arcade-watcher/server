@@ -29,11 +29,9 @@ export default fp(async (server, opts) => {
         Params: any,
     }>('/profiles/:regionId/:realmId/:profileId/summary', {
         schema: {
+            hide: true,
             tags: ['Profiles'],
             summary: 'Profile summary',
-            description: stripIndents`
-                NOTICE: This endpoint is not yet stable and might be changed in the future.
-            `,
             params: {
                 type: 'object',
                 required: ['regionId', 'realmId', 'profileId'],

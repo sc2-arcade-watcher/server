@@ -111,9 +111,9 @@ server.register(fastifyOAS, <fastifyOAS.FastifyOASOptions>{
                     Maps & mods published on Arcade.
                 `,
             },
-            // {
-            //     name: 'Profiles',
-            // },
+            {
+                name: 'Profiles',
+            },
         ],
     }
 });

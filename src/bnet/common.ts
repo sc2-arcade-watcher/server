@@ -11,7 +11,7 @@ export function profileHandle(profile: PlayerProfileParams) {
 }
 
 export function parseProfileHandle(s: string): PlayerProfileParams | undefined {
-    const m = s.match(/^(\d+)-S2-(\d+)-(\d+)$/);
+    const m = s.trim().match(/^(\d+)-S2-(\d+)-(\d+)$/);
     if (!m) return;
     const regionId = Number(m[1]) as GameRegion;
     if (!GameRegion[regionId]) return;

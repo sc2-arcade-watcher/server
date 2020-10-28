@@ -81,15 +81,11 @@ export default fp(async (server, opts) => {
                 'profile.avatarUrl',
                 'profile.lastOnlineAt',
             ])
-            .andWhere('profile.discriminator != 0')
             .limit(pQuery.fetchLimit)
         ;
 
         if (request.query.profileHandle !== void 0) {
-            const requestedProfile = parseProfileHandle(request.query.profileHandle);
-            if (!requestedProfile) {
-                return reply.code(400).send();
-            }
+            const requestedProfile = parseProfileHandle(request.query.profileHandle) ?? { regionId: 0, realmId: 0, profileId: 0 };
 
             qb.andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId', requestedProfile);
         }
