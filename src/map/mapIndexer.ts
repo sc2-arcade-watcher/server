@@ -12,6 +12,9 @@ import { S2Profile } from '../entity/S2Profile';
 import { S2MapTracking } from '../entity/S2MapTracking';
 import { S2MapVariant } from '../entity/S2MapVariant';
 import { AttributeSystemNamespaceId, AttributeId, lobbyDelayValues } from './attributes';
+import { S2MapRepository } from '../repository/S2MapRepository';
+import { S2MapLocale } from '../entity/S2MapLocale';
+import { S2MapDependency } from '../entity/S2MapDependency';
 
 export class MapIndexer {
     public readonly resolver = new MapResolver(this.conn);
@@ -118,30 +121,147 @@ export class MapIndexer {
         };
     }
 
+    async updateMapLocale(map: S2Map, mhead: S2MapHeader, rawHeaderData: MapHeaderDataRaw, forceUpdate = false) {
+        const isInitialVersion = (
+            map.initialVersion.majorVersion === mhead.majorVersion && map.initialVersion.minorVersion === mhead.minorVersion
+        );
+        const isLatestVersion = (
+            mhead.majorVersion === map.currentVersion.majorVersion && mhead.minorVersion === map.currentVersion.minorVersion
+        );
+        const rcode = GameRegion[mhead.regionId];
+        let dUpdated = false;
+
+        for (const lTable of rawHeaderData.localeTable) {
+            let s2locale = map.getLocalization(lTable.locale);
+
+            const isHeaderNewer = (
+                !s2locale ||
+                (mhead.majorVersion > s2locale.majorVersion) ||
+                (mhead.majorVersion === s2locale.majorVersion && mhead.minorVersion > s2locale.minorVersion) ||
+                (mhead.majorVersion === s2locale.majorVersion && mhead.minorVersion === s2locale.minorVersion && forceUpdate)
+            );
+            if (!isHeaderNewer) continue;
+
+            if (!s2locale) {
+                s2locale = new S2MapLocale();
+                s2locale.regionId = map.regionId;
+                s2locale.bnetId = map.bnetId;
+                s2locale.locale = lTable.locale;
+                s2locale.isMain = false;
+                s2locale.inLatestVersion = false;
+                map.locales.push(s2locale);
+            }
+
+            const localizationData = await this.resolver.getMapLocalization(
+                rcode,
+                lTable.stringTable[0].hash,
+                lTable.locale === GameLocale.enUS,
+            );
+            const localizedMapHeader = reprocessMapHeader(rawHeaderData, localizationData);
+
+            s2locale.majorVersion = mhead.majorVersion;
+            s2locale.minorVersion = mhead.minorVersion;
+            if (isLatestVersion) {
+                s2locale.inLatestVersion = true;
+            }
+            s2locale.name = localizedMapHeader.workingSet.name;
+            s2locale.description = localizedMapHeader.workingSet.description;
+            s2locale.website = localizedMapHeader.arcadeInfo?.website ?? '';
+
+            dUpdated = true;
+        }
+
+        for (const s2locale of map.locales) {
+            const localeIndex = rawHeaderData.localeTable.findIndex(x => x.locale === s2locale.locale);
+            if (localeIndex !== -1) continue;
+            const isHeaderNewer = (
+                (mhead.majorVersion > s2locale.majorVersion) ||
+                (mhead.majorVersion === s2locale.majorVersion && mhead.minorVersion > s2locale.minorVersion) ||
+                (mhead.majorVersion === s2locale.majorVersion && mhead.minorVersion === s2locale.minorVersion && forceUpdate)
+            );
+            if (!isHeaderNewer || !s2locale.inLatestVersion) continue;
+            s2locale.inLatestVersion = false;
+
+            dUpdated = true;
+        }
+
+        if (isInitialVersion) {
+            const mainLocaleable = (
+                rawHeaderData.workingSet.localeTable.find(x => x.locale === GameLocale.enUS) ?? rawHeaderData.workingSet.localeTable[0]
+            );
+            const s2locale = map.locales.find(x => x.locale === mainLocaleable.locale);
+            s2locale.isMain = true;
+
+            dUpdated = true;
+        }
+
+        return dUpdated;
+    }
+
+    updateMapDependency(map: S2Map, mhead: S2MapHeader, rawHeaderData: MapHeaderDataRaw) {
+        if (rawHeaderData.extraDependencies) {
+            let depIndex = 0;
+            for (const depItem of rawHeaderData.extraDependencies.reverse()) {
+                let s2dep = map.dependencies[depIndex];
+                if (!s2dep) {
+                    s2dep = new S2MapDependency();
+                    s2dep.regionId = map.regionId;
+                    s2dep.mapId = map.bnetId;
+                    s2dep.dependencyIndex = depIndex;
+                    map.dependencies.push(s2dep);
+                }
+                s2dep.dependencyMapId = depItem.id;
+                [s2dep.majorVersion, s2dep.minorVersion] = decodeMapVersion(depItem.version);
+                ++depIndex;
+            }
+
+            for (let i = depIndex; i < map.dependencies.length; i++) {
+                const s2dep = map.dependencies[i];
+                s2dep.dependencyMapId = 0;
+                s2dep.majorVersion = 0;
+                s2dep.minorVersion = 0;
+            }
+        }
+    }
+
     async updateMapDataFromHeader(map: S2Map, mhead: S2MapHeader, rawHeaderData?: MapHeaderDataRaw, forceUpdate = false) {
-        if (
+        const isInitialUpdate = (
+            !map.initialVersion ||
+            (mhead.majorVersion < map.initialVersion.majorVersion) ||
+            (mhead.majorVersion === map.initialVersion.majorVersion && mhead.minorVersion < map.initialVersion.minorVersion) ||
+            (map.initialVersion.majorVersion === mhead.majorVersion && map.initialVersion.minorVersion === mhead.minorVersion && forceUpdate)
+        );
+        const isLatestUpdate = (
             !map.currentVersion ||
             (mhead.majorVersion > map.currentVersion.majorVersion) ||
             (mhead.majorVersion === map.currentVersion.majorVersion && mhead.minorVersion > map.currentVersion.minorVersion) ||
-            forceUpdate
+            (mhead.majorVersion === map.currentVersion.majorVersion && mhead.minorVersion === map.currentVersion.minorVersion && forceUpdate)
+        );
+        const rcode = GameRegion[mhead.regionId];
+        let dUpdated = false;
+
+        if (
+            (isLatestUpdate || forceUpdate) &&
+            !rawHeaderData
         ) {
-            const rcode = GameRegion[mhead.regionId];
-            if (!rawHeaderData) {
-                rawHeaderData = await this.resolver.getMapHeader(rcode, mhead.headerHash);
-            }
+            rawHeaderData = await this.resolver.getMapHeader(rcode, mhead.headerHash);
+        }
+
+        if (isInitialUpdate) {
+            map.publishedAt = new Date(mhead.uploadedAt);
+            map.initialVersion = mhead;
+            dUpdated = true;
+        }
+
+        if (isLatestUpdate) {
             const mainLocaleTable = rawHeaderData.workingSet.localeTable.find(x => x.locale === GameLocale.enUS)
                 ?? rawHeaderData.workingSet.localeTable[0]
             ;
-            const localizationData = await this.resolver.getMapLocalization(rcode, mainLocaleTable.stringTable[0].hash, true);
+            const localizationData = await this.resolver.getMapLocalization(rcode, mainLocaleTable.stringTable[0].hash);
             const mapHeader = reprocessMapHeader(rawHeaderData, localizationData);
-            const mapIcon = (
-                mapHeader.arcadeInfo?.mapIcon ??
-                mapHeader.workingSet.thumbnail ??
-                mapHeader.workingSet.bigMap ??
-                null
-            );
 
-            const mainCategory = this.mapCategories.find(x => x.id === mapHeader.variants[mapHeader.defaultVariantIndex].categoryId);
+            const defaultVariant = mapHeader.variants[mapHeader.defaultVariantIndex];
+            const mainCategory = this.mapCategories.find(x => x.id === defaultVariant.categoryId);
             if (mapHeader.mapSize) {
                 if (mainCategory.isMelee) {
                     map.type = S2MapType.MeleeMap;
@@ -159,12 +279,22 @@ export class MapIndexer {
             map.name = mapHeader.workingSet.name;
             map.description = mapHeader.workingSet.description;
             map.website = mapHeader.arcadeInfo?.website;
-            map.mainCategoryId = mainCategory.id;
+            map.mainCategoryId = defaultVariant.categoryId;
             map.maxPlayers = mapHeader.workingSet.maxPlayers;
-            map.iconHash = mapIcon?.hash ?? null;
+            map.iconHash = (
+                mapHeader.arcadeInfo?.mapIcon ??
+                mapHeader.workingSet.thumbnail ??
+                mapHeader.workingSet.bigMap ??
+                null
+            )?.hash ?? null;
+            map.thumbnailHash = (
+                mapHeader.workingSet.thumbnail ??
+                mapHeader.workingSet.bigMap ??
+                null
+            )?.hash ?? null;
             map.mainLocale = mainLocaleTable.locale;
             map.mainLocaleHash = mainLocaleTable.stringTable[0].hash;
-            map.updatedAt = mhead.uploadedAt;
+            map.updatedAt = new Date(mhead.uploadedAt);
             map.currentVersion = mhead;
 
             // variants
@@ -186,10 +316,19 @@ export class MapIndexer {
                 }
             }
 
-            return true;
+            this.updateMapDependency(map, mhead, rawHeaderData);
+
+            dUpdated = true;
         }
 
-        return false;
+        if (
+            (isLatestUpdate || forceUpdate) &&
+            (await this.updateMapLocale(map, mhead, rawHeaderData, forceUpdate))
+        ) {
+            dUpdated = true;
+        }
+
+        return dUpdated;
     }
 
     @retry({
@@ -205,6 +344,13 @@ export class MapIndexer {
         },
     })
     async saveMap(map: S2Map, dateQuery?: Date) {
+        if (map.author && (!map.author.lastOnlineAt || map.updatedAt > map.author.lastOnlineAt)) {
+            map.author.lastOnlineAt = map.updatedAt;
+            await this.conn.getRepository(S2Profile).update(map.author.id, {
+                lastOnlineAt: map.author.lastOnlineAt,
+            });
+        }
+
         await this.conn.transaction(async tsManager => {
             if (tsManager.getRepository(S2Map).hasId(map)) {
                 await tsManager.getRepository(S2MapVariant).delete({
@@ -216,12 +362,24 @@ export class MapIndexer {
                 await tsManager.getRepository(S2MapVariant).insert(map.variants);
             }
 
-            if (map.author && (map.author.lastOnlineAt === null || map.updatedAt > map.author.lastOnlineAt)) {
-                map.author.lastOnlineAt = map.updatedAt;
-                await tsManager.getRepository(S2Profile).update(map.author.id, {
-                    lastOnlineAt: map.author.lastOnlineAt,
-                });
+            const removedDepIndex = map.dependencies.findIndex(x => x.dependencyMapId === 0);
+            if (removedDepIndex !== -1) {
+                map.dependencies.splice(removedDepIndex);
+                await tsManager.getRepository(S2MapDependency).createQueryBuilder()
+                    .delete()
+                    .andWhere('regionId = :regionId AND mapId = :mapId AND dependencyIndex >= :depIndex', {
+                        regionId: map.regionId,
+                        mapId: map.bnetId,
+                        depIndex: removedDepIndex,
+                    })
+                    .execute()
+                ;
             }
+            if (map.dependencies.length > 0) {
+                await tsManager.getRepository(S2MapDependency).save(map.dependencies, { transaction: false });
+            }
+
+            await tsManager.getRepository(S2MapLocale).save(map.locales, { transaction: false });
 
             if (dateQuery) {
                 let mtrack = await tsManager.getRepository(S2MapTracking).findOne({
@@ -265,34 +423,48 @@ export class MapIndexer {
             initialRevision : await this.prepareMapRevision(msg.regionId, msg.mapId, msg.latestRevision)
         );
 
-        let map = await this.conn.getRepository(S2Map).findOne({
-            relations: [
-                'currentVersion',
-                'initialVersion',
-                'author',
-            ],
-            where: {
-                regionId: currentRevision.mhead.regionId,
-                bnetId: currentRevision.mhead.bnetId,
-            },
-        });
+        let map = await this.conn.getCustomRepository(S2MapRepository).findOneWithMetadata(
+            currentRevision.mhead.regionId,
+            currentRevision.mhead.bnetId,
+        );
         let updatedMap = false;
+        let isNewMap = false;
 
         if (!map) {
             map = new S2Map();
             map.regionId = currentRevision.mhead.regionId;
             map.bnetId = currentRevision.mhead.bnetId;
+            map.locales = [];
+            map.dependencies = [];
             updatedMap = true;
+            isNewMap = true;
         }
 
+        if ((await this.updateMapDataFromHeader(map, initialRevision.mhead, initialRevision.rawHeaderData))) {
+            updatedMap = true;
+        }
         if ((await this.updateMapDataFromHeader(map, currentRevision.mhead, currentRevision.rawHeaderData))) {
             updatedMap = true;
         }
 
-        if (!map.initialVersion) {
-            map.initialVersion = initialRevision.mhead;
-            map.publishedAt = initialRevision.mhead.uploadedAt;
-            updatedMap = true;
+        if (isNewMap) {
+            const mHeaders = await this.conn.getRepository(S2MapHeader).createQueryBuilder('mhead')
+                .andWhere('mhead.regionId = :regionId AND mhead.bnetId = :bnetId', {
+                    regionId: map.regionId,
+                    bnetId: map.bnetId,
+                })
+                .addOrderBy('mhead.majorVersion', 'DESC')
+                .addOrderBy('mhead.minorVersion', 'DESC')
+                .getMany()
+            ;
+
+            for (const mhead of mHeaders) {
+                if (mhead.absoluteVersion === map.initialVersion.absoluteVersion) continue;
+                if (mhead.absoluteVersion === map.currentVersion.absoluteVersion) continue;
+
+                const rawHeaderData = await this.resolver.getMapHeader(GameRegion[mhead.regionId], mhead.headerHash);
+                await this.updateMapLocale(map, mhead, rawHeaderData);
+            }
         }
 
         if (!map.author) {
@@ -318,19 +490,17 @@ export class MapIndexer {
                     authorProfile.discriminator = msg.author.discriminator;
                     authorProfile.nameUpdatedAt = dateQuery;
                 }
+                await this.conn.getRepository(S2Profile).insert(authorProfile);
             }
             map.author = authorProfile;
             updatedMap = true;
         }
 
-        if (!this.conn.getRepository(S2MapHeader).hasId(initialRevision.mhead)) {
-            await this.conn.getRepository(S2MapHeader).insert(initialRevision.mhead);
+        if (!this.conn.getRepository(S2MapHeader).hasId(map.initialVersion)) {
+            await this.conn.getRepository(S2MapHeader).insert(map.initialVersion);
         }
-        if (!this.conn.getRepository(S2MapHeader).hasId(currentRevision.mhead)) {
-            await this.conn.getRepository(S2MapHeader).insert(currentRevision.mhead);
-        }
-        if (!this.conn.getRepository(S2Profile).hasId(map.author)) {
-            await this.conn.getRepository(S2Profile).insert(map.author);
+        if (!this.conn.getRepository(S2MapHeader).hasId(map.currentVersion)) {
+            await this.conn.getRepository(S2MapHeader).insert(map.currentVersion);
         }
 
         if (updatedMap) {
@@ -348,19 +518,18 @@ export class MapIndexer {
         logger.verbose(`processing map revision ${msg.regionId}/${msg.mapId},${msg.mapVersion}`);
         await this.conn.getRepository(S2MapHeader).insert(mapRevision.mhead);
 
-        const map = await this.conn.getRepository(S2Map).findOne({
-            relations: [
-                'currentVersion',
-                'author',
-            ],
-            where: {
-                regionId: mapRevision.mhead.regionId,
-                bnetId: mapRevision.mhead.bnetId,
-            },
-        });
+        const map = await this.conn.getCustomRepository(S2MapRepository).findOneWithMetadata(
+            mapRevision.mhead.regionId,
+            mapRevision.mhead.bnetId,
+        );
 
         const dateQuery = new Date(msg.queriedAt * 1000);
-        if (map && (await this.updateMapDataFromHeader(map, mapRevision.mhead, mapRevision.rawHeaderData))) {
+        if (
+            map && (
+                (await this.updateMapDataFromHeader(map, mapRevision.mhead, mapRevision.rawHeaderData)) ||
+                (await this.updateMapLocale(map, mapRevision.mhead, mapRevision.rawHeaderData))
+            )
+        ) {
             await this.saveMap(map, dateQuery);
         }
         else if (

@@ -74,4 +74,8 @@ export class S2MapHeader {
     get linkVer() {
         return `${this.regionId}/${this.bnetId} v${this.majorVersion}.${this.minorVersion}`;
     }
+
+    get absoluteVersion() {
+        return ((this.majorVersion & 0xFFFF) << 16) | this.minorVersion & 0xFFFF;
+    }
 }

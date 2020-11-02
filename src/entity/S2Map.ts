@@ -1,10 +1,10 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, Unique, JoinColumn, OneToMany } from 'typeorm';
-import { S2Region } from './S2Region';
 import { GameLocale } from '../common';
 import { S2MapHeader } from './S2MapHeader';
-import { S2MapCategory } from './S2MapCategory';
 import { S2Profile } from './S2Profile';
 import { S2MapVariant } from './S2MapVariant';
+import { S2MapLocale } from './S2MapLocale';
+import { S2MapDependency } from './S2MapDependency';
 
 export enum S2MapType {
     MeleeMap = 'melee_map',
@@ -14,16 +14,12 @@ export enum S2MapType {
 }
 
 @Entity()
-@Unique('region_bnet_idx', ['region', 'bnetId'])
+@Unique('region_bnet_idx', ['regionId', 'bnetId'])
+@Index('category_type_region_idx', ['mainCategoryId', 'type', 'regionId'])
+@Index('type_region_idx', ['type', 'regionId'])
 export class S2Map {
     @PrimaryGeneratedColumn()
     id: number;
-
-    @ManyToOne(type => S2Region, {
-        nullable: false,
-    })
-    @Index('region_idx')
-    region: S2Region;
 
     @Column({
         type: 'tinyint',
@@ -48,7 +44,6 @@ export class S2Map {
         type: 'enum',
         enum: S2MapType,
     })
-    @Index('map_type_idx')
     type: S2MapType;
 
     @ManyToOne(type => S2MapHeader, {
@@ -72,6 +67,7 @@ export class S2Map {
     @Column({
         type: 'char',
         length: 64,
+        collation: 'ascii_bin',
     })
     mainLocaleHash: string;
 
@@ -79,9 +75,17 @@ export class S2Map {
         type: 'char',
         length: 64,
         nullable: true,
+        collation: 'ascii_bin',
     })
-    @Index('icon_hash_idx')
     iconHash: string;
+
+    @Column({
+        type: 'char',
+        length: 64,
+        nullable: true,
+        collation: 'ascii_bin',
+    })
+    thumbnailHash: string;
 
     @Column()
     @Index('name_fulltext_idx', {
@@ -102,14 +106,10 @@ export class S2Map {
     })
     website: string;
 
-    @ManyToOne(type => S2MapCategory, {
-        nullable: true,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
+    @Column({
+        type: 'tinyint',
+        unsigned: true,
     })
-    mainCategory: S2MapCategory;
-
-    @Column()
     mainCategoryId: number;
 
     @Column({
@@ -138,4 +138,12 @@ export class S2Map {
     variants: S2MapVariant[];
 
     revisions?: S2MapHeader[];
+
+    locales?: S2MapLocale[];
+
+    dependencies?: S2MapDependency[];
+
+    getLocalization(locale: GameLocale) {
+        return this.locales?.find(x => x.locale === locale);
+    }
 }

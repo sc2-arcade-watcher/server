@@ -43,11 +43,11 @@ export default fp(async (server, opts) => {
         const map = await server.conn.getRepository(S2Map)
             .createQueryBuilder('map')
             .innerJoinAndSelect('map.currentVersion', 'mapHead')
-            .innerJoinAndSelect('map.mainCategory', 'mainCat')
             .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId', {
                 regionId: request.params.regionId,
                 bnetId: request.params.mapId,
             })
+            .limit(1)
             .getOne()
         ;
 

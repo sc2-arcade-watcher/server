@@ -1,8 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, Index } from 'typeorm';
+import { Entity, PrimaryColumn, Column, Index } from 'typeorm';
 
 @Entity()
 export class S2MapCategory {
-    @PrimaryGeneratedColumn()
+    @PrimaryColumn({
+        type: 'tinyint',
+        unsigned: true,
+    })
     id: number;
 
     @Column({

@@ -123,6 +123,7 @@ export interface MessageMapDiscoverResult extends MessageAcknowledgeable {
     author: PlayerProfile;
     initialRevision: MapVersionInfo;
     latestRevision: MapVersionInfo;
+    versions: MapVersionInfo[];
 }
 
 interface MessageMapUnavailableReport extends MessageAcknowledgeable {

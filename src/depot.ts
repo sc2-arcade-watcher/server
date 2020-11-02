@@ -71,6 +71,18 @@ export class BattleDepot {
 
         return targetFilename;
     }
+
+    async readFile(region: string, filename: string) {
+        const targetFilename = this.ndir.pathTo(filename);
+
+        if ((await fs.pathExists(targetFilename))) {
+            return fs.readFile(targetFilename, { encoding: 'utf8' });
+        }
+
+        return (await axios.get(getDepotURL(region, filename), {
+            responseType: 'text',
+        })).data as string;
+    }
 }
 
 export interface ImagickConvertOptions {

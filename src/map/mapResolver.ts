@@ -399,19 +399,24 @@ export class MapResolver {
     }
 
     async getMapLocalization(region: string, hash: string, persist = true): Promise<MapLocalizationTable> {
-        const fPath = await this.depot.getPathOrRetrieve(region, `${hash}.s2ml`);
-        const data = fxml.parse(await fs.readFile(fPath, { encoding: 'utf8' }), {
+        const remoteName = `${hash}.s2ml`;
+        let content: string;
+        if (persist) {
+            content = await fs.readFile(await this.depot.getPathOrRetrieve(region, remoteName), { encoding: 'utf8' });
+        }
+        else {
+            content = await this.depot.readFile(region, remoteName);
+        }
+        const data = fxml.parse(content, {
             ignoreAttributes: false,
             attributeNamePrefix: '',
             parseNodeValue: true,
             textNodeName: 'text',
             parseTrueNumberOnly: true,
+            trimValues: false,
             attrValueProcessor: (val, attrName) => he.decode(val, { isAttributeValue: true }),
             tagValueProcessor : (val, tagName) => he.decode(val),
         });
-        if (!persist) {
-            await fs.unlink(fPath);
-        }
         const stringMap = new Map<number, string>(data.Locale.e.map((x: { id: string, text: string }) => [Number(x.id), x.text ? String(x.text) : '']));
         return {
             locale: data.Locale.region,
@@ -419,7 +424,7 @@ export class MapResolver {
         };
     }
 
-    async getMapHeader(region: string, hash: string, persist = true) {
+    async getMapHeader(region: string, hash: string) {
         const fPath = await this.depot.getPathOrRetrieve(region, `${hash}.s2mh`);
         const decodingProc = await spawnWaitExit(spawn(process.env.STARC_S2MDEC_PATH ?? 's2mdec', [
             '-c',
@@ -432,9 +437,6 @@ export class MapResolver {
             logger.error('s2mdec stdout', decodingProc.stdout);
             logger.error('s2mdec stderr', decodingProc.stderr);
             throw new Error(`s2mdec failed on "${fPath}" code=${decodingProc.rcode} signal=${decodingProc.signal} killed=${decodingProc.proc.killed}`);
-        }
-        if (!persist) {
-            await fs.unlink(fPath);
         }
         return JSON.parse(decodingProc.stdout) as MapHeaderDataRaw;
     }
