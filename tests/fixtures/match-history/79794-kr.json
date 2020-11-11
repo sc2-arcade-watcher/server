@@ -1,0 +1,32 @@
+{
+    "regionId": 3,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "Halli Galli",
+                    "type": "Custom",
+                    "decision": "Tie",
+                    "speed": "Faster",
+                    "date": 1604163605
+                }
+            ]
+        },
+        {
+            "locale": "koKR",
+            "entries": [
+                {
+                    "map": "할리갈리",
+                    "type": "사용자 지정",
+                    "decision": "무승부",
+                    "speed": "아주 빠름",
+                    "date": 1604163605
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        79794
+    ]
+}

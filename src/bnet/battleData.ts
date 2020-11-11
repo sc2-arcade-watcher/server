@@ -217,29 +217,29 @@ export class BattleMatchEntryMapper {
 
                 // if maps are deleted then name can be reclaimed, so we can get more than more result
                 if (currMapCandidates.length >= 1) {
-                    let finalCandidate: MapLocalizedResult;
+                    let currFinalCandidates: MapLocalizedResult[] = [].concat(...currMapCandidates);
 
-                    if (currMapCandidates.length > 1) {
+                    if (currFinalCandidates.length > 1) {
                         // find appropriate map using available timestamps
                         // the list is intially sorted from newest to oldest
-                        finalCandidate = currMapCandidates.find(x => currEntry.date > (x.publishedAt.getTime() / 1000));
-                    }
-                    else {
-                        finalCandidate = currMapCandidates[0];
-                    }
-
-                    if (!finalCandidate) {
-                        logger.error(`${profile.nameAndId}, wtf finalCandidates invalid`, finalCandidate, currMapCandidates, currEntry);
-                        return false;
+                        currFinalCandidates = currFinalCandidates.filter(x => currEntry.date > (x.publishedAt.getTime() / 1000));
+                        if (currFinalCandidates.length === 0) {
+                            logger.error(`${profile.nameAndId}, wtf finalCandidates empty`, currMapCandidates, currEntry);
+                            return false;
+                        }
                     }
 
-                    const candidateRequestedLocale = finalCandidate.locales.find(x => x.locale === currSrc.locale);
-                    const candidateMainLocale = finalCandidate.locales.find(x => x.isMain);
-                    if (candidateRequestedLocale && candidateRequestedLocale.name === currEntry.map) {
-                        allCurrRegionMatches.push(finalCandidate);
-                    }
-                    else if (candidateMainLocale && candidateMainLocale.name === currEntry.map) {
-                        allCurrRegionMatches.push(finalCandidate);
+                    for (const finalCandidate of currFinalCandidates) {
+                        const candidateRequestedLocale = finalCandidate.locales.find(x => x.locale === currSrc.locale);
+                        const candidateMainLocale = finalCandidate.locales.find(x => x.isMain);
+                        if (candidateRequestedLocale && candidateRequestedLocale.name === currEntry.map) {
+                            allCurrRegionMatches.push(finalCandidate);
+                            break;
+                        }
+                        else if (candidateMainLocale && candidateMainLocale.name === currEntry.map) {
+                            allCurrRegionMatches.push(finalCandidate);
+                            break;
+                        }
                     }
                 }
                 else {
@@ -259,7 +259,11 @@ export class BattleMatchEntryMapper {
 
             if (!currFinalMatches.size && bSrcs.length >= sourcesLimit) {
                 const tdiffDays = (((new Date()).getTime() / 1000) - firstSrc.entries[entryIndex].date) / (3600 * 24);
-                if (tdiffDays >= 5) {
+                logger.warn(
+                    `${profile.nameAndId} couldn't identify map, tdiff=${tdiffDays.toFixed(1)}`,
+                    bSrcs.map(x => [x.locale, x.entries[entryIndex]]),
+                );
+                if (tdiffDays >= 28) {
                     currMappedEntry.mapId = 0;
                     mappedEntries.push(currMappedEntry);
                     continue;
@@ -353,7 +357,7 @@ export class BattleDataUpdater {
         }
         switch (regionId) {
             case GameRegion.US: {
-                return this.bAPIEntry.us;
+                return this.bAPIEntry.eu;
             }
             case GameRegion.EU: {
                 return this.bAPIEntry.eu;
@@ -596,6 +600,9 @@ export class BattleDataUpdater {
             const srcLocales = [
                 GameLocale.enUS,
                 GameLocale.plPL,
+                GameLocale.koKR,
+                GameLocale.zhCN,
+                GameLocale.zhTW,
                 GameLocale.ruRU,
             ];
             for (const locale of srcLocales) {

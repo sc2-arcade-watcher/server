@@ -33,7 +33,7 @@ export enum S2MatchType {
 
 @Entity()
 @Index('profile_region_idx', ['profileId', 'regionId'])
-@Index('map_region_idx', ['mapId', 'regionId'])
+@Index('map_region_date_idx', ['mapId', 'regionId', 'date'])
 export class S2ProfileMatch {
     @PrimaryGeneratedColumn({
         unsigned: true,

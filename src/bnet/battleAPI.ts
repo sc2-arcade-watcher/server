@@ -10,6 +10,10 @@ import { isAxiosError, sleep } from '../helpers';
 import { logger } from '../logger';
 
 export type BattleAPIGateway = '{region}.battle.net'
+    | 'us.battle.net'
+    | 'eu.battle.net'
+    | 'kr.battle.net'
+    | 'www.battlenet.com.cn'
     | '{region}.api.blizzard.com'
     | 'us.api.blizzard.com'
     | 'eu.api.blizzard.com'
@@ -54,8 +58,8 @@ abstract class BattleAPIBase {
         };
         this.mConfig.client.gateway = Object.assign({
             general: '{region}.api.blizzard.com',
-            oauth: '{region}.battle.net',
-            sc2: 'gateway.battlenet.com.cn',
+            oauth: 'us.battle.net',
+            sc2: '{region}.api.blizzard.com',
         }, params.client?.gateway ?? {});
 
         this.axios = this.createAxios();
@@ -351,7 +355,8 @@ export class BattleAPI {
                     await sleep(350 * Math.pow((error.config as any).retryAttempt, 1.4));
                 }
                 else if (error?.code === 'ECONNRESET') {
-                    logger.warn(`req failed due to ${error?.code}, retrying..`);
+                    logger.warn(`req failed due to ${error?.code}, retrying in..`);
+                    await sleep(1000 * Math.pow((error.config as any).retryAttempt, 1.4));
                 }
                 else {
                     throw error;

@@ -1,0 +1,44 @@
+{
+    "regionId": 5,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "人类防御战 中文版（双倍金钱、经验）",
+                    "type": "自定义",
+                    "decision": "获胜",
+                    "speed": "最快",
+                    "date": 1605036120
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "人类防御战 中文版（双倍金钱、经验）",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1605036120
+                }
+            ]
+        },
+        {
+            "locale": "zhCN",
+            "entries": [
+                {
+                    "map": "人类防御战 中文版（双倍金钱、经验）",
+                    "type": "自定义",
+                    "decision": "获胜",
+                    "speed": "最快",
+                    "date": 1605036120
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        55679
+    ]
+}

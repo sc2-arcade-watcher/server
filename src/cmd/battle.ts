@@ -61,6 +61,7 @@ program.command('battle:sync-profile')
     .option<Number>('--chunk-size [number]', 'number of records to fetch per chunk', (value, previous) => Number(value), 2000)
     .option<Number[]>('--region [regionId]', 'region', (value, previous) => value.split(',').map(x => Number(x)), [])
     .option<String>('--profile [profile handle]', 'profile handle', null)
+    .option<Number>('--online-margin [days]', '', (value, previous) => Number(value), 14)
     .option<Number>('--hist-delay [hours]', 'match history scan delay', (value, previous) => Number(value), 2)
     .option<Number>('--loop-delay [seconds]', '', (value, previous) => Number(value), -1)
     .option<Number>('--offset [number]', 'initial offset id', (value, previous) => Number(value), 0)
@@ -114,13 +115,14 @@ program.command('battle:sync-profile')
                     `(
                         pTrack.matchHistoryUpdatedAt IS NULL OR (
                             pTrack.matchHistoryUpdatedAt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL :histDelay HOUR) AND
-                            profile.lastOnlineAt > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 DAY)
+                            profile.lastOnlineAt > DATE_SUB(UTC_TIMESTAMP(), INTERVAL :onlineMargin DAY)
                         )
                     )`,
                 ].join(' OR ') + ')', {
                     histDelay: cmd.histDelay,
+                    onlineMargin: cmd.onlineMargin,
                 });
-                qb.andWhere('(pTrack.battleAPIErrorCounter IS NULL OR pTrack.battleAPIErrorCounter < 14)');
+                qb.andWhere('(pTrack.battleAPIErrorCounter IS NULL OR pTrack.battleAPIErrorCounter < 10)');
             }
 
             qb.limit(chunkLimit);
@@ -186,7 +188,7 @@ program.command('battle:sync-profile')
                             affectedMatches &&
                             (!profile.tracking?.profileInfoUpdatedAt || profile.tracking?.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? new Date(), 14))
                         ) ||
-                        (!profile.tracking?.profileInfoUpdatedAt || profile.tracking?.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? new Date(), 30)) ||
+                        (!profile.tracking?.profileInfoUpdatedAt || profile.tracking?.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? new Date(), 90)) ||
                         profile.avatarUrl === null
                     ) {
                         logger.verbose(`[${profile.id.toString().padStart(8, ' ')}] Updating profile "${profile.nameAndId}", meta data..`);
