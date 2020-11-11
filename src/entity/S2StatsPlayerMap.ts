@@ -1,9 +1,10 @@
 import { Entity, Column, Index } from 'typeorm';
+import { S2Map } from './S2Map';
+import { S2Profile } from './S2Profile';
 
 @Entity()
 @Index('map_lob_started_idx', ['mapId', 'regionId', 'lobbiesStarted'])
 @Index('map_lob_host_started_idx', ['mapId', 'regionId', 'lobbiesHostedStarted'])
-@Index('profile_map_lob_started_idx', ['profileId', 'mapId', 'regionId', 'realmId', 'lobbiesStarted'])
 export class S2StatsPlayerMap {
     @Column({
         primary: true,
@@ -11,13 +12,6 @@ export class S2StatsPlayerMap {
         unsigned: true,
     })
     regionId: number;
-
-    @Column({
-        primary: true,
-        type: 'mediumint',
-        unsigned: true,
-    })
-    mapId: number;
 
     @Column({
         primary: true,
@@ -32,12 +26,26 @@ export class S2StatsPlayerMap {
     })
     profileId: number;
 
+    @Column({
+        primary: true,
+        type: 'mediumint',
+        unsigned: true,
+    })
+    mapId: number;
+
     /** total number of joined lobbies which resulted in a game */
     @Column({
         type: 'mediumint',
         unsigned: true,
     })
     lobbiesStarted: number;
+
+    /** total number of joined lobbies which resulted in a game, constrained to at most 1 within period of a day */
+    @Column({
+        type: 'mediumint',
+        unsigned: true,
+    })
+    lobbiesStartedDiffDays: number;
 
     /** total number of different lobbies joined */
     @Column({
@@ -74,11 +82,25 @@ export class S2StatsPlayerMap {
 
     /** last time seen in started lobby */
     @Column({
-        default: 0,
+        default: '0000-00-00 00:00:00',
     })
     lastPlayedAt: Date;
 
-    /** stats updated at */
-    @Column()
-    updatedAt: Date;
+    map?: S2Map;
+
+    profile?: S2Profile;
+
+    static create(params: Partial<S2StatsPlayerMap> = {}) {
+        const defaults: Partial<S2StatsPlayerMap> = {
+            lobbiesStarted: 0,
+            lobbiesStartedDiffDays: 0,
+            lobbiesJoined: 0,
+            lobbiesHosted: 0,
+            lobbiesHostedStarted: 0,
+            timeSpentWaiting: 0,
+            timeSpentWaitingAsHost: 0,
+            lastPlayedAt: new Date(0),
+        };
+        return Object.assign(new S2StatsPlayerMap(), defaults, params);
+    }
 }

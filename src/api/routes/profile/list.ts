@@ -97,7 +97,7 @@ export default fp(async (server, opts) => {
         }
 
         if (request.query.name !== void 0 && request.query.name.trim().length) {
-            const nameQuery = request.query.name.replace(/%/g, '') as string;
+            const nameQuery = (request.query.name as string).replace(/([\%\?])/g, '\\$1');
 
             if (nameQuery.length) {
                 if (nameQuery.indexOf('#') > 0) {

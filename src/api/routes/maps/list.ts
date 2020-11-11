@@ -220,7 +220,7 @@ export default fp(async (server, opts) => {
                 ;
             }
             else {
-                nameQuery = nameQuery.replace(/%/g, '');
+                nameQuery = nameQuery.replace(/([\%\?])/g, '\\$1');
                 qb
                     .andWhere('map.name LIKE :name', { name: nameQuery + '%' })
                 ;

@@ -127,6 +127,7 @@ server.register(require('../api/routes/profile/list').default);
 server.register(require('../api/routes/profile/show').default);
 server.register(require('../api/routes/profile/summary').default);
 server.register(require('../api/routes/profile/matches').default);
+server.register(require('../api/routes/profile/mostPlayed').default);
 
 server.register(require('../api/routes/lobby/openGames').default);
 server.register(require('../api/routes/lobby/active').default);
@@ -139,6 +140,7 @@ server.register(require('../api/routes/maps/details').default);
 server.register(require('../api/routes/maps/versions').default);
 server.register(require('../api/routes/maps/dependencies').default);
 server.register(require('../api/routes/maps/stats').default);
+server.register(require('../api/routes/maps/playerBase').default);
 
 server.register(require('../api/routes/mapCategories').default);
 

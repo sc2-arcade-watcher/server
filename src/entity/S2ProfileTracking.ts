@@ -54,4 +54,9 @@ export class S2ProfileTracking {
         default: false,
     })
     preferPublicGateway: boolean;
+
+    @Column({
+        nullable: true,
+    })
+    mapStatsUpdatedAt: Date | null;
 }
