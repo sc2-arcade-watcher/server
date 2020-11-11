@@ -6,11 +6,15 @@ import Axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosTransform
 import applyCaseMiddleware from 'axios-case-converter';
 import * as snakecaseKeys from 'snakecase-keys';
 import { GameRegion, regionCode } from '../common';
-import { isAxiosError } from '../helpers';
+import { isAxiosError, sleep } from '../helpers';
 import { logger } from '../logger';
 
-type BattleAPIGateway = '{region}.battle.net'
+export type BattleAPIGateway = '{region}.battle.net'
     | '{region}.api.blizzard.com'
+    | 'us.api.blizzard.com'
+    | 'eu.api.blizzard.com'
+    | 'kr.api.blizzard.com'
+    | 'tw.api.blizzard.com'
     | 'gateway.battlenet.com.cn'
     | 'starcraft2.com/en-us/api'
 ;
@@ -338,10 +342,13 @@ export class BattleAPI {
                 }
                 (error.config as any).retryAttempt = ((error.config as any).retryAttempt ?? 0) + 1;
 
-                if (error.response?.status === 401) {
+                if (error?.response?.status === 401) {
                     logger.warn(`Battle accessToken expired? reqUrl=${error.config.url}`);
                     const tokenInfo = await this.refreshToken();
                     error.config.headers['Authorization'] = `Bearer ${tokenInfo.accessToken}`;
+                }
+                else if (error?.response?.status === 503 || error?.response?.status === 504 || error?.response?.status === 429) {
+                    await sleep(350 * Math.pow((error.config as any).retryAttempt, 1.4));
                 }
                 else if (error?.code === 'ECONNRESET') {
                     logger.warn(`req failed due to ${error?.code}, retrying..`);
