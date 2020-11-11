@@ -16,7 +16,7 @@ import { GameRegion, GameLocale } from '../common';
 
 const reSpecialChars = /[^a-z0-9]+/g;
 
-type ResolvedMapLocale = Pick<S2MapLocale, 'regionId' | 'bnetId' | 'locale' | 'inLatestVersion' | 'isMain' | 'name'>;
+type ResolvedMapLocale = Pick<S2MapLocale, 'regionId' | 'bnetId' | 'locale' | 'inLatestVersion' | 'isMain' | 'originalName' | 'name'>;
 
 interface MapLocalizedResult {
     regionId: number;
@@ -73,10 +73,10 @@ export class BattleMatchEntryMapper {
         }
         else if (params.name) {
             if (typeof params.name === 'string') {
-                qb.andWhere('mapLocale.name = :name', { name: params.name });
+                qb.andWhere('(mapLocale.name = :name OR mapLocale.originalName = :name)', { name: params.name });
             }
             else {
-                qb.andWhere('mapLocale.name IN (:name)', { name: params.name });
+                qb.andWhere('(mapLocale.name IN (:name) OR mapLocale.originalName IN (:name))', { name: params.name });
             }
         }
         else {
@@ -108,6 +108,7 @@ export class BattleMatchEntryMapper {
                 'mapLocale.locale',
                 'mapLocale.inLatestVersion',
                 'mapLocale.isMain',
+                'mapLocale.originalName',
                 'mapLocale.name',
             ])
             .addOrderBy('map.regionId', 'DESC')
@@ -229,14 +230,21 @@ export class BattleMatchEntryMapper {
                         }
                     }
 
+                    const currMapNameLower = currEntry.map.toLowerCase();
                     for (const finalCandidate of currFinalCandidates) {
                         const candidateRequestedLocale = finalCandidate.locales.find(x => x.locale === currSrc.locale);
                         const candidateMainLocale = finalCandidate.locales.find(x => x.isMain);
-                        if (candidateRequestedLocale && candidateRequestedLocale.name === currEntry.map) {
+                        if (candidateRequestedLocale && (
+                            candidateRequestedLocale.originalName?.toLowerCase() === currMapNameLower ||
+                            candidateRequestedLocale.name.toLowerCase() === currMapNameLower
+                        )) {
                             allCurrRegionMatches.push(finalCandidate);
                             break;
                         }
-                        else if (candidateMainLocale && candidateMainLocale.name === currEntry.map) {
+                        else if (candidateMainLocale && (
+                            candidateMainLocale.originalName?.toLowerCase() === currMapNameLower ||
+                            candidateMainLocale.name.toLowerCase() === currMapNameLower
+                        )) {
                             allCurrRegionMatches.push(finalCandidate);
                             break;
                         }
@@ -263,7 +271,8 @@ export class BattleMatchEntryMapper {
                     `${profile.nameAndId} couldn't identify map, tdiff=${tdiffDays.toFixed(1)}`,
                     bSrcs.map(x => [x.locale, x.entries[entryIndex]]),
                 );
-                if (tdiffDays >= 28) {
+                // FIXME: temporaily disabled
+                if (tdiffDays >= 28 && false) {
                     currMappedEntry.mapId = 0;
                     mappedEntries.push(currMappedEntry);
                     continue;
@@ -286,7 +295,9 @@ export class BattleMatchEntryMapper {
                         regionId: relevantRegions,
                         mapId: item.mapId,
                     }));
-                    const nameMatching = crossMapIdMatches.map(x => x.locales).flat(1).filter(x => possibleNames.findIndex(y => y === x.name) !== -1);
+                    const nameMatching = crossMapIdMatches.map(x => x.locales).flat(1).filter(x => {
+                        return possibleNames.findIndex(y => y === x.originalName || y === x.name) !== -1;
+                    });
                     allValidCrossLocales.push(...nameMatching);
                 }
                 const allValidMapIds = new Set<number>();
@@ -604,6 +615,7 @@ export class BattleDataUpdater {
                 GameLocale.zhCN,
                 GameLocale.zhTW,
                 GameLocale.ruRU,
+                GameLocale.deDE,
             ];
             for (const locale of srcLocales) {
                 bMatchSrcs.push({

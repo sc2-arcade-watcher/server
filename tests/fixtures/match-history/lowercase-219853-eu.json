@@ -1,0 +1,32 @@
+{
+    "regionId": 2,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "lava big game hunters",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Normal",
+                    "date": 1605017529
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "lava big game hunters",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Normalnie",
+                    "date": 1605017529
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        219853
+    ]
+}

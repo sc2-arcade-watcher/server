@@ -3,6 +3,7 @@ import { GameLocale } from '../common';
 
 @Entity()
 @Index('name_region_idx', ['name', 'regionId'])
+@Index('original_name_region_idx', ['originalName', 'regionId'])
 export class S2MapLocale {
     @Column({
         type: 'tinyint',
@@ -42,6 +43,11 @@ export class S2MapLocale {
 
     @Column()
     isMain: boolean;
+
+    @Column({
+        nullable: true,
+    })
+    originalName: string | null;
 
     @Column()
     name: string;

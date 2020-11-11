@@ -1,0 +1,32 @@
+{
+    "regionId": 2,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "Zone Control v1.0 Reload",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1605056670
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "Zone Control v1.0 Reload",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1605056670
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        176485
+    ]
+}

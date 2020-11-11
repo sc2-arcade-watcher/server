@@ -1,0 +1,44 @@
+{
+    "regionId": 3,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "P A R A S I T E - ZETA KR",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1562052319
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "P A R A S I T E - ZETA KR",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1562052319
+                }
+            ]
+        },
+        {
+            "locale": "koKR",
+            "entries": [
+                {
+                    "map": "기 생 수 -- 제타",
+                    "type": "사용자 지정",
+                    "decision": "패",
+                    "speed": "아주 빠름",
+                    "date": 1562052319
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        132368
+    ]
+}

@@ -30,6 +30,7 @@ program.command('map:dump-header <region> <hash>')
 program.command('map:update')
     .option<Number>('--id [number]', 'db id', (value, previous) => Number(value), null)
     .option<String>('--global-id [number]', 'bnet map id, in format "regionId/mapId"', (value, previous) => String(value), null)
+    .option('--initial-only', 'reindex only initial version', false)
     .option('--latest-only', 'reindex only latest version', false)
     .option<Number>('--offset [number]', 'offset', (value, previous) => Number(value), null)
     .option<Number>('--concurrency [number]', 'concurrency', (value, previous) => Number(value), 5)
@@ -75,15 +76,18 @@ program.command('map:update')
                     regionId: map.regionId,
                     bnetId: map.bnetId,
                 })
-                .addOrderBy('mhead.majorVersion', 'DESC')
-                .addOrderBy('mhead.minorVersion', 'DESC')
+                .addOrderBy('mhead.majorVersion', 'ASC')
+                .addOrderBy('mhead.minorVersion', 'ASC')
                 .getMany()
             ;
 
             const vTotal = mHeaders.length;
             for (const [verIndex, verInfo] of mHeaders.entries()) {
-                const isLatest = verIndex === 0;
-                if (cmd.latestOnly && !isLatest) continue;
+                const isLatest = verIndex === vTotal - 1;
+                const isInitial = verIndex === 0;
+                if ((cmd.latestOnly && !isLatest) || (cmd.initialOnly && !isInitial)) {
+                    continue;
+                }
                 logger.verbose(oneLine`
                     [${map.id.toString().padStart(6, ' ')}/${listMapIds[listMapIds.length - 1].toString().padStart(6, ' ')}]
                     Processing map version

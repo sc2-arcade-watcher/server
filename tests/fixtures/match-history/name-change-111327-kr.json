@@ -1,0 +1,32 @@
+{
+    "regionId": 3,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "컴퓨터 디펜스 Season 3 [E]",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1604766299
+                }
+            ]
+        },
+        {
+            "locale": "koKR",
+            "entries": [
+                {
+                    "map": "컴퓨터 디펜스 Season 3 [E]",
+                    "type": "사용자 지정",
+                    "decision": "패",
+                    "speed": "아주 빠름",
+                    "date": 1604766299
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        111327
+    ]
+}

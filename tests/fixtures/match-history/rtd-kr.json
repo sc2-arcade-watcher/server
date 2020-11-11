@@ -171,13 +171,6 @@
                     "decision": "Left",
                     "speed": "Faster",
                     "date": 1596955044
-                },
-                {
-                    "map": "Sengoku",
-                    "type": "Custom",
-                    "decision": "Win",
-                    "speed": "Faster",
-                    "date": 1596954326
                 }
             ]
         },
@@ -351,13 +344,6 @@
                     "decision": "Opuszczono",
                     "speed": "Szybciej",
                     "date": 1596955044
-                },
-                {
-                    "map": "Sengoku",
-                    "type": "Własne",
-                    "decision": "Wygrana",
-                    "speed": "Szybciej",
-                    "date": 1596954326
                 }
             ]
         }
@@ -386,7 +372,6 @@
         120692,
         133827,
         134254,
-        114309,
-        0
+        114309
     ]
 }

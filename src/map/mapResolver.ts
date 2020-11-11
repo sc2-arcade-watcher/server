@@ -398,7 +398,7 @@ export class MapResolver {
     constructor(protected conn: orm.Connection) {
     }
 
-    async getMapLocalization(region: string, hash: string, persist = true): Promise<MapLocalizationTable> {
+    async getMapLocalization(region: string, hash: string, persist = false): Promise<MapLocalizationTable> {
         const remoteName = `${hash}.s2ml`;
         let content: string;
         if (persist) {
