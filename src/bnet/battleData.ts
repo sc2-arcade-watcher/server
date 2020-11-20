@@ -13,6 +13,7 @@ import { S2Map } from '../entity/S2Map';
 import { S2MapLocale } from '../entity/S2MapLocale';
 import { oneLine } from 'common-tags';
 import { GameRegion, GameLocale } from '../common';
+import { S2ProfileMatchUnknownMap } from '../entity/S2ProfileMatchUnknownMap';
 
 const reSpecialChars = /[^a-z0-9]+/g;
 
@@ -28,6 +29,10 @@ interface MapLocalizedResult {
 
 export type BattleMatchMapMapped = BattleSC2MatchEntry & {
     mapId: number;
+    mapNames?: {
+        name: string;
+        locale: GameLocale;
+    }[];
 };
 
 export interface BattleMatchMappingResult {
@@ -224,10 +229,6 @@ export class BattleMatchEntryMapper {
                         // find appropriate map using available timestamps
                         // the list is intially sorted from newest to oldest
                         currFinalCandidates = currFinalCandidates.filter(x => currEntry.date > (x.publishedAt.getTime() / 1000));
-                        if (currFinalCandidates.length === 0) {
-                            logger.error(`${profile.nameAndId}, wtf finalCandidates empty`, currMapCandidates, currEntry);
-                            return false;
-                        }
                     }
 
                     const currMapNameLower = currEntry.map.toLowerCase();
@@ -267,20 +268,24 @@ export class BattleMatchEntryMapper {
 
             if (!currFinalMatches.size && bSrcs.length >= sourcesLimit) {
                 const tdiffDays = (((new Date()).getTime() / 1000) - firstSrc.entries[entryIndex].date) / (3600 * 24);
-                logger.warn(
+                logger.debug(
                     `${profile.nameAndId} couldn't identify map, tdiff=${tdiffDays.toFixed(1)}`,
                     bSrcs.map(x => [x.locale, x.entries[entryIndex]]),
                 );
-                // FIXME: temporaily disabled
-                if (tdiffDays >= 28 && false) {
-                    currMappedEntry.mapId = 0;
-                    mappedEntries.push(currMappedEntry);
-                    continue;
-                }
-                else {
-                    // hold on for few days - it might be just not yet indexed map
+                if (tdiffDays <= 0.5) {
+                    // hold on - it might be just not yet indexed map
                     break;
                 }
+
+                currMappedEntry.mapNames = bSrcs.map(x => {
+                    return {
+                        locale: x.locale,
+                        name: x.entries[entryIndex].map,
+                    };
+                }).filter(x => x.locale === GameLocale.enUS || x.name !== firstSrc.entries[entryIndex].map);
+                currMappedEntry.mapId = 0;
+                mappedEntries.push(currMappedEntry);
+                continue;
             }
 
             // as last effort check for cross bnetId matches
@@ -616,6 +621,7 @@ export class BattleDataUpdater {
                 GameLocale.zhTW,
                 GameLocale.ruRU,
                 GameLocale.deDE,
+                GameLocale.frFR,
             ];
             for (const locale of srcLocales) {
                 bMatchSrcs.push({
@@ -644,20 +650,28 @@ export class BattleDataUpdater {
                 }
 
                 if (bMatchHistoryResult.matches.length) {
-                    const bValidMatches = bMatchHistoryResult.matches.filter(x => x.mapId !== 0);
+                    const bUnknownMatches = bMatchHistoryResult.matches.filter(x => x.mapId === 0);
                     logger.info(oneLine`
                         [${profile.id.toString().padStart(8, ' ')}]
-                        recv=${bValidMatches.length.toString().padStart(2, '0')}
+                        recv=${bMatchHistoryResult.matches.length.toString().padStart(2, '0')}
                         tdiff=${tdiff.toFixed(1).padStart(5, '0')}h
                         integral=${typeof updatedTrackingData.matchHistoryIntegritySince === 'undefined' ? 1 : 0}
+                        unk=${bUnknownMatches.length}
                         :: ${profile.nameAndIdPad}
                     `);
 
-                    for (const item of bValidMatches) {
-                        newMatchEntries.push(this.bMapper.createMatchEntry(profile, item));
-                    }
-                    if (newMatchEntries.length) {
-                        await this.conn.getRepository(S2ProfileMatch).insert(newMatchEntries);
+                    newMatchEntries = bMatchHistoryResult.matches.map(x => this.bMapper.createMatchEntry(profile, x));
+                    await this.conn.getRepository(S2ProfileMatch).insert(newMatchEntries);
+                    for (const [currIndex, currMatch] of bMatchHistoryResult.matches.entries()) {
+                        if (currMatch.mapId !== 0) continue;
+                        const unkMatchMap = currMatch.mapNames.map(mapName => {
+                            const unk = new S2ProfileMatchUnknownMap();
+                            unk.match = newMatchEntries[currIndex];
+                            unk.locale = mapName.locale;
+                            unk.name = mapName.name;
+                            return unk;
+                        });
+                        await this.conn.getRepository(S2ProfileMatchUnknownMap).insert(unkMatchMap);
                     }
 
                     const tmpDate = new Date(bMatchHistoryResult.matches[bMatchHistoryResult.matches.length - 1].date * 1000);

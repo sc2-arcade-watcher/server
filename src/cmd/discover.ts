@@ -96,8 +96,8 @@ program.command('discover:profile')
         });
 
         let regionId = cmd.region;
-        let realmId = cmd.region;
-        let profileId = cmd.offset;
+        let realmId = 0;
+        let profileId = Math.max(cmd.offset - 1, 0);
         const bDiscovery = new BattleDiscovery(gateway);
         const activeJobIds = new Set<number>();
 
@@ -152,7 +152,7 @@ program.command('discover:profile')
 
                 activeJobIds.add(profParams.profileId);
                 try {
-                    const checkpointId = Array.from(activeJobIds.values()).sort((a, b) => a - b)[0];
+                    let checkpointId = Array.from(activeJobIds.values()).sort((a, b) => a - b)[0];
                     logger.verbose(`Trying ${profileHandle(profParams)} :: checkpoint ${checkpointId}`);
 
                     const bResult = await bDiscovery.retrieveProfileMeta(profParams);
@@ -161,6 +161,7 @@ program.command('discover:profile')
                     s2prof.name = bResult.name;
                     s2prof.avatarUrl = bResult.avatarUrl;
 
+                    checkpointId = Array.from(activeJobIds.values()).sort((a, b) => a - b)[0];
                     logger.info(`Discovered ${s2prof.nameAndIdPad} :: checkpoint ${checkpointId}`);
                     try {
                         await conn.getRepository(S2Profile).save(s2prof, { transaction: false });

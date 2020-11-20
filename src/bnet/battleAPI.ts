@@ -6,7 +6,7 @@ import Axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosTransform
 import applyCaseMiddleware from 'axios-case-converter';
 import * as snakecaseKeys from 'snakecase-keys';
 import { GameRegion, regionCode } from '../common';
-import { isAxiosError, sleep } from '../helpers';
+import { isAxiosError, sleep, TypedEvent } from '../helpers';
 import { logger } from '../logger';
 
 export type BattleAPIGateway = '{region}.battle.net'
@@ -323,6 +323,8 @@ const defaultConfig: BattleAPIClientConfig = {
     })(),
 };
 
+let battleTokenRefreshEvent: TypedEvent<string> = void 0;
+
 export class BattleAPI {
     public readonly oauth: BattleOAuth;
     public readonly sc2: BattleSC2;
@@ -348,8 +350,11 @@ export class BattleAPI {
 
                 if (error?.response?.status === 401) {
                     logger.warn(`Battle accessToken expired? reqUrl=${error.config.url}`);
-                    const tokenInfo = await this.refreshToken();
-                    error.config.headers['Authorization'] = `Bearer ${tokenInfo.accessToken}`;
+                    const accessToken = await this.refreshToken();
+                    if (!accessToken) {
+                        throw error;
+                    }
+                    error.config.headers['Authorization'] = `Bearer ${accessToken}`;
                 }
                 else if (error?.response?.status === 503 || error?.response?.status === 504 || error?.response?.status === 429) {
                     await sleep(350 * Math.pow((error.config as any).retryAttempt, 1.4));
@@ -367,12 +372,29 @@ export class BattleAPI {
         });
     }
 
-    async refreshToken() {
-        logger.verbose(`Refreshing Battle token..`);
-        const tokenInfo = (await this.oauth.acquireToken({ grantType: 'client_credentials' })).data;
-        this.sc2.axios.defaults.headers['Authorization'] = `Bearer ${tokenInfo.accessToken}`;
-        logger.verbose(`Refreshed Battle token, accessToken=${tokenInfo.accessToken} expiresIn=${tokenInfo.expiresIn}`);
-        await fs.writeFile('data/.battle_token', tokenInfo.accessToken, { encoding: 'utf8' });
-        return tokenInfo;
+    async refreshToken(): Promise<string | undefined> {
+        if (battleTokenRefreshEvent) {
+            return (new Promise((resolve, reject) => {
+                battleTokenRefreshEvent.once((ev) => { resolve(ev); });
+            }));
+        }
+
+        battleTokenRefreshEvent = new TypedEvent();
+        try {
+            logger.verbose(`Refreshing Battle token..`);
+            const tokenInfo = (await this.oauth.acquireToken({ grantType: 'client_credentials' })).data;
+            this.sc2.axios.defaults.headers['Authorization'] = `Bearer ${tokenInfo.accessToken}`;
+            logger.verbose(`Refreshed Battle token, accessToken=${tokenInfo.accessToken} expiresIn=${tokenInfo.expiresIn}`);
+            await fs.writeFile('data/.battle_token', tokenInfo.accessToken, { encoding: 'utf8' });
+            battleTokenRefreshEvent.emit(tokenInfo.accessToken);
+            return tokenInfo.accessToken;
+        }
+        catch (err) {
+            logger.error(`Failed to refresh token`, err);
+            battleTokenRefreshEvent.emit(void 0);
+        }
+        finally {
+            battleTokenRefreshEvent = void 0;
+        }
     }
 }

@@ -70,6 +70,7 @@ export default fp(async (server, opts) => {
                 'map.name',
                 'map.iconHash',
             ])
+            .andWhere('profMatch.mapId != 0')
             .andWhere('profMatch.regionId = :regionId AND profMatch.realmId = :realmId AND profMatch.profileId = :profileId', {
                 regionId: request.params.regionId,
                 realmId: request.params.realmId,
