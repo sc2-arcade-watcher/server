@@ -266,6 +266,66 @@ export class BattleMatchEntryMapper {
                 continue;
             }
 
+            // as last effort check for cross bnetId matches
+            if (bSrcs.length >= 3) {
+                const relevantRegions = [GameRegion.US, GameRegion.EU, GameRegion.KR, GameRegion.CN];
+                relevantRegions.splice(relevantRegions.findIndex(x => x === reqRegionId), 1);
+                const possibleNames = Array.from(new Set(bSrcs.map(x => x.entries[entryIndex].map)));
+
+                if (currFinalMatches.size === 2) {
+                    const allValidCrossLocales: ResolvedMapLocale[] = [];
+                    for (const item of currFinalMatches.values()) {
+                        const crossMapIdMatches = (await this.fetchMaps({
+                            regionId: relevantRegions,
+                            mapId: item.mapId,
+                        }));
+                        const nameMatching = crossMapIdMatches.map(x => x.locales).flat(1).filter(x => {
+                            return possibleNames.findIndex(y => y === x.originalName || y === x.name) !== -1;
+                        });
+                        allValidCrossLocales.push(...nameMatching);
+                    }
+                    const allValidMapIds = new Set<number>();
+                    allValidCrossLocales.forEach(x => {
+                        allValidMapIds.add(x.bnetId);
+                    });
+
+                    if (allValidMapIds.size === 1) {
+                        const finalValidMapId = Array.from(allValidMapIds)[0];
+                        const superFinalMatches = allCurrRegionMatches.filter(x => x.mapId !== finalValidMapId);
+                        const unSet = new Set(superFinalMatches.map(x => `${x.regionId}/${x.mapId}`));
+                        if (unSet.size === 1) {
+                            currMappedEntry.mapId = superFinalMatches[0].mapId;
+                            mappedEntries.push(currMappedEntry);
+                            continue;
+                        }
+                    }
+                }
+                else if (currFinalMatches.size === 0 && possibleNames.length === 1) {
+                    // if neither of the names matches it most likely means they're all fake
+                    // so let's see if there's anything by that name anywhere
+                    const crossMapIdMatches = (await this.fetchMaps({
+                        // regionId: relevantRegions,
+                        name: possibleNames,
+                    }));
+                    if (crossMapIdMatches.length === 1) {
+                        const mirrorMatch = crossMapIdMatches[0];
+                        if (mirrorMatch.regionId !== reqRegionId && mirrorMatch.locales.length >= bSrcs.length) {
+                            const possiblyValidMatch = (await this.fetchMaps({
+                                regionId: reqRegionId,
+                                mapId: mirrorMatch.mapId,
+                            }));
+
+                            // that must be it, and if it's not.. then it might be just lost case
+                            if (possiblyValidMatch.length === 1) {
+                                currMappedEntry.mapId = possiblyValidMatch[0].mapId;
+                                mappedEntries.push(currMappedEntry);
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+
             if (!currFinalMatches.size && bSrcs.length >= sourcesLimit) {
                 const tdiffDays = (((new Date()).getTime() / 1000) - firstSrc.entries[entryIndex].date) / (3600 * 24);
                 logger.debug(
@@ -286,39 +346,6 @@ export class BattleMatchEntryMapper {
                 currMappedEntry.mapId = 0;
                 mappedEntries.push(currMappedEntry);
                 continue;
-            }
-
-            // as last effort check for cross bnetId matches
-            if (bSrcs.length >= 3 && currFinalMatches.size === 2) {
-                const relevantRegions = [GameRegion.US, GameRegion.EU, GameRegion.KR, GameRegion.CN];
-                relevantRegions.splice(relevantRegions.findIndex(x => x === reqRegionId), 1);
-                const possibleNames = bSrcs.map(x => x.entries[entryIndex].map);
-
-                const allValidCrossLocales: ResolvedMapLocale[] = [];
-                for (const item of currFinalMatches.values()) {
-                    const crossMapIdMatches = (await this.fetchMaps({
-                        regionId: relevantRegions,
-                        mapId: item.mapId,
-                    }));
-                    const nameMatching = crossMapIdMatches.map(x => x.locales).flat(1).filter(x => {
-                        return possibleNames.findIndex(y => y === x.originalName || y === x.name) !== -1;
-                    });
-                    allValidCrossLocales.push(...nameMatching);
-                }
-                const allValidMapIds = new Set<number>();
-                allValidCrossLocales.forEach(x => {
-                    allValidMapIds.add(x.bnetId);
-                });
-
-                if (allValidMapIds.size === 1) {
-                    const finalValidMapId = Array.from(allValidMapIds)[0];
-                    const superFinalMatches = allCurrRegionMatches.filter(x => x.mapId !== finalValidMapId);
-                    if (superFinalMatches.length === 1) {
-                        currMappedEntry.mapId = superFinalMatches[0].mapId;
-                        mappedEntries.push(currMappedEntry);
-                        continue;
-                    }
-                }
             }
 
             if (bSrcs.length >= sourcesLimit) {
@@ -622,6 +649,7 @@ export class BattleDataUpdater {
                 GameLocale.ruRU,
                 GameLocale.deDE,
                 GameLocale.frFR,
+                GameLocale.enGB,
             ];
             for (const locale of srcLocales) {
                 bMatchSrcs.push({
@@ -697,26 +725,28 @@ export class BattleDataUpdater {
                     errLast=${profile.tracking.battleAPIErrorLast?.toISOString()}
                 `);
 
-                switch (err.response?.status) {
-                    case 404:
-                    case 500: {
-                        updatedTrackingData.battleAPIErrorLast = new Date();
-                        updatedTrackingData.battleAPIErrorCounter = profile.tracking.battleAPIErrorCounter + 1;
-                        if (profile.tracking.battleAPIErrorCounter > 3 && profile.regionId !== GameRegion.CN) {
-                            updatedTrackingData.preferPublicGateway = true;
+                if (err.response) {
+                    switch (err.response.status) {
+                        case 404:
+                        case 500:
+                        case 503:
+                        case 504: {
+                            break;
                         }
-                        break;
-                    }
 
-                    case 503:
-                    case 504: {
-                        return;
-                        break;
+                        default: {
+                            throw err;
+                        }
                     }
+                }
+                else if (err.code !== 'ECONNABORTED') {
+                    throw err;
+                }
 
-                    default: {
-                        throw err;
-                    }
+                updatedTrackingData.battleAPIErrorLast = new Date();
+                updatedTrackingData.battleAPIErrorCounter = profile.tracking.battleAPIErrorCounter + 1;
+                if (profile.tracking.battleAPIErrorCounter > 3 && profile.regionId !== GameRegion.CN) {
+                    updatedTrackingData.preferPublicGateway = true;
                 }
             }
             else {

@@ -67,6 +67,7 @@ abstract class BattleAPIBase {
 
     protected createAxios() {
         return Axios.create(Object.assign<AxiosRequestConfig, AxiosRequestConfig>({
+            timeout: 40000,
             baseURL: gatewayURL(this.mConfig.client.gateway.general, this.mConfig.client.region),
             httpAgent: new http.Agent({
                 keepAlive: true,
@@ -356,8 +357,11 @@ export class BattleAPI {
                     }
                     error.config.headers['Authorization'] = `Bearer ${accessToken}`;
                 }
-                else if (error?.response?.status === 503 || error?.response?.status === 504 || error?.response?.status === 429) {
+                else if (error?.response?.status === 503 || error?.response?.status === 429) {
                     await sleep(350 * Math.pow((error.config as any).retryAttempt, 1.4));
+                }
+                else if (error?.response?.status === 504) {
+                    await sleep(300 * Math.pow((error.config as any).retryAttempt, 1.1));
                 }
                 else if (error?.code === 'ECONNRESET') {
                     logger.warn(`req failed due to ${error?.code}, retrying in..`);

@@ -1,0 +1,92 @@
+{
+    "regionId": 3,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "MacroMicro on The Shattered Temple",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1605863474
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "MacroMicro on The Shattered Temple",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1605863474
+                }
+            ]
+        },
+        {
+            "locale": "ruRU",
+            "entries": [
+                {
+                    "map": "MacroMicro on The Shattered Temple",
+                    "type": "Своя игра",
+                    "decision": "Покинутая игра",
+                    "speed": "Очень быстро",
+                    "date": 1605863474
+                }
+            ]
+        },
+        {
+            "locale": "deDE",
+            "entries": [
+                {
+                    "map": "MacroMicro on The Shattered Temple",
+                    "type": "Eigenes Spiel",
+                    "decision": "Verlassen",
+                    "speed": "Schneller",
+                    "date": 1605863474
+                }
+            ]
+        },
+        {
+            "locale": "frFR",
+            "entries": [
+                {
+                    "map": "MacroMicro on The Shattered Temple",
+                    "type": "Personnalisé",
+                    "decision": "Restant",
+                    "speed": "Plus rapide",
+                    "date": 1605863474
+                }
+            ]
+        },
+        {
+            "locale": "enGB",
+            "entries": [
+                {
+                    "map": "비트코인 랜덤 디펜스 베타",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1605863474
+                }
+            ]
+        },
+        {
+            "locale": "zhTW",
+            "entries": [
+                {
+                    "map": "MacroMicro on The Shattered Temple",
+                    "type": "自訂",
+                    "decision": "離開",
+                    "speed": "更加快速",
+                    "date": 1605863474
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        128843
+    ]
+}

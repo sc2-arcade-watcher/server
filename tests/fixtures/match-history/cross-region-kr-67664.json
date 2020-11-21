@@ -1,0 +1,56 @@
+{
+    "regionId": 3,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "Fallout Zone",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1605862756
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "Strefa radioaktywna",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1605862756
+                }
+            ]
+        },
+        {
+            "locale": "koKR",
+            "entries": [
+                {
+                    "map": "토르 막기 1ㄷ1 맵",
+                    "type": "사용자 지정",
+                    "decision": "승",
+                    "speed": "아주 빠름",
+                    "date": 1605862756
+                }
+            ]
+        },
+        {
+            "locale": "frFR",
+            "entries": [
+                {
+                    "map": "토르 막기 1ㄷ1 맵",
+                    "type": "Personnalisé",
+                    "decision": "Victoire",
+                    "speed": "Plus rapide",
+                    "date": 1605862756
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        67664
+    ]
+}
