@@ -135,7 +135,7 @@ export default fp(async (server, opts) => {
                 'profile.profileId',
                 'profile.name',
                 'profile.discriminator',
-                'profile.avatarUrl',
+                'profile.avatar',
             ])
             .andWhere('statPlayer.regionId = :regionId AND statPlayer.mapId = :mapId', {
                 regionId: request.params.regionId,

@@ -9,6 +9,7 @@ import { BattleAPI, BattleAPIGateway } from '../bnet/battleAPI';
 import { PlayerProfileParams, profileHandle } from '../bnet/common';
 import { retry, isAxiosError, sleep, throwErrIfNotDuplicateEntry } from '../helpers';
 import { subHours } from 'date-fns';
+import { BattleDataUpdater, getAvatarIdentifierFromUrl } from '../bnet/battleData';
 
 class BattleDiscovery {
     protected bAPI: BattleAPI;
@@ -53,10 +54,10 @@ class BattleDiscovery {
 }
 
 program.command('discover:profile')
-    .option<Number>('--region [number]', 'region id', (value, previous) => Number(value), 1)
-    .option<Number>('--offset [number]', 'offset', (value, previous) => Number(value), 0)
-    .option<Number>('--concurrency [number]', 'concurrency', (value, previous) => Number(value), 5)
-    .option<String>('--gateway [string]', 'blz blz-us blz-eu blz-kr blz-cn sc2', (value, previous) => String(value), 'sc2')
+    .option<Number>('--region <number>', 'region id', (value, previous) => Number(value), 1)
+    .option<Number>('--offset <number>', 'offset', (value, previous) => Number(value), 0)
+    .option<Number>('--concurrency <number>', 'concurrency', (value, previous) => Number(value), 5)
+    .option<String>('--gateway <string>', 'blz blz-us blz-eu blz-kr blz-cn sc2', (value, previous) => String(value), 'sc2')
     .action(async function (cmd: program.Command) {
         let gateway: BattleAPIGateway;
         switch (cmd.gateway) {
@@ -124,6 +125,7 @@ program.command('discover:profile')
                     }
 
                     profParams = { regionId, realmId, profileId };
+                    logger.verbose(`Checking ${profileHandle(profParams)}`);
                     const profResult = await conn.getRepository(S2ProfileTracking).createQueryBuilder('pTrack')
                         .addSelect(profileQuery, 'pid')
                         .andWhere('pTrack.regionId = :regionId AND pTrack.realmId = :realmId AND pTrack.profileId = :profileId', profParams)
@@ -136,7 +138,7 @@ program.command('discover:profile')
                             pTrack = profResult.entities[0];
                             if (
                                 pTrack.battleAPIErrorCounter > 4 ||
-                                (pTrack.battleAPIErrorLast !== null && pTrack.battleAPIErrorLast < subHours(new Date(), 12))
+                                (pTrack.battleAPIErrorLast !== null && pTrack.battleAPIErrorLast > subHours(new Date(), 12))
                             ) {
                                 continue;
                             }
@@ -156,10 +158,11 @@ program.command('discover:profile')
                     logger.verbose(`Trying ${profileHandle(profParams)} :: checkpoint ${checkpointId}`);
 
                     const bResult = await bDiscovery.retrieveProfileMeta(profParams);
+                    const bCurrAvatar = getAvatarIdentifierFromUrl(bResult.avatarUrl);
                     const s2prof = S2Profile.create();
                     Object.assign(s2prof, profParams);
                     s2prof.name = bResult.name;
-                    s2prof.avatarUrl = bResult.avatarUrl;
+                    s2prof.avatar = bCurrAvatar;
 
                     checkpointId = Array.from(activeJobIds.values()).sort((a, b) => a - b)[0];
                     logger.info(`Discovered ${s2prof.nameAndIdPad} :: checkpoint ${checkpointId}`);
@@ -208,6 +211,17 @@ program.command('discover:profile')
 
         await queue.onIdle();
         logger.info('done');
+        await conn.close();
+    })
+;
+
+
+program.command('discover:account')
+    .option<Number>('--offset <number>', 'offset', Number, 0)
+    .option<Number>('--concurrency <number>', 'concurrency', Number, 5)
+    .action(async function (cmd: program.Command) {
+        const conn = await orm.createConnection();
+        const bData = new BattleDataUpdater(conn);
         await conn.close();
     })
 ;

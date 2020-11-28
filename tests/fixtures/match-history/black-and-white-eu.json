@@ -1,0 +1,32 @@
+{
+    "regionId": 2,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "Black and White LotV",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1604212030
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "Black and White",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1604212030
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        85768
+    ]
+}

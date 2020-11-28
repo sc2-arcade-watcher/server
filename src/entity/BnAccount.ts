@@ -1,7 +1,7 @@
 import { Entity, PrimaryColumn, Column, OneToOne, OneToMany } from 'typeorm';
 import { AppAccount } from './AppAccount';
-import { S2Profile } from './S2Profile';
 import { BnAccountSettings } from './BnAccountSettings';
+import { S2ProfileAccountLink } from './S2ProfileAccountLink';
 
 @Entity()
 export class BnAccount {
@@ -29,11 +29,11 @@ export class BnAccount {
     @OneToOne(type => AppAccount, appAccount => appAccount.bnAccount)
     appAccount: AppAccount;
 
-    @OneToMany(type => S2Profile, profile => profile.account, {
+    @OneToMany(type => S2ProfileAccountLink, profileLink => profileLink.account, {
         cascade: false,
         persistence: false,
     })
-    profiles: S2Profile[];
+    profileLinks: S2ProfileAccountLink[];
 
     @OneToOne(type => BnAccountSettings, settings => settings.account)
     settings: BnAccountSettings;

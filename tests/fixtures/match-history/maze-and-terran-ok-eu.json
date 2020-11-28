@@ -1,15 +1,15 @@
 {
-    "regionId": 3,
+    "regionId": 2,
     "sources": [
         {
             "locale": "enUS",
             "entries": [
                 {
-                    "map": "防空TD",
+                    "map": "Maze and Terran",
                     "type": "Custom",
                     "decision": "Left",
                     "speed": "Faster",
-                    "date": 1282806404
+                    "date": 1602804369
                 }
             ]
         },
@@ -17,28 +17,28 @@
             "locale": "plPL",
             "entries": [
                 {
-                    "map": "Crush Company - The Last Hope",
+                    "map": "Maze and Terran",
                     "type": "Własne",
-                    "decision": "Wygrana",
+                    "decision": "Opuszczono",
                     "speed": "Szybciej",
-                    "date": 1282806404
+                    "date": 1602804369
                 }
             ]
         },
         {
-            "locale": "ruRU",
+            "locale": "koKR",
             "entries": [
                 {
-                    "map": "防空TD",
-                    "type": "Своя игра",
-                    "decision": "Победа",
-                    "speed": "Очень быстро",
-                    "date": 1282806404
+                    "map": "미로 속에서 살아남기",
+                    "type": "사용자 지정",
+                    "decision": "승",
+                    "speed": "아주 빠름",
+                    "date": 1602804369
                 }
             ]
         }
     ],
     "targetMapIds": [
-        181
+        227559
     ]
 }

@@ -43,9 +43,9 @@ export default fp(async (server, opts) => {
         lobbyRepo.addTitleHistory(qb);
 
         qb.addSelect([
-            'profile.avatarUrl',
-            'joinHistoryProfile.avatarUrl',
-            'titleHistoryProfile.avatarUrl',
+            'profile.avatar',
+            'joinHistoryProfile.avatar',
+            'titleHistoryProfile.avatar',
             'map.updatedAt',
             'extMod.updatedAt',
             'multiMod.updatedAt',

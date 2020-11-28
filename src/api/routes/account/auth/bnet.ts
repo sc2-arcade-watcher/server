@@ -54,7 +54,6 @@ export default fp(async (server, opts) => {
             }
         }
 
-        authResult.account.bnAccount.profiles.forEach(x => delete x.account);
         return reply.code(200).send({
             accessToken: authResult.accessToken,
             battleAccount: authResult.account.bnAccount,

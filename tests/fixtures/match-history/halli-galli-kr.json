@@ -7,9 +7,9 @@
                 {
                     "map": "Halli Galli",
                     "type": "Custom",
-                    "decision": "Tie",
+                    "decision": "Left",
                     "speed": "Faster",
-                    "date": 1604163605
+                    "date": 1605019735
                 }
             ]
         },
@@ -19,9 +19,21 @@
                 {
                     "map": "할리갈리",
                     "type": "사용자 지정",
-                    "decision": "무승부",
+                    "decision": "패",
                     "speed": "아주 빠름",
-                    "date": 1604163605
+                    "date": 1605019735
+                }
+            ]
+        },
+        {
+            "locale": "enGB",
+            "entries": [
+                {
+                    "map": "Halli Galli",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1605019735
                 }
             ]
         },
@@ -33,7 +45,7 @@
                     "type": "自訂",
                     "decision": "離開",
                     "speed": "更加快速",
-                    "date": 1604163605
+                    "date": 1605019735
                 }
             ]
         }

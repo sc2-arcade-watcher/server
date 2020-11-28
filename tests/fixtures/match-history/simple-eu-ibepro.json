@@ -1,0 +1,32 @@
+{
+    "regionId": 2,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "Ice Baneling Escape - Pro",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1593808858
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "Ice Baneling Escape - Pro",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1593808858
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        207064
+    ]
+}

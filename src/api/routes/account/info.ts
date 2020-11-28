@@ -1,4 +1,5 @@
 import fp from 'fastify-plugin';
+import { S2ProfileRepository } from '../../../repository/S2ProfileRepository';
 
 export default fp(async (server, opts) => {
     server.get<{
@@ -10,8 +11,14 @@ export default fp(async (server, opts) => {
             return reply.code(401).send();
         }
 
+        const accProfiles = await server.conn.getCustomRepository(S2ProfileRepository).findByBattleAccount(request.userAccount.bnAccount.id);
+
         return reply.code(200).send({
-            battleAccount: request.userAccount.bnAccount,
+            battleAccount: {
+                id: request.userAccount.bnAccount.id,
+                battleTag: request.userAccount.bnAccount.battleTag,
+                profiles: accProfiles,
+            },
         });
     });
 });

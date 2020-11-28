@@ -38,7 +38,7 @@ export default fp(async (server, opts) => {
                 'profile.profileId',
                 'profile.name',
                 'profile.discriminator',
-                'profile.avatarUrl',
+                'profile.avatar',
                 'profile.lastOnlineAt',
             ])
             .andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId', {

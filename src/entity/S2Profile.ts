@@ -2,17 +2,22 @@ import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneTo
 import { S2Region } from './S2Region';
 import { BnAccount } from './BnAccount';
 import { S2ProfileTracking } from './S2ProfileTracking';
+import { S2ProfileAccountLink } from './S2ProfileAccountLink';
+
+export interface BareS2Profile {
+    regionId: number;
+    realmId: number;
+    profileId: number;
+    name: string;
+    discriminator: number;
+    avatar?: string;
+}
 
 @Entity()
 @Unique('bnet_id', ['regionId', 'realmId', 'profileId'])
-export class S2Profile {
+export class S2Profile implements BareS2Profile {
     @PrimaryGeneratedColumn()
     id: number;
-
-    @Column({
-        nullable: true,
-    })
-    nameUpdatedAt: Date;
 
     @Column({
         unsigned: true,
@@ -46,36 +51,17 @@ export class S2Profile {
     discriminator: number;
 
     @Column({
+        type: 'varchar',
+        length: 12,
+        collation: 'ascii_bin',
+        nullable: false,
+    })
+    avatar: string;
+
+    @Column({
         default: false,
     })
     deleted: boolean;
-
-    @ManyToOne(type => BnAccount, account => account.profiles, {
-        nullable: true,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
-    })
-    @Index('account_idx')
-    account: BnAccount;
-
-    @Column({
-        unsigned: true,
-        nullable: true,
-    })
-    accountId: number | null;
-
-    /**
-     * determines whether profile origin has been verified through Blizzard API
-     */
-    @Column({
-        default: false,
-    })
-    accountVerified: boolean;
-
-    @Column({
-        nullable: true,
-    })
-    avatarUrl: string | null;
 
     @Column({
         nullable: true,
@@ -85,8 +71,18 @@ export class S2Profile {
 
     tracking?: S2ProfileTracking;
 
+    accountLink?: S2ProfileAccountLink;
+
     get fullname(): string {
         return `${this.name}#${this.discriminator}`;
+    }
+
+    get fullnameWithHandle(): string {
+        return `${this.name}#${this.discriminator} [${this.phandle}]`;
+    }
+
+    get phandle(): string {
+        return `${this.regionId}-S2-${this.realmId}-${this.profileId}`;
     }
 
     get nameAndId(): string {
@@ -100,9 +96,8 @@ export class S2Profile {
     static create() {
         const prof = new S2Profile();
         prof.discriminator = 0;
+        prof.avatar = '';
         prof.deleted = false;
-        prof.accountId = null;
-        prof.accountVerified = false;
         return prof;
     }
 }

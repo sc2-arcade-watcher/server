@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, ManyToOne } from 'typeorm';
-import { S2GameLobby } from './S2GameLobby';
 import { S2Map } from './S2Map';
+import { S2Profile } from './S2Profile';
 
 export enum S2MatchDecision {
     Left = 'left',
@@ -87,4 +87,6 @@ export class S2ProfileMatch {
     mapId: number;
 
     map?: S2Map;
+
+    profile?: S2Profile;
 }

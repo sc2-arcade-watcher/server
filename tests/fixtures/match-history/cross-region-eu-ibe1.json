@@ -1,0 +1,32 @@
+{
+    "regionId": 2,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "브라우첸 와이트 ver 2",
+                    "type": "Custom",
+                    "decision": "Left",
+                    "speed": "Faster",
+                    "date": 1595029408
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "Ice Baneling Escape",
+                    "type": "Własne",
+                    "decision": "Opuszczono",
+                    "speed": "Szybciej",
+                    "date": 1595029408
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        136081
+    ]
+}

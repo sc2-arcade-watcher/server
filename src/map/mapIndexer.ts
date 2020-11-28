@@ -15,6 +15,7 @@ import { AttributeSystemNamespaceId, AttributeId, lobbyDelayValues } from './att
 import { S2MapRepository } from '../repository/S2MapRepository';
 import { S2MapLocale } from '../entity/S2MapLocale';
 import { S2MapDependency } from '../entity/S2MapDependency';
+import { S2ProfileRepository } from '../repository/S2ProfileRepository';
 
 export class MapIndexer {
     public readonly resolver = new MapResolver(this.conn);
@@ -473,31 +474,7 @@ export class MapIndexer {
         }
 
         if (!map.author) {
-            let authorProfile = await this.conn.getRepository(S2Profile).findOne({
-                where: {
-                    regionId: msg.author.regionId,
-                    realmId: msg.author.realmId,
-                    profileId: msg.author.profileId,
-                },
-            });
-            if (!authorProfile) {
-                authorProfile = new S2Profile();
-                authorProfile.regionId = msg.author.regionId;
-                authorProfile.realmId = msg.author.realmId;
-                authorProfile.profileId = msg.author.profileId;
-                if (msg.author.discriminator === 0) {
-                    authorProfile.name = null;
-                    authorProfile.discriminator = 0;
-                    authorProfile.deleted = true;
-                }
-                else {
-                    authorProfile.name = msg.author.name;
-                    authorProfile.discriminator = msg.author.discriminator;
-                    authorProfile.nameUpdatedAt = dateQuery;
-                }
-                await this.conn.getRepository(S2Profile).insert(authorProfile);
-            }
-            map.author = authorProfile;
+            map.author = await this.conn.getCustomRepository(S2ProfileRepository).fetchOrCreate(msg.author);
             updatedMap = true;
         }
 

@@ -1,0 +1,107 @@
+{
+    "regionId": 2,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "Lightshade LE",
+                    "type": "Co-Op",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1603324043
+                },
+                {
+                    "map": "Jagannatha LE",
+                    "type": "Co-Op",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1603323984
+                },
+                {
+                    "map": "Mist Opportunities",
+                    "type": "(Unknown)",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1602801898
+                },
+                {
+                    "map": "Part and Parcel",
+                    "type": "(Unknown)",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1602799017
+                },
+                {
+                    "map": "Star Battle v3.1",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1602797442
+                },
+                {
+                    "map": "--Wrath-- Test Version",
+                    "type": "Custom",
+                    "decision": "Tie",
+                    "speed": "Faster",
+                    "date": 1602794104
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "Jasny Cień ER",
+                    "type": "Wspólnie",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1603324043
+                },
+                {
+                    "map": "Jagannatha ER",
+                    "type": "Wspólnie",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1603323984
+                },
+                {
+                    "map": "Stetmann w oparach",
+                    "type": "(Nieznana)",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1602801898
+                },
+                {
+                    "map": "Złomuj i rządź",
+                    "type": "(Nieznana)",
+                    "decision": "Przegrana",
+                    "speed": "Szybciej",
+                    "date": 1602799017
+                },
+                {
+                    "map": "Star Battle v3.1",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1602797442
+                },
+                {
+                    "map": "--Wrath-- Test Version",
+                    "type": "Własne",
+                    "decision": "Remis",
+                    "speed": "Szybciej",
+                    "date": 1602794104
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        228767,
+        228766,
+        195013,
+        204950,
+        175904,
+        226731
+    ]
+}

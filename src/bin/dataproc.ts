@@ -20,6 +20,9 @@ import { oneLine } from 'common-tags';
 import { BnAccount } from '../entity/BnAccount';
 import { differenceInSeconds } from 'date-fns';
 import { GameRegion } from '../common';
+import { S2ProfileTracking } from '../entity/S2ProfileTracking';
+import { S2ProfileRepository } from '../repository/S2ProfileRepository';
+import { S2ProfileTrackingRepository } from '../repository/S2ProfileTrackingRepository';
 
 const slotKindMap = {
     [LobbyPvExSlotKind.Computer]: S2GameLobbySlotKind.AI,
@@ -277,45 +280,6 @@ class DataProc {
         }
     }
 
-    protected async profileConnectWithAcc(s2lobby: S2GameLobby, recentTitle: S2GameLobbyTitle, matchingSlot: S2GameLobbySlot, tsManager: orm.EntityManager) {
-        const bnAccount = await this.fetchOrCreateBnAccount(recentTitle.accountId);
-        const matchingProfile = matchingSlot.profile;
-        if (matchingProfile.accountId !== null && matchingProfile.accountId !== recentTitle.accountId) {
-            logger.warn(oneLine`
-                ${s2lobby.globalId}
-                profile ${matchingProfile.nameAndId} already paired with another account
-                curr=${matchingProfile.accountId} new=${recentTitle.accountId}
-            `);
-        }
-        else if (matchingProfile.accountId === null && !bnAccount.isVerified) {
-            const accProfiles = await this.conn.getRepository(S2Profile).find({
-                where: {
-                    accountId: recentTitle.accountId,
-                    regionId: this.region,
-                },
-            });
-
-            if (accProfiles.length > 0) {
-                logger.warn(oneLine`
-                    ${s2lobby.globalId}
-                    profile candidate ${matchingProfile.nameAndId}
-                    to pair with account=${recentTitle.accountId}
-                    already paired with ${accProfiles.filter(x => x.nameAndId)}
-                `);
-            }
-            else {
-                matchingProfile.accountId = recentTitle.accountId;
-                logger.info(oneLine`
-                    ${s2lobby.globalId}
-                    profile ${matchingProfile.nameAndId} paired with account=${matchingProfile.accountId}
-                `);
-                await tsManager.getRepository(S2Profile).update(matchingProfile.id, {
-                    accountId: matchingProfile.accountId,
-                });
-            }
-        }
-    }
-
     protected async updateLobbyTitleOrigin(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc, tsManager: orm.EntityManager) {
         if (!s2lobby.slots.length) {
             // TODO: could try to determine missing profile using accountId
@@ -353,12 +317,10 @@ class DataProc {
             else if (recentTitle.accountId !== null) {
                 // try by looking for profiles already associated with this account
                 if (recentTitle.profileId === null) {
-                    const accProfiles = await this.conn.getRepository(S2Profile).find({
-                        where: {
-                            accountId: recentTitle.accountId,
-                            regionId: this.region,
-                        },
-                    });
+                    const accProfiles = await this.conn.getCustomRepository(S2ProfileRepository).findByBattleAccount(
+                        recentTitle.accountId,
+                        { regionId: this.region }
+                    );
 
                     if (accProfiles.length === 1) {
                         const finalMatch = accProfiles[accProfiles.length - 1];
@@ -638,7 +600,9 @@ class DataProc {
         const key = accountId.toString();
         let bnAccount = this.bnAccountsCache.get(key);
         if (!bnAccount) {
-            bnAccount = await this.conn.getRepository(BnAccount).findOne(accountId);
+            bnAccount = await this.conn.getRepository(BnAccount).findOne(accountId, {
+                relations: ['profileLinks'],
+            });
             if (!bnAccount) {
                 bnAccount = this.conn.getRepository(BnAccount).create({
                     id: accountId,
@@ -654,36 +618,29 @@ class DataProc {
         const profKey = `${infoProfile.realmId}-${infoProfile.profileId}`;
         let s2profile = this.profilesCache.get(profKey);
         if (!s2profile) {
-            s2profile = await this.conn.getRepository(S2Profile).findOne({
-                where: {
-                    regionId: infoProfile.regionId,
-                    realmId: infoProfile.realmId,
-                    profileId: infoProfile.profileId,
-                },
-            });
-            if (!s2profile) {
-                s2profile = S2Profile.create();
-                s2profile.nameUpdatedAt = updatedAt;
-                s2profile.lastOnlineAt = updatedAt;
-                Object.assign(s2profile, infoProfile);
-                logger.verbose(`new profile ${s2profile.nameAndId}`);
-                await this.conn.getRepository(S2Profile).insert(s2profile);
-            }
+            s2profile = await this.conn.getCustomRepository(S2ProfileRepository).fetchOrCreate(infoProfile);
             this.profilesCache.set(profKey, s2profile);
         }
 
-        if (
-            (s2profile.name !== infoProfile.name || s2profile.discriminator !== infoProfile.discriminator) &&
-            (s2profile.nameUpdatedAt === null || s2profile.nameUpdatedAt < updatedAt)
-        ) {
-            logger.verbose(`updating profile ${s2profile.nameAndId} => ${infoProfile.name}#${infoProfile.discriminator}`);
-            const updateData: Partial<S2Profile> = {
-                name: infoProfile.name,
-                discriminator: infoProfile.discriminator,
-                nameUpdatedAt: updatedAt,
-            };
-            Object.assign(s2profile, updateData);
-            await this.conn.getRepository(S2Profile).update(s2profile.id, updateData);
+        if (s2profile.name !== infoProfile.name || s2profile.discriminator !== infoProfile.discriminator) {
+            // before changing name ensure we're not process some stale data, where new name isn't actually new
+            const pTrack = await this.conn.getCustomRepository(S2ProfileTrackingRepository).fetchOrCreate(infoProfile);
+            if (pTrack.nameUpdatedAt < updatedAt) {
+                logger.verbose(`updating profile ${s2profile.fullname} => ${infoProfile.name}#${infoProfile.discriminator} [${s2profile.phandle}]`);
+                const updateData: Partial<S2Profile> = {
+                    name: infoProfile.name,
+                    discriminator: infoProfile.discriminator,
+                };
+                Object.assign(s2profile, updateData);
+                pTrack.nameUpdatedAt = updatedAt;
+
+                await this.conn.transaction(async tsManager => {
+                    await tsManager.getRepository(S2Profile).update(s2profile.id, updateData);
+                    await tsManager.getRepository(S2ProfileTracking).update(s2profile.id, {
+                        nameUpdatedAt: pTrack.nameUpdatedAt,
+                    });
+                });
+            }
         }
 
         return s2profile;

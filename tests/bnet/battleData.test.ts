@@ -33,7 +33,9 @@ afterAll(async () => {
 });
 
 describe('BattleMatchEntryMapper', () => {
-    test('return newly publised first if the name clashes', async () => {
+    // TODO: don't use local db for matching, mockup data for the tests
+
+    test('return newly published first if the name clashes', async () => {
         const bMapper = new BattleMatchEntryMapper(orm.getConnection());
         const maps = await bMapper.fetchMaps({
             regionId: 2,
@@ -41,7 +43,7 @@ describe('BattleMatchEntryMapper', () => {
         });
         expect(maps).toHaveLength(2);
         expect(maps[0].mapId).toBeGreaterThan(maps[1].mapId);
-        expect(maps[0].publishedAt.getTime()).toBeGreaterThan(maps[1].updatedAt.getTime());
+        expect(maps[0].publishedAt.getTime()).toBeGreaterThan(maps[1].publishedAt.getTime());
     });
 
     test('partial data processing if unknown maps are found', async () => {
@@ -194,6 +196,32 @@ describe('BattleMatchEntryMapper', () => {
                             type: BattleSC2MatchType.Custom,
                         },
                     ],
+                },
+                {
+                    locale: GameLocale.plPL,
+                    entries: [
+                        {
+                            date: (tnow.getTime() / 1000),
+                            decision: BattleSC2MatchDecision.Win,
+                            map: 'Dolina Agrii',
+                            speed: BattleSC2MatchSpeed.Faster,
+                            type: BattleSC2MatchType.Custom,
+                        },
+                        {
+                            date: (mostRecentMatch.date.getTime() / 1000),
+                            decision: BattleSC2MatchDecision.Win,
+                            map: 'Wysoka orbita',
+                            speed: BattleSC2MatchSpeed.Faster,
+                            type: BattleSC2MatchType.Custom,
+                        },
+                        {
+                            date: (mostRecentMatch.date.getTime() / 1000) - 3600,
+                            decision: BattleSC2MatchDecision.Win,
+                            map: 'Wysoka orbita',
+                            speed: BattleSC2MatchSpeed.Faster,
+                            type: BattleSC2MatchType.Custom,
+                        },
+                    ],
                 }
             ],
             s2profile,
@@ -237,6 +265,18 @@ describe('BattleMatchEntryMapper', () => {
                             type: BattleSC2MatchType.Custom,
                         },
                     ],
+                },
+                {
+                    locale: GameLocale.plPL,
+                    entries: [
+                        {
+                            date: (tnow.getTime() / 1000) - 500,
+                            decision: BattleSC2MatchDecision.Win,
+                            map: 'Wysoka Orbita',
+                            speed: BattleSC2MatchSpeed.Faster,
+                            type: BattleSC2MatchType.Custom,
+                        },
+                    ],
                 }
             ],
             s2profile,
@@ -256,7 +296,17 @@ describe('BattleMatchEntryMapper', () => {
             const matchesData: MatchesTestData = await fs.readJSON(`${fixturesPath}/${fName}`);
             const s2profile = mockupProfile({ regionId: matchesData.regionId });
 
-            const mappedResult = await bMapper.mapFromSource(matchesData.sources, s2profile, void 0, void 0, matchesData.sources.length);
+            let mappedResult: BattleMatchMappingResult | boolean;
+            for (const [sourceIndex, sourceData] of matchesData.sources.entries()) {
+                mappedResult = await bMapper.mapFromSource(
+                    matchesData.sources.slice(0, sourceIndex + 1),
+                    s2profile,
+                    void 0,
+                    void 0,
+                    matchesData.sources.length
+                );
+                if (mappedResult !== false) break;
+            }
             expect(typeof mappedResult === 'object').toBeTruthy();
             if (typeof mappedResult === 'object') {
                 expect(mappedResult.matches).toHaveLength(matchesData.sources[0].entries.length);

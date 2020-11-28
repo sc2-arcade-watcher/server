@@ -1,6 +1,5 @@
 import * as orm from 'typeorm';
 import fp from 'fastify-plugin';
-import { subMonths } from 'date-fns';
 import { AppAccount, AccountPrivileges } from '../../entity/AppAccount';
 import { S2Map } from '../../entity/S2Map';
 import { S2Profile } from '../../entity/S2Profile';
@@ -27,27 +26,15 @@ interface IAccessManager {
     isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile | PlayerProfileParams, userAccount?: AppAccount): Promise<boolean>;
 }
 
-function getEffectiveAccountPreferences(account: BnAccount | null, profile?: S2Profile): Required<UserPrivacyPreferences> {
-    let defaultPreferences: Required<UserPrivacyPreferences> = Object.assign({}, defaultAccountSettings);
-
-    if (profile && !(profile.name === 'blizzmaps' && profile.discriminator === 1)) {
-        // restrict access to maps on profiles where author has been active in last X months
-        if (profile.lastOnlineAt! > subMonths(new Date(), 1)) {
-            defaultPreferences.mapPrivDetails = false;
-        }
-        if (profile.lastOnlineAt! > subMonths(new Date(), 9)) {
-            defaultPreferences.mapPrivDownload = false;
-            defaultPreferences.mapPrivListed = false;
-        }
-    }
-
+function getEffectiveAccountPreferences(account: BnAccount | null): Required<UserPrivacyPreferences> {
     const preferences: Required<UserPrivacyPreferences> = {} as any;
-    for (const key of Object.keys(defaultPreferences)) {
+
+    for (const key of Object.keys(defaultAccountSettings)) {
         if (account?.settings && (account.settings as any)[key] !== null) {
             (preferences as any)[key] = (account.settings as any)[key];
         }
         else {
-            (preferences as any)[key] = (defaultPreferences as any)[key];
+            (preferences as any)[key] = (defaultAccountSettings as any)[key];
         }
     }
 
@@ -74,30 +61,38 @@ class AccessManager implements IAccessManager {
             return true;
         }
 
-        const qb = this.conn.getRepository(S2Profile).createQueryBuilder('profile')
-            .leftJoinAndSelect('profile.account', 'bnAccount')
+        const qb = this.conn.getRepository(BnAccount)
+            .createQueryBuilder('bnAccount')
             .leftJoinAndSelect('bnAccount.settings', 'bnSettings')
+            .innerJoin('bnAccount.profileLinks', 'plink', 'plink.accountVerified = 1')
         ;
 
-        if (mapOrHeader instanceof S2Map && mapOrHeader.author?.id) {
-            qb.andWhere('profile.id = :pid', { pid: mapOrHeader.author.id });
+        if (
+            mapOrHeader instanceof S2Map &&
+            typeof mapOrHeader.author?.regionId === 'number' &&
+            typeof mapOrHeader.author?.realmId === 'number' &&
+            typeof mapOrHeader.author?.profileId === 'number'
+        ) {
+            qb.andWhere('plink.regionId = :regionId AND plink.realmId = :realmId AND plink.profileId = :profileId', {
+                regionId: mapOrHeader.author.regionId,
+                realmId: mapOrHeader.author.realmId,
+                profileId: mapOrHeader.author.profileId,
+            });
         }
         else if (mhead.regionId && mhead.bnetId) {
-            const mapAuthorQuery = qb.subQuery().select()
-                .from(S2Map, 'map')
-                .select('map.author')
-                .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId')
-                .limit(1)
-                .getQuery()
-            ;
-            qb.andWhere('profile.id = ' + mapAuthorQuery, { regionId: mhead.regionId, bnetId: mhead.bnetId })
+            qb.innerJoin(S2Map, 'map', 'map.regionId = :regionId AND map.bnetId = :bnetId', {
+                regionId: mhead.regionId,
+                bnetId: mhead.bnetId,
+            });
+            qb.innerJoin(S2Profile, 'profile', 'profile.id = map.author');
+            qb.andWhere('plink.regionId = profile.regionId AND plink.realmId = profile.realmId AND plink.profileId = profile.profileId');
         }
         else {
             throw new Error(`isMapAccessGranted, missing map params`);
         }
 
         // TODO: cache the result
-        let authorProfile = await qb.getOne();
+        let authorBattleAccount = await qb.limit(1).getOne();
 
         const results: boolean[] = [];
         const kinds = Array.isArray(kind) ? kind : [kind];
@@ -107,19 +102,13 @@ class AccessManager implements IAccessManager {
                 continue;
             }
 
-            if (!authorProfile) {
-                logger.warn(`couldn't fetch authorProfile of ${mhead.linkVer}`);
-                results.push(false);
-                continue;
-            }
-
             // allow access to author's own content
-            if (userAccount && userAccount.bnAccountId === authorProfile?.account?.id) {
+            if (userAccount && userAccount.bnAccountId === authorBattleAccount?.id) {
                 results.push(true);
                 continue;
             }
 
-            const preferences = getEffectiveAccountPreferences(authorProfile?.account ?? null, authorProfile);
+            const preferences = getEffectiveAccountPreferences(authorBattleAccount ?? null);
 
             switch (currKind) {
                 case MapAccessAttributes.Details: {
@@ -142,47 +131,30 @@ class AccessManager implements IAccessManager {
         return Array.isArray(kind) ? results : results.shift();
     }
 
-    async isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile | PlayerProfileParams, userAccount?: AppAccount): Promise<boolean> {
-        let profileAccount: BnAccount | null = null;
-
-        if (profile instanceof S2Profile) {
-            profileAccount = profile.account;
-        }
-        else {
-            const profileQuery = this.conn.getRepository(S2Profile).createQueryBuilder().subQuery()
-                .from(S2Profile, 'profile')
-                .select('profile.id')
-                .andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId')
-                .limit(1)
-                .getQuery()
-            ;
-            const result = await this.conn.getRepository(S2Profile).createQueryBuilder('profile')
-                .select([
-                    'profile.id',
-                    'profile.account'
-                ])
-                .leftJoinAndSelect('profile.account', 'bnAccount')
-                .leftJoinAndSelect('bnAccount.settings', 'bnSettings')
-                .andWhere('profile.id = ' + profileQuery, {
-                    regionId: profile.regionId,
-                    realmId: profile.realmId,
-                    profileId: profile.profileId,
-                })
-                .getOne()
-            ;
-            profileAccount = result?.account ?? null;
-        }
+    async isProfileAccessGranted(kind: ProfileAccessAttributes, profile: PlayerProfileParams, userAccount?: AppAccount): Promise<boolean> {
+        const profileBatteAccount = await this.conn.getRepository(BnAccount)
+            .createQueryBuilder('bnAccount')
+            .leftJoinAndSelect('bnAccount.settings', 'bnSettings')
+            .innerJoin('bnAccount.profileLinks', 'plink', 'plink.accountVerified = 1')
+            .andWhere('plink.regionId = :regionId AND plink.realmId = :realmId AND plink.profileId = :profileId', {
+                regionId: profile.regionId,
+                realmId: profile.realmId,
+                profileId: profile.profileId,
+            })
+            .limit(1)
+            .getOne()
+        ;
 
         if (userAccount && userAccount.privileges & AccountPrivileges.SuperAdmin) {
             return true;
         }
 
         // allow access to author's own content
-        if (userAccount && userAccount.bnAccountId === profileAccount?.id) {
+        if (userAccount && userAccount.bnAccountId === profileBatteAccount?.id) {
             return true;
         }
 
-        const preferences = getEffectiveAccountPreferences(profileAccount, profile instanceof S2Profile ? profile : void 0);
+        const preferences = getEffectiveAccountPreferences(profileBatteAccount);
 
         switch (kind) {
             case ProfileAccessAttributes.Details: {

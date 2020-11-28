@@ -22,7 +22,6 @@ class AuthManager {
             relations: [
                 'account',
                 'account.bnAccount',
-                'account.bnAccount.profiles',
             ],
             where: {
                 type: AppAccountTokenKind.App,
@@ -84,7 +83,7 @@ class AuthManager {
         let userAccount = await this.conn.getRepository(AppAccount).findOne({
             relations: [
                 'bnAccount',
-                'bnAccount.profiles',
+                'bnAccount.profileLinks',
             ],
             where: {
                 bnAccountId: bUserInfo.id,

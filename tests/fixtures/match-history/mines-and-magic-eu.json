@@ -1,0 +1,56 @@
+{
+    "regionId": 2,
+    "sources": [
+        {
+            "locale": "enUS",
+            "entries": [
+                {
+                    "map": "Trollobattles",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1606156502
+                }
+            ]
+        },
+        {
+            "locale": "koKR",
+            "entries": [
+                {
+                    "map": "Mines and Magic",
+                    "type": "사용자 지정",
+                    "decision": "패",
+                    "speed": "아주 빠름",
+                    "date": 1606156502
+                }
+            ]
+        },
+        {
+            "locale": "enGB",
+            "entries": [
+                {
+                    "map": "Mines and Magic",
+                    "type": "Custom",
+                    "decision": "Loss",
+                    "speed": "Faster",
+                    "date": 1606156502
+                }
+            ]
+        },
+        {
+            "locale": "zhTW",
+            "entries": [
+                {
+                    "map": "Mines and Magic",
+                    "type": "自訂",
+                    "decision": "敗北",
+                    "speed": "更加快速",
+                    "date": 1606156502
+                }
+            ]
+        }
+    ],
+    "targetMapIds": [
+        155608
+    ]
+}

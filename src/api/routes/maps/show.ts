@@ -34,7 +34,7 @@ export default fp(async (server, opts) => {
                 'author.profileId',
                 'author.name',
                 'author.discriminator',
-                'author.avatarUrl',
+                'author.avatar',
             ])
             .andWhere('map.regionId = :regionId AND map.bnetId = :bnetId', {
                 regionId: request.params.regionId,

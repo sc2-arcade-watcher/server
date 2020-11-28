@@ -3,7 +3,7 @@ import { S2ProfileMatch } from './S2ProfileMatch';
 import { GameLocale } from '../common';
 
 @Entity()
-export class S2ProfileMatchUnknownMap {
+export class S2ProfileMatchMapName {
     @PrimaryGeneratedColumn({
         unsigned: true,
     })

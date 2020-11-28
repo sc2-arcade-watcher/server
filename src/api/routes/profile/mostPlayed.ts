@@ -30,10 +30,6 @@ export default fp(async (server, opts) => {
         },
     }, async (request, reply) => {
         const profile = await server.conn.getRepository(S2Profile).findOne({
-            relations: [
-                'account',
-                'account.settings',
-            ],
             where: {
                 regionId: request.params.regionId,
                 realmId: request.params.realmId,

@@ -78,7 +78,7 @@ export default fp(async (server, opts) => {
                 'profile.profileId',
                 'profile.name',
                 'profile.discriminator',
-                'profile.avatarUrl',
+                'profile.avatar',
                 'profile.lastOnlineAt',
             ])
             .limit(pQuery.fetchLimit)

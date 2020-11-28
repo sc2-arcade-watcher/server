@@ -6,22 +6,34 @@
             "entries": [
                 {
                     "map": "Photon Discs",
-                    "type": "4v4",
-                    "decision": "Loss",
+                    "type": "Custom",
+                    "decision": "Win",
                     "speed": "Faster",
-                    "date": 1432324381
+                    "date": 1606324587
                 }
             ]
         },
         {
-            "locale": "plPL",
+            "locale": "koKR",
             "entries": [
                 {
-                    "map": "Stary Świat",
-                    "type": "4 na 4",
-                    "decision": "Przegrana",
-                    "speed": "Szybciej",
-                    "date": 1432324381
+                    "map": "고국",
+                    "type": "사용자 지정",
+                    "decision": "승",
+                    "speed": "아주 빠름",
+                    "date": 1606324587
+                }
+            ]
+        },
+        {
+            "locale": "zhTW",
+            "entries": [
+                {
+                    "map": "古國",
+                    "type": "自訂",
+                    "decision": "獲勝",
+                    "speed": "更加快速",
+                    "date": 1606324587
                 }
             ]
         },
@@ -30,15 +42,51 @@
             "entries": [
                 {
                     "map": "Прежний мир",
-                    "type": "4х4",
-                    "decision": "Поражение",
+                    "type": "Своя игра",
+                    "decision": "Победа",
                     "speed": "Очень быстро",
-                    "date": 1432324381
+                    "date": 1606324587
+                }
+            ]
+        },
+        {
+            "locale": "frFR",
+            "entries": [
+                {
+                    "map": "Vieux monde",
+                    "type": "Personnalisé",
+                    "decision": "Victoire",
+                    "speed": "Plus rapide",
+                    "date": 1606324587
+                }
+            ]
+        },
+        {
+            "locale": "plPL",
+            "entries": [
+                {
+                    "map": "Stary Świat",
+                    "type": "Własne",
+                    "decision": "Wygrana",
+                    "speed": "Szybciej",
+                    "date": 1606324587
+                }
+            ]
+        },
+        {
+            "locale": "enGB",
+            "entries": [
+                {
+                    "map": "Photon Discs",
+                    "type": "Custom",
+                    "decision": "Win",
+                    "speed": "Faster",
+                    "date": 1606324587
                 }
             ]
         }
     ],
     "targetMapIds": [
-        115631
+        166305
     ]
 }

@@ -156,10 +156,6 @@ export default fp(async (server, opts) => {
             // });
 
             const mapAuthorProfile = await server.conn.getRepository(S2Profile).findOne({
-                relations: [
-                    'account',
-                    'account.settings',
-                ],
                 where: {
                     regionId: requestedAuthor.regionId,
                     realmId: requestedAuthor.realmId,
