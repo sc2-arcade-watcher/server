@@ -535,7 +535,8 @@ export class BattleDataUpdater {
                 await this.conn.getRepository(S2ProfileAccountLink).insert(profileLink);
             }
             else if (!profileLink.accountVerified) {
-                await this.conn.getRepository(S2ProfileAccountLink).update(profileLink, {
+                profileLink.accountVerified = true;
+                await this.conn.getRepository(S2ProfileAccountLink).update(this.conn.getRepository(S2ProfileAccountLink).getId(profileLink), {
                     accountVerified: true,
                 });
             }
@@ -547,8 +548,8 @@ export class BattleDataUpdater {
             logger.info(`Detaching profile ${profileHandle(profileLink)} from account ${profileLink.accountId} (verified=${profileLink.accountVerified})`);
             // TODO: can Battle API be trusted in that regard?
             // bnAccount.profileLinks.splice(bnAccount.profileLinks.findIndex(x => x === profileLink), 1);
-            // await this.conn.getRepository(S2ProfileAccountLink).delete(profileLink);
-            await this.conn.getRepository(S2ProfileAccountLink).update(profileLink, {
+            // await this.conn.getRepository(S2ProfileAccountLink).delete(this.conn.getRepository(S2ProfileAccountLink).getId(profileLink));
+            await this.conn.getRepository(S2ProfileAccountLink).update(this.conn.getRepository(S2ProfileAccountLink).getId(profileLink), {
                 accountVerified: false,
             });
         }
