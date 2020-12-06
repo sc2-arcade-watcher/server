@@ -2,15 +2,24 @@ import fp from 'fastify-plugin';
 import { stripIndents } from 'common-tags';
 import { GameLobbyStatus } from '../../../gametracker';
 import { S2GameLobbyRepository } from '../../../repository/S2GameLobbyRepository';
+import { TypedEvent } from '../../../helpers';
 
 export default fp(async (server, opts) => {
+    type lCacheData = {
+        d?: any;
+        date?: Date;
+        processEvent?: TypedEvent<boolean>;
+    };
+    const lcData = new Map<string, lCacheData>();
+    const lcDuration = 1500;
+
     server.get<{
         Querystring: any,
         Params: any,
     }>('/lobbies/active', {
         config: {
             rateLimit: {
-                max: 15,
+                max: 20,
                 timeWindow: 1000 * 30,
             },
         },
@@ -65,11 +74,43 @@ export default fp(async (server, opts) => {
             },
         },
     }, async (request, reply) => {
+        // that's really disgusting way of caching, but should do the job for now
+        const cacheKey = JSON.stringify(Object.keys(request.query).sort().map(x => [x, request.query[x]]));
+        let cReq = lcData.get(cacheKey);
+        if (!cReq || (cReq.date && new Date().getTime() - cReq.date.getTime() > lcDuration)) {
+            cReq = {
+                processEvent: new TypedEvent(),
+            };
+            lcData.set(cacheKey, cReq);
+        }
+        else {
+            if (!cReq.d && cReq.processEvent) {
+                let timeout: NodeJS.Timeout;
+                try {
+                    await Promise.race([
+                        new Promise<boolean>((resolve, reject) => { cReq.processEvent.once(resolve); }),
+                        new Promise<boolean>((resolve, reject) => {
+                            timeout = setTimeout(reject, lcDuration * 2) as any;
+                        })
+                    ]);
+                }
+                catch (err) {
+                    return reply.type('application/json').code(500).send();
+                }
+                finally {
+                    clearTimeout(timeout);
+                }
+            }
+            reply.header('Cache-control', 'public, s-maxage=4');
+            return reply.type('application/json').code(200).send(cReq.d);
+        }
+
         const lobbyRepo = server.conn.getCustomRepository(S2GameLobbyRepository);
         const qb = lobbyRepo
             .createQueryBuilder('lobby')
             .select([])
             .addOrderBy('lobby.createdAt', 'ASC')
+            .addOrderBy('lobby.id', 'DESC')
         ;
 
         if (request.query.includeMapInfo) {
@@ -123,16 +164,17 @@ export default fp(async (server, opts) => {
 
         const result = await qb.getMany();
 
-        // START for compatibility, to be removed
-        result.forEach(x => {
-            (<any>x).mapMajorVersion = 0;
-            (<any>x).mapMinorVersion = 0;
-            (<any>x).extModMajorVersion = 0;
-            (<any>x).extModMinorVersion = 0;
-            (<any>x).multiModMajorVersion = 0;
-            (<any>x).multiModMinorVersion = 0;
-        });
-        // END
+        cReq.d = result;
+        cReq.date = new Date();
+        cReq.processEvent.emit(true);
+        cReq.processEvent = void 0;
+        if (lcData.size > 20) {
+            for (const [k, v] of lcData) {
+                if (v.date && new Date().getTime() - v.date.getTime() > lcDuration * 2) {
+                    lcData.delete(k);
+                }
+            }
+        }
 
         reply.header('Cache-control', 'public, s-maxage=4');
         return reply.type('application/json').code(200).send(result);

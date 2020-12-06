@@ -96,7 +96,7 @@ export default fp(async (server, opts) => {
             qb.andWhere('profile.regionId = :regionId', { regionId: request.query.regionId });
         }
 
-        if (request.query.name !== void 0 && request.query.name.trim().length) {
+        if (request.query.name !== void 0 && request.query.name.trim().length > 2) {
             const nameQuery = (request.query.name as string).replace(/([\%\?])/g, '\\$1');
 
             if (nameQuery.length) {

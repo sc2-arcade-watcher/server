@@ -38,6 +38,7 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
                 'map.bnetId',
                 'map.name',
                 'map.iconHash',
+                'map.mainCategoryId',
             ])
             .addSelect([
                 'extMod.regionId',
@@ -71,6 +72,7 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
                 'profile.profileId',
                 'profile.name',
                 'profile.discriminator',
+                'profile.avatar',
             ])
             .addOrderBy('slot.slotNumber', 'ASC')
         ;

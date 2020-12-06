@@ -5,18 +5,22 @@ import { StatsBuilderPlayers, StatsBuilderPlayersOptionsOpt } from '../task/play
 import { S2StatsPeriodKind } from '../entity/S2StatsPeriod';
 import { parseProfileHandle } from '../bnet/common';
 
-program.command('stats')
-    .action(async () => {
+program.command('stats:lobbies')
+    .option('--daily', '', false)
+    .option('--weekly', '', false)
+    .option('--monthly', '', false)
+    .action(async (cmd: program.Command) => {
         const conn = await orm.createConnection();
 
-        await buildStatsForPeriod(conn, S2StatsPeriodKind.Monthly);
-        await buildStatsForPeriod(conn, S2StatsPeriodKind.Weekly);
-        await buildStatsForPeriod(conn, S2StatsPeriodKind.Daily);
-
-        const sbp = new StatsBuilderPlayers(conn, {
-            queryConcurrency: 1,
-        });
-        await sbp.generateOverdue();
+        if (cmd.daily) {
+            await buildStatsForPeriod(conn, S2StatsPeriodKind.Daily);
+        }
+        if (cmd.weekly) {
+            await buildStatsForPeriod(conn, S2StatsPeriodKind.Weekly);
+        }
+        if (cmd.monthly) {
+            await buildStatsForPeriod(conn, S2StatsPeriodKind.Monthly);
+        }
 
         await conn.close();
     })

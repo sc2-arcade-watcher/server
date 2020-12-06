@@ -29,10 +29,10 @@ export class NestedHashDir {
 
 function getDepotURL(region: string, filename?: string) {
     if (region.toLowerCase() === 'cn') {
-        return `http://${region.toLowerCase()}.depot.battlenet.com.cn:1119/${filename ?? ''}`;
+        return `http://${region.toLowerCase()}-s2-depot.battlenet.com.cn/${filename ?? ''}`;
     }
     else {
-        return `http://${region.toLowerCase()}.depot.battle.net:1119/${filename ?? ''}`;
+        return `http://${region.toLowerCase()}-s2-depot.classic.blizzard.com/${filename ?? ''}`;
     }
 }
 

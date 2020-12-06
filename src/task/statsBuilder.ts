@@ -74,10 +74,11 @@ async function generateMapStats(conn: orm.Connection, statPeriod: S2StatsPeriod,
     async function getParticipantsData(regionId: number, bnetId: number, lobbyIds?: number[]) {
         const qb = conn.getCustomRepository(S2GameLobbyRepository)
             .createQueryBuilder('lobby')
-            .leftJoin('lobby.slots', 'slot')
+            .leftJoin('lobby.slots', 'slot', 'slot.kind = \'human\'')
             .select([])
             .addSelect('COUNT(DISTINCT slot.id)', 'participantsTotal')
             .addSelect('COUNT(DISTINCT slot.profile)', 'participantsUniqueTotal')
+            .andWhere('lobby.status = :status', { status: GameLobbyStatus.Started })
         ;
 
         if (lobbyIds) {
@@ -88,10 +89,6 @@ async function generateMapStats(conn: orm.Connection, statPeriod: S2StatsPeriod,
             qb.andWhere('lobby.closedAt >= :from AND lobby.closedAt < :to', { from: statPeriod.dateFrom, to: statPeriod.dateTo });
         }
 
-        qb
-            .andWhere('lobby.status = :status', { status: GameLobbyStatus.Started })
-            .andWhere('slot.kind = :kind', { kind: S2GameLobbySlotKind.Human })
-        ;
         const slotMap = await qb.getRawOne();
 
         return [ Number(slotMap.participantsTotal), Number(slotMap.participantsUniqueTotal) ];
@@ -131,7 +128,7 @@ async function generateRegionStats(conn: orm.Connection, statPeriod: S2StatsPeri
     const regRecords = await conn.getRepository(S2GameLobby)
         .createQueryBuilder('lobby')
         .select([])
-        .leftJoin('lobby.slots', 'slot')
+        .leftJoin('lobby.slots', 'slot', 'slot.kind = \'human\' AND lobby.status = \'started\'')
         .addSelect('lobby.regionId', 'regionId')
         .addSelect('COUNT(DISTINCT lobby.id)', 'lobbiesHosted')
         .addSelect('COUNT(DISTINCT CASE WHEN lobby.status = \'started\' THEN lobby.id END)', 'lobbiesStarted')
@@ -161,16 +158,13 @@ async function generateRegionStats(conn: orm.Connection, statPeriod: S2StatsPeri
 export async function buildStatsForPeriod(conn: orm.Connection, statKind: S2StatsPeriodKind) {
     function incDate(currDate: Date) {
         switch (statKind) {
-            case S2StatsPeriodKind.Daily:
-            {
+            case S2StatsPeriodKind.Daily: {
                 return addDays(currDate, 1);
             }
-            case S2StatsPeriodKind.Weekly:
-            {
+            case S2StatsPeriodKind.Weekly: {
                 return addWeeks(currDate, 1);
             }
-            case S2StatsPeriodKind.Monthly:
-            {
+            case S2StatsPeriodKind.Monthly: {
                 return addMonths(currDate, 1);
             }
         }
@@ -192,7 +186,7 @@ export async function buildStatsForPeriod(conn: orm.Connection, statKind: S2Stat
         switch (statKind) {
             case S2StatsPeriodKind.Daily:
             case S2StatsPeriodKind.Weekly: {
-                currDate = new Date('2020-01-27');
+                currDate = new Date('2020-02-03');
                 break;
             }
             case S2StatsPeriodKind.Monthly: {

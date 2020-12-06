@@ -1,5 +1,6 @@
 import fp from 'fastify-plugin';
 import { AppAccountToken } from '../../../../entity/AppAccountToken';
+import { S2ProfileRepository } from '../../../../repository/S2ProfileRepository';
 
 export default fp(async (server, opts) => {
     server.post<{
@@ -54,9 +55,15 @@ export default fp(async (server, opts) => {
             }
         }
 
+        const accProfiles = await server.conn.getCustomRepository(S2ProfileRepository).findByBattleAccount(authResult.account.bnAccount.id);
+
         return reply.code(200).send({
             accessToken: authResult.accessToken,
-            battleAccount: authResult.account.bnAccount,
+            battleAccount: {
+                id: authResult.account.bnAccount.id,
+                battleTag: authResult.account.bnAccount.battleTag,
+                profiles: accProfiles,
+            },
         });
     });
 });

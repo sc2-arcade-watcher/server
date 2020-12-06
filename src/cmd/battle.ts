@@ -49,7 +49,7 @@ program.command('battle:sync-account')
             try {
                 logger.verbose(`${skey}/${results.length} : Updating acc=${accountId} ..`);
                 const bnAccount = await bData.updateAccount(accountId);
-                logger.info(`${skey}/${results.length} : OK ${bnAccount.nameWithId} profiles: ${bnAccount.profileLinks.map(profileHandle).join(' ')}`);
+                logger.verbose(`${skey}/${results.length} : OK ${bnAccount.nameWithId} profiles: ${bnAccount.profileLinks.map(profileHandle).join(' ')}`);
             }
             catch (err) {
                 if (isAxiosError(err) && err.response.status === 404) {

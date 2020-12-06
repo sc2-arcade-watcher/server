@@ -64,14 +64,14 @@ export class MapIndexer {
                 }
                 else {
                     // most likely means it's invalid archive, such as:
-                    // http://us.depot.battle.net:1119/02374236dc17df4e4e0ee7dd85662c2dca06a666795cec665ef37fad9187d593.s2ma
+                    // US 02374236dc17df4e4e0ee7dd85662c2dca06a666795cec665ef37fad9187d593.s2ma
                     mhead.archiveSize = null;
                 }
             }
             catch (err) {
                 // CN depot, specificaly, might repeatedly return 503 for non cached s2ma and possibly other files (?)
                 // just give up in that case - it probably affects only old revisions of s2ma's
-                // example: http://cn.depot.battlenet.com.cn:1119/54c06a38ab2eb96811742cd0bf4107d9be7b58019ca21b73936338b4df378a7e.s2ma
+                // example: CN 54c06a38ab2eb96811742cd0bf4107d9be7b58019ca21b73936338b4df378a7e.s2ma
                 if (isAxiosError(err) && err.response?.status === 503) {
                     mhead.archiveSize = null;
                     logger.verbose(`failed to obtain archiveSize of ${mhead.linkVer} due to 503`);
@@ -476,6 +476,16 @@ export class MapIndexer {
         if (!map.author) {
             map.author = await this.conn.getCustomRepository(S2ProfileRepository).fetchOrCreate(msg.author);
             updatedMap = true;
+        }
+
+        // update discriminator if applicable
+        if (map.author.name === msg.author.name && map.author.discriminator === 0 && msg.author.discriminator !== 0) {
+            map.author.name = msg.author.name;
+            map.author.discriminator = msg.author.discriminator;
+            await this.conn.getCustomRepository(S2ProfileRepository).update(map.author.id, {
+                name: msg.author.name,
+                discriminator: msg.author.discriminator,
+            });
         }
 
         if (!this.conn.getRepository(S2MapHeader).hasId(map.initialVersion)) {

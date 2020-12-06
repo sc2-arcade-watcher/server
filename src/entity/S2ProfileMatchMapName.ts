@@ -9,7 +9,7 @@ export class S2ProfileMatchMapName {
     })
     id: number;
 
-    @ManyToOne(type => S2ProfileMatch, {
+    @ManyToOne(type => S2ProfileMatch, match => match.names, {
         nullable: false,
         onDelete: 'CASCADE',
         onUpdate: 'CASCADE',

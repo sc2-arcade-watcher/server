@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, Index, ManyToOne } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Index, ManyToOne, OneToMany } from 'typeorm';
 import { S2Map } from './S2Map';
 import { S2Profile } from './S2Profile';
+import { S2ProfileMatchMapName } from './S2ProfileMatchMapName';
 
 export enum S2MatchDecision {
     Left = 'left',
@@ -85,6 +86,12 @@ export class S2ProfileMatch {
         unsigned: true,
     })
     mapId: number;
+
+    @OneToMany(type => S2ProfileMatchMapName, name => name.match, {
+        persistence: false,
+        cascade: false,
+    })
+    names: S2ProfileMatchMapName[];
 
     map?: S2Map;
 

@@ -271,7 +271,7 @@ class DataProc {
     protected async updateProfileLastOnline(s2profiles: S2Profile[], nLastOnline: Date) {
         const joinTime = new Date(nLastOnline);
         joinTime.setMilliseconds(0);
-        const newlyJoined = s2profiles.filter(x => joinTime > x.lastOnlineAt);
+        const newlyJoined = s2profiles.filter(x => !x.lastOnlineAt || joinTime > x.lastOnlineAt);
         if (newlyJoined.length > 0) {
             newlyJoined.forEach(x => { x.lastOnlineAt = nLastOnline; });
             await this.conn.getRepository(S2Profile).update(newlyJoined.map(x => x.id), {

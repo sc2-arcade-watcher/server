@@ -146,14 +146,16 @@ export default fp(async (server, opts) => {
         if (request.query.name !== void 0 && request.query.name.trim().length) {
             const nameQuery = (request.query.name as string).replace(/([\%\?])/g, '\\$1');
             if (nameQuery.indexOf('#') > 0) {
-                qb.andWhere('profile.name LIKE :name', { name: nameQuery.substr(0, nameQuery.indexOf('#')) });
+                // qb.andWhere('profile.name LIKE :name', { name: nameQuery.substr(0, nameQuery.indexOf('#')) });
+                qb.andWhere('profile.name = :name', { name: nameQuery.substr(0, nameQuery.indexOf('#')) });
                 const discriminator = Number(nameQuery.substr(nameQuery.indexOf('#') + 1));
                 if (discriminator && !isNaN(discriminator)) {
                     qb.andWhere('profile.discriminator = :discriminator', { discriminator });
                 }
             }
             else {
-                qb.andWhere('profile.name LIKE :name', { name: nameQuery + '%' });
+                // qb.andWhere('profile.name LIKE :name', { name: nameQuery + '%' });
+                qb.andWhere('profile.name = :name', { name: nameQuery });
             }
         }
 

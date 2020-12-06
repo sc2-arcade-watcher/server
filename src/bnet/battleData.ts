@@ -363,8 +363,13 @@ export class BattleMatchEntryMapper {
                     (isMainLocaleMatching || entryMapNamesUnique.length === availableUniqueNames.length)
                 ) {
                     if (matchedMap.mapType === S2MapType.DependencyMod || matchedMap.mapType === S2MapType.ExtensionMod) {
-                        logger.error(`${profile.nameAndId} matched mod of type=${matchedMap.mapType} instead of map - wtf?`, matchedMap, entryMapNamesUnique);
-                        return false;
+                        if (bSrcs.length < sourcesLimit) {
+                            return false;
+                        }
+                        logger.warn(`${profile.nameAndId} matched mod of type=${matchedMap.mapType} instead of map - wtf?`, matchedMap, entryMapNamesUnique);
+                        currMappedEntry.mapId = 0;
+                        mappedEntries.push(currMappedEntry);
+                        continue;
                     }
 
                     currMappedEntry.mapId = matchedMap.mapId;
@@ -467,7 +472,16 @@ export class BattleDataUpdater {
     protected async updateAccountProfiles(bnAccount: BnAccount) {
         let bProfiles: BattleSC2ProfileBase[];
         try {
-            bProfiles = (await this.bAPIEntry.pub.sc2.getAccount(bnAccount.id)).data;
+            try {
+                bProfiles = (await this.bAPIEntry.eu.sc2.getAccount(bnAccount.id)).data;
+            }
+            catch (err) {
+                if (!isAxiosError(err)) throw err;
+            }
+
+            if (!bProfiles) {
+                bProfiles = (await this.bAPIEntry.pub.sc2.getAccount(bnAccount.id)).data;
+            }
         }
         catch (err) {
             if (isAxiosError(err)) {
@@ -481,6 +495,8 @@ export class BattleDataUpdater {
                 throw err;
             }
         }
+
+        const initProfileLinksLen = bnAccount.profileLinks.length;
 
         // ensure profiles exists & update avatars
         const affectedProfiles = await Promise.all(bProfiles.map(async bCurrProfile => {
@@ -505,7 +521,7 @@ export class BattleDataUpdater {
             let profileLink = bnAccount.profileLinks.find(x => profileHandle(x) === profileHandle(bCurrProfile));
             if (!profileLink) {
                 const profile = affectedProfiles.find(x => profileHandle(x) === profileHandle(bCurrProfile));
-                logger.debug(`Attaching new profile ${profile.fullnameWithHandle} to account ${bnAccount.nameWithId}`);
+                logger.info(`Attaching new profile ${profile.fullnameWithHandle} to account ${bnAccount.nameWithId}`);
 
                 profileLink = this.conn.getRepository(S2ProfileAccountLink).create({
                     regionId: bCurrProfile.regionId,
@@ -525,12 +541,16 @@ export class BattleDataUpdater {
             }
         }
 
-        // unlink profiles that might have been deleted/banned/miss-linked/whatever
+        // unlink profiles that might have been deleted/banned/miss-linked/whatever .. ?
         const removedProfileLinks = bnAccount.profileLinks.filter(x => !bProfiles.find(y => profileHandle(x) === profileHandle(y)));
         for (const profileLink of removedProfileLinks) {
-            logger.warn(`Detaching profile ${profileHandle(profileLink)} from account ${profileLink.accountId} (verified=${profileLink.accountVerified})`);
-            bnAccount.profileLinks.splice(bnAccount.profileLinks.findIndex(x => x === profileLink), 1);
-            await this.conn.getRepository(S2ProfileAccountLink).delete(profileLink);
+            logger.info(`Detaching profile ${profileHandle(profileLink)} from account ${profileLink.accountId} (verified=${profileLink.accountVerified})`);
+            // TODO: can Battle API be trusted in that regard?
+            // bnAccount.profileLinks.splice(bnAccount.profileLinks.findIndex(x => x === profileLink), 1);
+            // await this.conn.getRepository(S2ProfileAccountLink).delete(profileLink);
+            await this.conn.getRepository(S2ProfileAccountLink).update(profileLink, {
+                accountVerified: false,
+            });
         }
 
         return {
@@ -588,6 +608,7 @@ export class BattleDataUpdater {
         if (!bnAccount) {
             bnAccount = new BnAccount();
             bnAccount.id = accountId;
+            bnAccount.profileLinks = [];
             await this.conn.getRepository(BnAccount).save(bnAccount, { transaction: false });
         }
         if (typeof accountInfo === 'object') {

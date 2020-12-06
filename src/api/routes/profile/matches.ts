@@ -60,6 +60,7 @@ export default fp(async (server, opts) => {
         const qb = server.conn.getRepository(S2ProfileMatch)
             .createQueryBuilder('profMatch')
             .leftJoinAndMapOne('profMatch.map', S2Map, 'map', 'map.regionId = profMatch.regionId AND map.bnetId = profMatch.mapId')
+            .leftJoinAndSelect('profMatch.names', 'mapNames', 'profMatch.mapId = 0')
             .select([
                 'profMatch.id',
                 'profMatch.date',
@@ -69,8 +70,9 @@ export default fp(async (server, opts) => {
                 'map.bnetId',
                 'map.name',
                 'map.iconHash',
+                'mapNames.locale',
+                'mapNames.name',
             ])
-            .andWhere('profMatch.mapId != 0')
             .andWhere('profMatch.regionId = :regionId AND profMatch.realmId = :realmId AND profMatch.profileId = :profileId', {
                 regionId: request.params.regionId,
                 realmId: request.params.realmId,
