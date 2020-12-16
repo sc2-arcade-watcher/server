@@ -131,6 +131,11 @@ export class S2Map {
     @Index('published_at_idx')
     publishedAt: Date;
 
+    @Column({
+        default: false,
+    })
+    removed: boolean;
+
     @OneToMany(type => S2MapVariant, variant => variant.map, {
         persistence: false,
         cascade: false,

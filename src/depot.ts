@@ -57,7 +57,9 @@ export class BattleDepot {
     }
 
     async retrieveHead(region: string, filename: string) {
-        return axios.head(getDepotURL(region, filename));
+        return axios.head(getDepotURL(region, filename), {
+            timeout: 60000,
+        });
     }
 
     async getPathOrRetrieve(region: string, filename: string) {

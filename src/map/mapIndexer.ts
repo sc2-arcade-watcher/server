@@ -165,8 +165,8 @@ export class MapIndexer {
                 if (isLatestVersion) {
                     s2locale.inLatestVersion = true;
                 }
-                s2locale.name = localizedMapHeader.workingSet.name;
-                s2locale.description = localizedMapHeader.workingSet.description;
+                s2locale.name = localizedMapHeader.workingSet.name ?? '';
+                s2locale.description = localizedMapHeader.workingSet.description ?? '';
                 s2locale.website = localizedMapHeader.arcadeInfo?.website ?? '';
                 dUpdated = true;
             }
@@ -281,7 +281,7 @@ export class MapIndexer {
             else {
                 map.type = S2MapType.DependencyMod;
             }
-            map.name = mapHeader.workingSet.name;
+            map.name = mapHeader.workingSet.name ?? '';
             map.description = mapHeader.workingSet.description;
             map.website = mapHeader.arcadeInfo?.website;
             map.mainCategoryId = defaultVariant.categoryId;
@@ -301,6 +301,11 @@ export class MapIndexer {
             map.mainLocaleHash = mainLocaleTable.stringTable[0].hash;
             map.updatedAt = new Date(mhead.uploadedAt);
             map.currentVersion = mhead;
+
+            // if we get a new version of removed map, it most likely means that it has been restored
+            if (!forceUpdate && map.removed) {
+                map.removed = false;
+            }
 
             // variants
             if (map.type === S2MapType.ArcadeMap || map.type === S2MapType.MeleeMap) {
@@ -503,7 +508,7 @@ export class MapIndexer {
     protected async processMapRevision(msg: MessageMapRevisionResult) {
         const mapRevision = await this.prepareMapRevision(msg.regionId, msg.mapId, msg);
         if (this.conn.getRepository(S2MapHeader).hasId(mapRevision.mhead)) {
-            logger.debug(`skpping map revision ${msg.regionId}/${msg.mapId},${msg.mapVersion}`);
+            logger.debug(`skipping map revision ${msg.regionId}/${msg.mapId},${msg.mapVersion}`);
             return;
         }
 
@@ -549,15 +554,20 @@ export class MapIndexer {
     }
 
     async add(msg: MessageMapDiscoverResult | MessageMapRevisionResult) {
+        if (this.taskQueue.size > 60 || this.taskQueue.pending > 60) {
+            logger.debug(`queue=${this.taskQueue.size} pending=${this.taskQueue.pending}`, this.currentlyProcessing);
+        }
         return this.taskQueue.add(async () => {
             const key = `${msg.regionId}/${msg.mapId}`;
             if (this.currentlyProcessing.has(key)) {
-                logger.debug(`waiting for ${key}..`);
+                logger.debug(`waiting ${key}.. ${(<MessageMapRevisionResult>msg)?.mapVersion}`);
                 while (this.currentlyProcessing.has(key)) {
                     await sleep(100);
                 }
+                logger.debug(`done waiting ${key}.. ${(<MessageMapRevisionResult>msg)?.mapVersion}`);
             }
             try {
+                logger.debug(`begin processing ${key}.. ${(<MessageMapRevisionResult>msg)?.mapVersion}`);
                 this.currentlyProcessing.add(key);
                 switch (msg.$id) {
                     case MessageKind.MapDiscoverResult: {
@@ -571,13 +581,11 @@ export class MapIndexer {
                 }
             }
             finally {
+                logger.debug(`done processing ${key}.. ${(<MessageMapRevisionResult>msg)?.mapVersion}`);
                 this.currentlyProcessing.delete(key);
             }
         }, {
             priority: msg.$id === MessageKind.MapDiscoverResult ? 10 : 5,
         });
-        if (this.taskQueue.size > 100) {
-            logger.debug(`queue=${this.taskQueue.size} pending=${this.taskQueue.pending}`);
-        }
     }
 }
