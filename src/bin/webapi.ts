@@ -118,6 +118,8 @@ server.register(fastifyOAS, <fastifyOAS.FastifyOASOptions>{
     }
 });
 
+server.register(require('../api/routes/content/donations').default);
+
 server.register(require('../api/routes/account/auth/bnet').default);
 server.register(require('../api/routes/account/logout').default);
 server.register(require('../api/routes/account/info').default);
