@@ -461,7 +461,7 @@ export class BattleDataUpdater {
                 return this.bAPIEntry.eu;
             }
             case GameRegion.KR: {
-                return this.bAPIEntry.us;
+                return this.bAPIEntry.kr;
             }
             case GameRegion.CN: {
                 return this.bAPIEntry.cn;
