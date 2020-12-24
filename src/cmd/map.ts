@@ -27,13 +27,13 @@ program.command('map:dump-header <region> <hash>')
     })
 ;
 
-program.command('map:update')
-    .option<Number>('--id [number]', 'db id', (value, previous) => Number(value), null)
-    .option<String>('--global-id [number]', 'bnet map id, in format "regionId/mapId"', (value, previous) => String(value), null)
+program.command('map:update-info')
+    .option<Number>('--id <number>', 'db id', Number, null)
+    .option<String>('--global-id <string>', 'bnet map id, in format "regionId/mapId"', (value, previous) => String(value), null)
+    .option<Number>('--offset <number>', 'offset', Number, null)
+    .option<Number>('--concurrency <number>', 'concurrency', Number, 5)
     .option('--initial-only', 'reindex only initial version', false)
     .option('--latest-only', 'reindex only latest version', false)
-    .option<Number>('--offset [number]', 'offset', (value, previous) => Number(value), null)
-    .option<Number>('--concurrency [number]', 'concurrency', (value, previous) => Number(value), 5)
     .action(async function (cmd: program.Command) {
         const conn = await orm.createConnection();
         const mIndexer = new MapIndexer(conn);
@@ -109,6 +109,60 @@ program.command('map:update')
         }, {
             concurrency: cmd.concurrency,
         });
+        await conn.close();
+    })
+;
+
+
+program.command('map:update-header')
+    .option<Number>('--id <number>', 'db id', Number, null)
+    .option<String>('--global-id <string>', 'bnet map id, in format "regionId/mapId"', (value, previous) => String(value), null)
+    .option<Number>('--offset <number>', 'offset', Number, null)
+    .option<Number>('--concurrency <number>', 'concurrency', Number, 5)
+    .action(async function (cmd: program.Command) {
+        const conn = await orm.createConnection();
+        const mIndexer = new MapIndexer(conn);
+        await mIndexer.load();
+        const qb = conn.getRepository(S2MapHeader).createQueryBuilder('mhead')
+            .select('mhead.id', 'id')
+            .addOrderBy('mhead.id', 'ASC')
+        ;
+
+        if (cmd.id) {
+            qb.andWhere('mhead.id = :id', { id: cmd.id });
+        }
+
+        if (cmd.globalId) {
+            const matches = (cmd.globalId as string).match(/^(\d+)\/(\d+)$/);
+            if (!matches) {
+                logger.error('invalid param');
+                return;
+            }
+
+            qb.andWhere('mhead.regionId = :regionId AND mhead.bnetId = :bnetId', {
+                regionId: Number(matches[1]),
+                bnetId: Number(matches[2]),
+            });
+        }
+
+        if (cmd.offset) {
+            qb.andWhere('mhead.id >= :offset', { offset: cmd.offset });
+        }
+
+        const lRawIds = (await qb.getRawMany()).map(x => x.id);
+        await pMap(lRawIds, async (mapHeaderId) => {
+            const mhead = await conn.getRepository(S2MapHeader).findOne({ id: mapHeaderId });
+            await mIndexer.populateMapHeader(mhead);
+            await conn.getRepository(S2MapHeader).save(mhead, { transaction: false });
+
+            logger.info(oneLine`
+                [${mhead.id.toString().padStart(7, ' ')}/${lRawIds[lRawIds.length - 1].toString().padStart(7, ' ')}]
+                ${mhead.linkVer}
+            `);
+        }, {
+            concurrency: cmd.concurrency,
+        });
+
         await conn.close();
     })
 ;

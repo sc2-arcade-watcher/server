@@ -1,18 +1,11 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, Unique, JoinColumn } from 'typeorm';
-import { S2Region } from './S2Region';
 import { S2Map } from './S2Map';
 
 @Entity()
-@Unique('region_map_ver_idx', ['region', 'bnetId', 'majorVersion', 'minorVersion'])
+@Unique('region_map_ver_idx', ['regionId', 'bnetId', 'majorVersion', 'minorVersion'])
 export class S2MapHeader {
     @PrimaryGeneratedColumn()
     id: number;
-
-    @ManyToOne(type => S2Region, {
-        nullable: false,
-    })
-    @Index()
-    region: S2Region;
 
     @Column({
         type: 'tinyint',
@@ -41,6 +34,7 @@ export class S2MapHeader {
     @Column({
         type: 'char',
         length: 64,
+        collation: 'ascii_bin',
     })
     headerHash: string;
 
@@ -50,10 +44,11 @@ export class S2MapHeader {
     @Column()
     isExtensionMod: boolean;
 
+    @Index('archive_hash_idx')
     @Column({
         type: 'char',
         length: 64,
-        nullable: true,
+        collation: 'ascii_bin',
     })
     archiveHash: string;
 
@@ -62,6 +57,11 @@ export class S2MapHeader {
         nullable: true,
     })
     archiveSize: number;
+
+    @Column({
+        nullable: true,
+    })
+    archiveFilename: string;
 
     @Column({
         nullable: true,

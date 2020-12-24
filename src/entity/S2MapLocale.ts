@@ -2,8 +2,8 @@ import { Entity, Column, Index } from 'typeorm';
 import { GameLocale } from '../common';
 
 @Entity()
-@Index('name_region_idx', ['name', 'regionId'])
-@Index('original_name_region_idx', ['originalName', 'regionId'])
+@Index('name_idx', ['name'])
+@Index('original_name_idx', ['originalName'])
 export class S2MapLocale {
     @Column({
         type: 'tinyint',
@@ -29,20 +29,42 @@ export class S2MapLocale {
     @Column({
         type: 'smallint',
         unsigned: true,
+        default: 0,
     })
-    majorVersion: number;
+    initialMajorVersion: number;
+
+    @Column({
+        type: 'smallint',
+        unsigned: true,
+        default: 0,
+    })
+    initialMinorVersion: number;
 
     @Column({
         type: 'smallint',
         unsigned: true,
     })
-    minorVersion: number;
+    latestMajorVersion: number;
+
+    @Column({
+        type: 'smallint',
+        unsigned: true,
+    })
+    latestMinorVersion: number;
 
     @Column()
     inLatestVersion: boolean;
 
     @Column()
     isMain: boolean;
+
+    @Column({
+        type: 'char',
+        length: 64,
+        collation: 'ascii_bin',
+        nullable: true,
+    })
+    tableHash: string;
 
     @Column({
         nullable: true,

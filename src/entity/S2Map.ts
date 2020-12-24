@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, Unique, JoinColumn, OneToMany } from 'typeorm';
-import { GameLocale } from '../common';
+import { GameLocale, GameLocaleFlag } from '../common';
 import { S2MapHeader } from './S2MapHeader';
 import { S2Profile } from './S2Profile';
 import { S2MapVariant } from './S2MapVariant';
@@ -53,10 +53,16 @@ export class S2Map {
     currentVersion: S2MapHeader;
 
     @ManyToOne(type => S2MapHeader, {
-        nullable: true,
+        nullable: false,
     })
     @Index('initial_version_idx')
     initialVersion: S2MapHeader;
+
+    @Column({
+        type: 'int',
+        unsigned: true,
+    })
+    availableLocales: GameLocaleFlag;
 
     @Column({
         type: 'enum',
@@ -115,19 +121,22 @@ export class S2Map {
     @Column({
         type: 'tinyint',
         unsigned: true,
-        nullable: true,
+        default: 0,
     })
     maxPlayers: number;
 
     @Column({
-        nullable: true,
+        type: 'tinyint',
+        unsigned: true,
+        default: 0,
     })
+    maxHumanPlayers: number;
+
+    @Column()
     @Index('updated_at_idx')
     updatedAt: Date;
 
-    @Column({
-        nullable: true,
-    })
+    @Column()
     @Index('published_at_idx')
     publishedAt: Date;
 

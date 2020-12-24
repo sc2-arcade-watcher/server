@@ -1,6 +1,5 @@
 import fp from 'fastify-plugin';
 import { S2Map } from '../../../entity/S2Map';
-import { MapAccessAttributes } from '../../plugins/accessManager';
 
 export default fp(async (server, opts) => {
     server.get<{
@@ -26,9 +25,15 @@ export default fp(async (server, opts) => {
     }, async (request, reply) => {
         const map = await server.conn.getRepository(S2Map)
             .createQueryBuilder('map')
-            .innerJoinAndSelect('map.currentVersion', 'mapHead')
+            .innerJoin('map.currentVersion', 'currRev')
             .leftJoin('map.author', 'author')
             .addSelect([
+                'currRev.id',
+                'currRev.majorVersion',
+                'currRev.minorVersion',
+                'currRev.isPrivate',
+                'currRev.archiveSize',
+                'currRev.uploadedAt',
                 'author.regionId',
                 'author.realmId',
                 'author.profileId',
@@ -40,6 +45,7 @@ export default fp(async (server, opts) => {
                 regionId: request.params.regionId,
                 bnetId: request.params.mapId,
             })
+            .limit(1)
             .getOne()
         ;
 
@@ -47,13 +53,7 @@ export default fp(async (server, opts) => {
             return reply.code(404).send();
         }
 
-        // TODO: don't provide these attributes in this endpoint to avoid this check?
-        const canDownload = await server.accessManager.isMapAccessGranted(MapAccessAttributes.Download, map, request.userAccount);
-        if (!canDownload) {
-            map.currentVersion.headerHash = null;
-            map.currentVersion.archiveHash = null;
-        }
-
+        reply.header('Cache-control', 'public, s-maxage=30');
         return reply.code(200).send(map);
     });
 });

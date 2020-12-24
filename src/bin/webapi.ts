@@ -138,6 +138,7 @@ server.register(require('../api/routes/lobby/history').default);
 
 server.register(require('../api/routes/maps/list').default);
 server.register(require('../api/routes/maps/show').default);
+server.register(require('../api/routes/maps/locales').default);
 server.register(require('../api/routes/maps/details').default);
 server.register(require('../api/routes/maps/versions').default);
 server.register(require('../api/routes/maps/dependencies').default);

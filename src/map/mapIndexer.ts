@@ -3,9 +3,9 @@ import PQueue from 'p-queue';
 import { logger } from '../logger';
 import { retry, sleep, isAxiosError } from '../helpers';
 import { S2MapHeader } from '../entity/S2MapHeader';
-import { MapResolver, reprocessMapHeader, MapHeaderDataRaw, AttributeValue } from './mapResolver';
+import { MapResolver, reprocessMapHeader, MapHeaderDataRaw, AttributeValue, MapHeader } from './mapResolver';
 import { MessageKind, MessageMapRevisionResult, MessageMapDiscoverResult, MapVersionInfo } from '../server/executiveServer';
-import { decodeMapVersion, GameRegion, GameLocale } from '../common';
+import { decodeMapVersion, GameRegion, GameLocale, GameLocaleFlag } from '../common';
 import { S2Map, S2MapType } from '../entity/S2Map';
 import { S2MapCategory } from '../entity/S2MapCategory';
 import { S2Profile } from '../entity/S2Profile';
@@ -46,7 +46,7 @@ export class MapIndexer {
             logger.warn(`failed to populate header`, err);
         },
     })
-    protected async populateMapHeader(mhead: S2MapHeader) {
+    public async populateMapHeader(mhead: S2MapHeader) {
         logger.verbose(`resolving header.. map=${mhead.linkVer} hash=${mhead.headerHash}`);
         const rcode = GameRegion[mhead.regionId];
 
@@ -56,6 +56,7 @@ export class MapIndexer {
             const s2mhResponse = await this.resolver.depot.retrieveHead(rcode, `${mhead.headerHash}.s2mh`);
             mhead.uploadedAt = new Date(s2mhResponse.headers['last-modified']);
         }
+
         if (!mhead.archiveSize) {
             try {
                 const s2maResponse = await this.resolver.depot.retrieveHead(rcode, `${headerRawData.archiveHandle.hash}.${headerRawData.archiveHandle.type}`);
@@ -74,14 +75,16 @@ export class MapIndexer {
                 // example: CN 54c06a38ab2eb96811742cd0bf4107d9be7b58019ca21b73936338b4df378a7e.s2ma
                 if (isAxiosError(err) && err.response?.status === 503) {
                     mhead.archiveSize = null;
-                    logger.verbose(`failed to obtain archiveSize of ${mhead.linkVer} due to 503`);
+                    logger.warn(`failed to obtain archiveSize of ${mhead.linkVer} due to 503`);
                 }
                 else {
                     throw err;
                 }
             }
         }
+
         mhead.archiveHash = headerRawData.archiveHandle.hash;
+        mhead.archiveFilename = headerRawData.filename;
 
         return headerRawData;
     }
@@ -137,9 +140,17 @@ export class MapIndexer {
 
             const isHeaderNewer = (
                 !s2locale ||
-                (mhead.majorVersion > s2locale.majorVersion) ||
-                (mhead.majorVersion === s2locale.majorVersion && mhead.minorVersion > s2locale.minorVersion) ||
-                (mhead.majorVersion === s2locale.majorVersion && mhead.minorVersion === s2locale.minorVersion && forceUpdate)
+                (mhead.majorVersion > s2locale.latestMajorVersion) ||
+                (mhead.majorVersion === s2locale.latestMajorVersion && mhead.minorVersion > s2locale.latestMinorVersion) ||
+                (mhead.majorVersion === s2locale.latestMajorVersion && mhead.minorVersion === s2locale.latestMinorVersion && forceUpdate)
+            );
+
+            const isHeaderOlder = (
+                !s2locale ||
+                (mhead.majorVersion < s2locale.initialMajorVersion) ||
+                (mhead.majorVersion === s2locale.initialMajorVersion && mhead.minorVersion < s2locale.initialMinorVersion) ||
+                (mhead.majorVersion === s2locale.initialMajorVersion && mhead.minorVersion === s2locale.initialMinorVersion && forceUpdate) ||
+                (0 === s2locale.initialMajorVersion && 0 === s2locale.initialMinorVersion && forceUpdate)
             );
 
             if (!s2locale) {
@@ -149,27 +160,40 @@ export class MapIndexer {
                 s2locale.locale = lTable.locale;
                 s2locale.isMain = false;
                 s2locale.inLatestVersion = false;
+                s2locale.initialMajorVersion = mhead.majorVersion;
+                s2locale.initialMinorVersion = mhead.minorVersion;
                 s2locale.originalName = null;
                 map.locales.push(s2locale);
             }
 
-            const localizationData = await this.resolver.getMapLocalization(
-                rcode,
-                lTable.stringTable[0].hash,
-            );
-            const localizedMapHeader = reprocessMapHeader(rawHeaderData, localizationData);
+            let localizedMapHeader: MapHeader;
+            // don't load it unless required
+            if (isHeaderNewer || isInitialVersion || s2locale.originalName === null) {
+                localizedMapHeader = reprocessMapHeader(rawHeaderData, await this.resolver.getMapLocalization(
+                    rcode,
+                    lTable.stringTable[0].hash,
+                ));
+            }
 
             if (isHeaderNewer) {
-                s2locale.majorVersion = mhead.majorVersion;
-                s2locale.minorVersion = mhead.minorVersion;
+                s2locale.latestMajorVersion = mhead.majorVersion;
+                s2locale.latestMinorVersion = mhead.minorVersion;
                 if (isLatestVersion) {
                     s2locale.inLatestVersion = true;
                 }
+                s2locale.tableHash = lTable.stringTable[0].hash;
                 s2locale.name = localizedMapHeader.workingSet.name ?? '';
                 s2locale.description = localizedMapHeader.workingSet.description ?? '';
                 s2locale.website = localizedMapHeader.arcadeInfo?.website ?? '';
                 dUpdated = true;
             }
+
+            if (isHeaderOlder) {
+                s2locale.initialMajorVersion = mhead.majorVersion;
+                s2locale.initialMinorVersion = mhead.minorVersion;
+                dUpdated = true;
+            }
+
             if (isInitialVersion || s2locale.originalName === null) {
                 s2locale.originalName = localizedMapHeader.workingSet.name;
                 dUpdated = true;
@@ -180,9 +204,9 @@ export class MapIndexer {
             const localeIndex = rawHeaderData.localeTable.findIndex(x => x.locale === s2locale.locale);
             if (localeIndex !== -1) continue;
             const isHeaderNewer = (
-                (mhead.majorVersion > s2locale.majorVersion) ||
-                (mhead.majorVersion === s2locale.majorVersion && mhead.minorVersion > s2locale.minorVersion) ||
-                (mhead.majorVersion === s2locale.majorVersion && mhead.minorVersion === s2locale.minorVersion && forceUpdate)
+                (mhead.majorVersion > s2locale.latestMajorVersion) ||
+                (mhead.majorVersion === s2locale.latestMajorVersion && mhead.minorVersion > s2locale.latestMinorVersion) ||
+                (mhead.majorVersion === s2locale.latestMajorVersion && mhead.minorVersion === s2locale.latestMinorVersion && forceUpdate)
             );
             if (!isHeaderNewer || !s2locale.inLatestVersion) continue;
             s2locale.inLatestVersion = false;
@@ -191,9 +215,7 @@ export class MapIndexer {
         }
 
         if (isInitialVersion) {
-            const mainLocaleable = (
-                rawHeaderData.workingSet.localeTable.find(x => x.locale === GameLocale.enUS) ?? rawHeaderData.workingSet.localeTable[0]
-            );
+            const mainLocaleable = rawHeaderData.workingSet.localeTable[0];
             const s2locale = map.locales.find(x => x.locale === mainLocaleable.locale);
             s2locale.isMain = true;
 
@@ -285,7 +307,16 @@ export class MapIndexer {
             map.description = mapHeader.workingSet.description;
             map.website = mapHeader.arcadeInfo?.website;
             map.mainCategoryId = defaultVariant.categoryId;
+
+            const playableVariants = mapHeader.variants
+                .filter(x => x.categoryId !== 17 && x.categoryId !== 19) // not archon
+                .filter(x => x.maxHumanPlayers)
+            ;
             map.maxPlayers = mapHeader.workingSet.maxPlayers;
+            map.maxHumanPlayers = playableVariants.length ?
+                playableVariants.map(x => x.maxHumanPlayers).sort()[playableVariants.length - 1] : mapHeader.workingSet.maxPlayers
+            ;
+
             map.iconHash = (
                 mapHeader.arcadeInfo?.mapIcon ??
                 mapHeader.workingSet.thumbnail ??
@@ -297,6 +328,11 @@ export class MapIndexer {
                 mapHeader.workingSet.bigMap ??
                 null
             )?.hash ?? null;
+
+            map.availableLocales = 0;
+            for (const currLocale of rawHeaderData.workingSet.localeTable.map(x => x.locale)) {
+                map.availableLocales |= GameLocaleFlag[currLocale];
+            }
             map.mainLocale = mainLocaleTable.locale;
             map.mainLocaleHash = mainLocaleTable.stringTable[0].hash;
             map.updatedAt = new Date(mhead.uploadedAt);
