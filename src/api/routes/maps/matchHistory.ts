@@ -49,14 +49,6 @@ export default fp(async (server, opts) => {
                 orderByKey = `profMatch.${request.query.orderBy}`;
                 break;
             }
-            case 'profileId': {
-                orderByKey = [
-                    'profile.regionId',
-                    'profile.realmId',
-                    'profile.profileId',
-                ];
-                break;
-            }
             default: {
                 return reply.code(400).send();
             }
@@ -68,11 +60,11 @@ export default fp(async (server, opts) => {
 
         const qb = server.conn.getRepository(S2ProfileMatch)
             .createQueryBuilder('profMatch')
-            .leftJoinAndMapOne(
+            .innerJoinAndMapOne(
                 'profMatch.profile',
                 S2Profile,
                 'profile',
-                'profile.regionId = profMatch.regionId AND profile.realmId = profMatch.realmId AND profile.profileId = profMatch.profileId'
+                'profile.regionId = profMatch.regionId AND profile.localProfileId = profMatch.localProfileId'
             )
             .select([
                 'profMatch.date',
@@ -94,10 +86,8 @@ export default fp(async (server, opts) => {
         qb.limit(pQuery.fetchLimit);
         pQuery.applyQuery(qb, request.query.orderDirection!.toUpperCase());
 
-        reply.header('Cache-control', 'private, max-age=60');
+        reply.header('Cache-control', 'public, s-maxage=60');
         const results = await qb.getRawAndEntities();
-        // if (results.entities.length >= pQuery.fetchLimit) {
-        // }
         return reply.code(200).sendWithCursorPagination(results, pQuery);
     });
 });

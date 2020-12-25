@@ -2,7 +2,9 @@ import { Entity, PrimaryGeneratedColumn, Column, Index, ManyToOne } from 'typeor
 import { S2ProfileMatch } from './S2ProfileMatch';
 import { GameLocale } from '../common';
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 export class S2ProfileMatchMapName {
     @PrimaryGeneratedColumn({
         unsigned: true,
@@ -24,6 +26,9 @@ export class S2ProfileMatchMapName {
     })
     locale: GameLocale;
 
-    @Column()
+    @Column({
+        type: 'varchar',
+        collation: 'utf8mb4_bin',
+    })
     name: string;
 }

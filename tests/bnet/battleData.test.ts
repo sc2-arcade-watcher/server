@@ -16,11 +16,12 @@ interface MatchesTestData {
 }
 
 function mockupProfile(params: Partial<S2Profile> = {}) {
-    const s2profile = S2Profile.create();
+    const s2profile = S2Profile.create({
+        regionId: params?.regionId ?? 1,
+        realmId: params?.realmId ?? 1,
+        profileId: params?.profileId ?? 1,
+    });
     s2profile.name = params?.name ?? 'ASD';
-    s2profile.regionId = params?.regionId ?? 1;
-    s2profile.realmId = params?.realmId ?? 1;
-    s2profile.profileId = params?.profileId ?? 1;
     return s2profile;
 }
 
@@ -55,8 +56,7 @@ describe('BattleMatchEntryMapper', () => {
 
         const mostRecentMatch = new S2ProfileMatch();
         mostRecentMatch.regionId = s2profile.regionId;
-        mostRecentMatch.profileId = s2profile.profileId;
-        mostRecentMatch.realmId = s2profile.realmId;
+        mostRecentMatch.localProfileId = s2profile.localProfileId;
         mostRecentMatch.mapId = 42; // High Orbit
         mostRecentMatch.date = new Date(((tnow.getTime() / 1000) - 2000) * 1000);
         mostRecentMatch.date.setMilliseconds(0);
@@ -160,8 +160,7 @@ describe('BattleMatchEntryMapper', () => {
 
         const mostRecentMatch = new S2ProfileMatch();
         mostRecentMatch.regionId = s2profile.regionId;
-        mostRecentMatch.profileId = s2profile.profileId;
-        mostRecentMatch.realmId = s2profile.realmId;
+        mostRecentMatch.localProfileId = s2profile.localProfileId;
         mostRecentMatch.mapId = 42; // High Orbit
         mostRecentMatch.date = new Date(tnow.getTime() - 600 * 1000);
         mostRecentMatch.decision = S2MatchDecision.Win;
@@ -243,8 +242,7 @@ describe('BattleMatchEntryMapper', () => {
 
         const mostRecentMatch = new S2ProfileMatch();
         mostRecentMatch.regionId = s2profile.regionId;
-        mostRecentMatch.profileId = s2profile.profileId;
-        mostRecentMatch.realmId = s2profile.realmId;
+        mostRecentMatch.localProfileId = s2profile.localProfileId;
         mostRecentMatch.mapId = 42; // High Orbit
         mostRecentMatch.date = new Date(tnow.getTime() - 2000 * 1000);
         mostRecentMatch.decision = S2MatchDecision.Win;

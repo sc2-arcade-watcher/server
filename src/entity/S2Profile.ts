@@ -1,8 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneToMany } from 'typeorm';
-import { S2Region } from './S2Region';
-import { BnAccount } from './BnAccount';
 import { S2ProfileTracking } from './S2ProfileTracking';
 import { S2ProfileAccountLink } from './S2ProfileAccountLink';
+import { PlayerProfileParams } from '../bnet/common';
 
 export interface BareS2Profile {
     regionId: number;
@@ -15,9 +14,17 @@ export interface BareS2Profile {
 
 @Entity()
 @Unique('bnet_id', ['regionId', 'realmId', 'profileId'])
+@Unique('local_profile_region_idx', ['localProfileId', 'regionId'])
 export class S2Profile implements BareS2Profile {
     @PrimaryGeneratedColumn()
     id: number;
+
+    @Column({
+        unsigned: true,
+        type: 'int',
+        default: 0,
+    })
+    localProfileId: number;
 
     @Column({
         unsigned: true,
@@ -93,11 +100,23 @@ export class S2Profile implements BareS2Profile {
         return `${this.regionId}-S2-${this.realmId}-${this.profileId.toString().padEnd(8, ' ')} ${this.name}`;
     }
 
-    static create() {
+    static create(params: PlayerProfileParams) {
         const prof = new S2Profile();
+
+        if (params.regionId > 6 || params.regionId <= 0) throw new Error('regionId > 6');
+        if (params.realmId > 2 || params.realmId <= 0) throw new Error('realmId > 2');
+
+        Object.assign(prof, params);
+        prof.localProfileId = params.profileId;
+        if (params.realmId === 2) {
+            prof.localProfileId |= 1 << 31;
+        }
+
+        prof.name = null;
         prof.discriminator = 0;
         prof.avatar = '';
         prof.deleted = false;
+
         return prof;
     }
 }

@@ -15,8 +15,10 @@ export class S2ProfileRepository extends Repository<S2Profile> {
         });
 
         if (!profile) {
-            profile = S2Profile.create();
-            Object.assign(profile, params);
+            profile = S2Profile.create(params);
+            profile.name = params.name;
+            profile.discriminator = params.discriminator;
+            profile.avatar = params.avatar ?? '';
             await this.insert(profile);
         }
 

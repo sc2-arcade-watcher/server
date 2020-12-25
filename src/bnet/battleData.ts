@@ -154,8 +154,7 @@ export class BattleMatchEntryMapper {
     createMatchEntry(profile: S2Profile, bMatch: BattleMatchMapMapped) {
         const s2match = new S2ProfileMatch();
         s2match.regionId = profile.regionId;
-        s2match.realmId = profile.realmId;
-        s2match.profileId = profile.profileId;
+        s2match.localProfileId = profile.localProfileId;
         s2match.date = new Date(bMatch.date * 1000);
         s2match.type = bMatch.type.toLowerCase().replace(reSpecialChars, '') as S2MatchType;
         s2match.decision = bMatch.decision.toLowerCase().replace(reSpecialChars, '') as S2MatchDecision;
@@ -711,10 +710,9 @@ export class BattleDataUpdater {
             ) / 1000 / 3600.0 : 0;
 
             const latestStoredRecord = await this.conn.getRepository(S2ProfileMatch).createQueryBuilder('profMatch')
-                .andWhere('profMatch.regionId = :regionId AND profMatch.realmId = :realmId AND profMatch.profileId = :profileId', {
+                .andWhere('profMatch.regionId = :regionId AND profMatch.localProfileId = :localProfileId', {
                     regionId: profile.regionId,
-                    realmId: profile.realmId,
-                    profileId: profile.profileId,
+                    localProfileId: profile.localProfileId,
                 })
                 .orderBy('profMatch.id', 'DESC')
                 .limit(1)

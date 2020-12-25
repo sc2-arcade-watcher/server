@@ -1,3 +1,5 @@
+import { PlayerProfileParams } from './bnet/common';
+
 export enum GameRegion {
     US = 1,
     EU = 2,
@@ -52,6 +54,10 @@ export interface PlayerProfile {
     profileId: number;
     name: string;
     discriminator: number;
+}
+
+export function localProfileId(params: PlayerProfileParams) {
+    return params.profileId | (params.realmId === 2 ? 1 << 31 : 0);
 }
 
 export function regionCode(regionCodeOrId: GameRegion | string) {

@@ -32,8 +32,10 @@ export enum S2MatchType {
     FreeForAll = 'ffa',
 }
 
-@Entity()
-@Index('profile_region_idx', ['profileId', 'regionId'])
+@Entity({
+    engine: 'ROCKSDB',
+})
+@Index('local_profile_region_idx', ['localProfileId', 'regionId'])
 @Index('map_region_date_idx', ['mapId', 'regionId', 'date'])
 export class S2ProfileMatch {
     @PrimaryGeneratedColumn({
@@ -48,15 +50,10 @@ export class S2ProfileMatch {
     regionId: number;
 
     @Column({
-        type: 'tinyint',
+        type: 'int',
         unsigned: true,
     })
-    realmId: number;
-
-    @Column({
-        unsigned: true,
-    })
-    profileId: number;
+    localProfileId: number;
 
     @Column({
         precision: 0,

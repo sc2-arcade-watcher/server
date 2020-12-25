@@ -159,8 +159,7 @@ program.command('discover:profile')
 
                     const bResult = await bDiscovery.retrieveProfileMeta(profParams);
                     const bCurrAvatar = getAvatarIdentifierFromUrl(bResult.avatarUrl);
-                    const s2prof = S2Profile.create();
-                    Object.assign(s2prof, profParams);
+                    const s2prof = S2Profile.create(profParams);
                     s2prof.name = bResult.name;
                     s2prof.avatar = bCurrAvatar;
 
