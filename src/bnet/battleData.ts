@@ -5,16 +5,16 @@ import { BattleAPI, BattleUserInfo, BattleSC2ProfileBase, BattleSC2MatchEntry } 
 import { BnAccount } from '../entity/BnAccount';
 import { profileHandle } from './common';
 import { S2Profile } from '../entity/S2Profile';
-import { S2ProfileTracking } from '../entity/S2ProfileTracking';
+import { S2ProfileBattleTracking } from '../entity/S2ProfileBattleTracking';
 import { isAxiosError, isErrDuplicateEntry, retry, sleep } from '../helpers';
 import { logger } from '../logger';
 import { S2ProfileMatch, S2MatchSpeed, S2MatchDecision, S2MatchType } from '../entity/S2ProfileMatch';
 import { S2Map, S2MapType } from '../entity/S2Map';
 import { S2MapLocale } from '../entity/S2MapLocale';
 import { oneLine } from 'common-tags';
-import { GameRegion, GameLocale } from '../common';
+import { GameRegion, GameLocale, GameLocaleFlag } from '../common';
 import { S2ProfileMatchMapName } from '../entity/S2ProfileMatchMapName';
-import { S2ProfileTrackingRepository } from '../repository/S2ProfileTrackingRepository';
+import { S2ProfileBattleTrackingRepository } from '../repository/S2ProfileBattleTrackingRepository';
 import { S2ProfileRepository } from '../repository/S2ProfileRepository';
 import { S2ProfileAccountLink } from '../entity/S2ProfileAccountLink';
 import { AxiosError } from 'axios';
@@ -560,19 +560,19 @@ export class BattleDataUpdater {
     }
 
     protected async profileEnsureTracking(profile: S2Profile) {
-        if (profile.tracking === null) {
-            profile.tracking = await this.conn.getCustomRepository(S2ProfileTrackingRepository).fetchOrCreate(profile);
+        if (profile.battleTracking === null) {
+            profile.battleTracking = await this.conn.getCustomRepository(S2ProfileBattleTrackingRepository).fetchOrCreate(profile);
         }
     }
 
-    protected handleAxiosError(err: AxiosError, profile: S2Profile, updatedTrackingData: Partial<S2ProfileTracking>) {
+    protected handleAxiosError(err: AxiosError, profile: S2Profile, updatedTrackingData: Partial<S2ProfileBattleTracking>) {
         logger.warn(oneLine`
             Profile ${profile.nameAndId}
             req=${err.config.url}
             code=${err?.code}
             status=${err.response?.status}
-            errCounter=${profile.tracking.battleAPIErrorCounter}
-            errLast=${profile.tracking.battleAPIErrorLast?.toISOString()}
+            errCounter=${profile.battleTracking.battleAPIErrorCounter}
+            errLast=${profile.battleTracking.battleAPIErrorLast?.toISOString()}
         `);
 
         if (err.response) {
@@ -594,9 +594,9 @@ export class BattleDataUpdater {
         }
 
         updatedTrackingData.battleAPIErrorLast = new Date();
-        updatedTrackingData.battleAPIErrorCounter = profile.tracking.battleAPIErrorCounter + 1;
-        if (profile.tracking.battleAPIErrorCounter > 3 && profile.regionId !== GameRegion.CN) {
-            updatedTrackingData.preferPublicGateway = true;
+        updatedTrackingData.battleAPIErrorCounter = profile.battleTracking.battleAPIErrorCounter + 1;
+        if (profile.battleTracking.battleAPIErrorCounter > 3 && profile.regionId !== GameRegion.CN) {
+            updatedTrackingData.publicGatewaySince = new Date();
         }
     }
 
@@ -629,10 +629,10 @@ export class BattleDataUpdater {
     async updateProfileMetaData(profile: S2Profile) {
         await this.profileEnsureTracking(profile);
         const updatedData: Partial<S2Profile> = {};
-        const updatedTrackingData: Partial<S2ProfileTracking> = {};
+        const updatedTrackingData: Partial<S2ProfileBattleTracking> = {};
 
         try {
-            const bAPI = this.getAPIForRegion(profile.regionId, profile.tracking.preferPublicGateway);
+            const bAPI = this.getAPIForRegion(profile.regionId, profile.battleTracking.publicGatewaySince !== null);
             const bCurrProfile = (await bAPI.sc2.getProfileMeta(profile)).data;
             const bCurrAvatar = getAvatarIdentifierFromUrl(bCurrProfile.avatarUrl);
 
@@ -661,8 +661,11 @@ export class BattleDataUpdater {
         }
 
         if (!Object.keys(updatedTrackingData).length) return;
-        Object.assign(profile.tracking, updatedTrackingData);
-        await this.conn.getRepository(S2ProfileTracking).update(profile.tracking.id, updatedTrackingData);
+        Object.assign(profile.battleTracking, updatedTrackingData);
+        await this.conn.getRepository(S2ProfileBattleTracking).update(
+            this.conn.getRepository(S2ProfileBattleTracking).getId(profile.battleTracking),
+            updatedTrackingData
+        );
 
         return Object.keys(updatedData).length > 0;
     }
@@ -700,13 +703,13 @@ export class BattleDataUpdater {
 
     async updateProfileMatchHistory(profile: S2Profile) {
         await this.profileEnsureTracking(profile);
-        const updatedTrackingData: Partial<S2ProfileTracking> = {};
+        const updatedTrackingData: Partial<S2ProfileBattleTracking> = {};
         let newMatchEntries: S2ProfileMatch[] = [];
 
         try {
-            const bAPI = this.getAPIForRegion(profile.regionId, profile.tracking.preferPublicGateway);
-            const tdiff = profile.tracking.matchHistoryUpdatedAt ? (
-                (new Date()).getTime() - profile.tracking.matchHistoryUpdatedAt.getTime()
+            const bAPI = this.getAPIForRegion(profile.regionId, profile.battleTracking.publicGatewaySince !== null);
+            const tdiff = profile.battleTracking.matchHistoryUpdatedAt ? (
+                (new Date()).getTime() - profile.battleTracking.matchHistoryUpdatedAt.getTime()
             ) / 1000 / 3600.0 : 0;
 
             const latestStoredRecord = await this.conn.getRepository(S2ProfileMatch).createQueryBuilder('profMatch')
@@ -747,7 +750,7 @@ export class BattleDataUpdater {
                     bMatchSrcs,
                     profile,
                     latestStoredRecord,
-                    profile.tracking.matchHistoryIntegritySince,
+                    profile.battleTracking.matchHistoryIntegritySince,
                     srcLocales.length
                 );
                 // exit as soon as we get a match
@@ -758,8 +761,8 @@ export class BattleDataUpdater {
 
             if (typeof bMatchHistoryResult === 'object') {
                 if (
-                    !profile.tracking.matchHistoryIntegritySince ||
-                    profile.tracking.matchHistoryIntegritySince.getTime() !== bMatchHistoryResult.integritySince.getTime()
+                    !profile.battleTracking.matchHistoryIntegritySince ||
+                    profile.battleTracking.matchHistoryIntegritySince.getTime() !== bMatchHistoryResult.integritySince.getTime()
                 ) {
                     updatedTrackingData.matchHistoryIntegritySince = new Date(bMatchHistoryResult.integritySince);
                 }
@@ -780,14 +783,19 @@ export class BattleDataUpdater {
                     const matchMapNames: S2ProfileMatchMapName[] = [];
                     for (const [currIndex, currMatch] of bMatchHistoryResult.matches.entries()) {
                         if (currMatch.mapId !== 0) continue;
-                        // mapNames.filter(x => x.locale === GameLocale.enUS || x.name !== firstSrc.entries[entryIndex].map);
-                        const currMapNames = currMatch.mapNames.map(mapName => {
-                            const unk = new S2ProfileMatchMapName();
-                            unk.match = newMatchEntries[currIndex];
-                            unk.locale = mapName.locale;
-                            unk.name = mapName.name;
-                            return unk;
-                        });
+
+                        const currMapNames: S2ProfileMatchMapName[] = [];
+                        for (const item of currMatch.mapNames) {
+                            let cName = currMapNames.find(x => x.name === item.name);
+                            if (!cName) {
+                                cName = new S2ProfileMatchMapName();
+                                cName.match = newMatchEntries[currIndex];
+                                cName.name = item.name;
+                                cName.locales = 0;
+                                currMapNames.push(cName);
+                            }
+                            cName.locales |= GameLocaleFlag[item.locale];
+                        }
                         matchMapNames.push(...currMapNames);
                     }
 
@@ -825,15 +833,18 @@ export class BattleDataUpdater {
             }
         }
 
-        if (profile.tracking.battleAPIErrorCounter > 0 && typeof updatedTrackingData.battleAPIErrorCounter === 'undefined') {
-            logger.verbose(`Resetting error counter on ${profile.nameAndId}, it was at ${profile.tracking.battleAPIErrorCounter}`);
+        if (profile.battleTracking.battleAPIErrorCounter > 0 && typeof updatedTrackingData.battleAPIErrorCounter === 'undefined') {
+            logger.verbose(`Resetting error counter on ${profile.nameAndId}, it was at ${profile.battleTracking.battleAPIErrorCounter}`);
             updatedTrackingData.battleAPIErrorCounter = 0;
             updatedTrackingData.battleAPIErrorLast = null;
         }
 
         if (!Object.keys(updatedTrackingData).length) return;
-        Object.assign(profile.tracking, updatedTrackingData);
-        await this.conn.getRepository(S2ProfileTracking).update(profile.tracking.id, updatedTrackingData);
+        Object.assign(profile.battleTracking, updatedTrackingData);
+        await this.conn.getRepository(S2ProfileBattleTracking).update(
+            this.conn.getRepository(S2ProfileBattleTracking).getId(profile.battleTracking),
+            updatedTrackingData
+        );
 
         return newMatchEntries.length;
     }

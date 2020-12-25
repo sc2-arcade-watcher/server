@@ -2,6 +2,8 @@ import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneTo
 import { S2ProfileTracking } from './S2ProfileTracking';
 import { S2ProfileAccountLink } from './S2ProfileAccountLink';
 import { PlayerProfileParams } from '../bnet/common';
+import { localProfileId } from '../common';
+import { S2ProfileBattleTracking } from './S2ProfileBattleTracking';
 
 export interface BareS2Profile {
     regionId: number;
@@ -78,6 +80,8 @@ export class S2Profile implements BareS2Profile {
 
     tracking?: S2ProfileTracking;
 
+    battleTracking?: S2ProfileBattleTracking;
+
     accountLink?: S2ProfileAccountLink;
 
     get fullname(): string {
@@ -107,10 +111,7 @@ export class S2Profile implements BareS2Profile {
         if (params.realmId > 2 || params.realmId <= 0) throw new Error('realmId > 2');
 
         Object.assign(prof, params);
-        prof.localProfileId = params.profileId;
-        if (params.realmId === 2) {
-            prof.localProfileId |= 1 << 31;
-        }
+        prof.localProfileId = localProfileId(params);
 
         prof.name = null;
         prof.discriminator = 0;

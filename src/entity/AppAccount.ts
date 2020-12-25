@@ -3,6 +3,7 @@ import { BnAccount } from './BnAccount';
 
 export enum AccountPrivileges {
     SuperAdmin = 1 << 0,
+    Overseer = 1 << 1,
 }
 
 @Entity()

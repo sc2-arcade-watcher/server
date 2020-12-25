@@ -19,8 +19,6 @@ export enum GameLocaleFlag {
     esES = 0x80,
     zhTW = 0x100,
     enGB = 0x200,
-    // enCH = 0x400,
-    // enTW = 0x800,
     esMX = 0x1000,
     ruRU = 0x2000,
     ptBR = 0x4000,
@@ -57,7 +55,7 @@ export interface PlayerProfile {
 }
 
 export function localProfileId(params: PlayerProfileParams) {
-    return params.profileId | (params.realmId === 2 ? 1 << 31 : 0);
+    return params.profileId + (params.realmId === 2 ? 1 << 31 >>> 0 : 0);
 }
 
 export function regionCode(regionCodeOrId: GameRegion | string) {

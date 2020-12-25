@@ -18,8 +18,7 @@ export class S2ProfileTrackingRepository extends Repository<S2ProfileTracking> {
             pTracking.regionId = params.regionId;
             pTracking.realmId = params.realmId;
             pTracking.profileId = params.profileId;
-            pTracking.battleAPIErrorCounter = 0;
-            pTracking.preferPublicGateway = false;
+            pTracking.mapStatsUpdatedAt = null;
             pTracking.nameUpdatedAt = new Date(0);
             await this.insert(pTracking);
         }

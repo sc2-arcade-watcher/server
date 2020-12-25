@@ -26,38 +26,6 @@ export class S2ProfileTracking {
     @Column({
         nullable: true,
     })
-    profileInfoUpdatedAt: Date | null;
-
-    @Column({
-        nullable: true,
-    })
-    matchHistoryUpdatedAt: Date | null;
-
-    @Column({
-        nullable: true,
-    })
-    matchHistoryIntegritySince: Date | null;
-
-    @Column({
-        type: 'tinyint',
-        unsigned: true,
-        default: 0,
-    })
-    battleAPIErrorCounter: number;
-
-    @Column({
-        nullable: true,
-    })
-    battleAPIErrorLast: Date | null;
-
-    @Column({
-        default: false,
-    })
-    preferPublicGateway: boolean;
-
-    @Column({
-        nullable: true,
-    })
     mapStatsUpdatedAt: Date | null;
 
     @Column({

@@ -1,30 +1,34 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, ManyToOne } from 'typeorm';
 import { S2ProfileMatch } from './S2ProfileMatch';
-import { GameLocale } from '../common';
+import { GameLocaleFlag } from '../common';
 
 @Entity({
     engine: 'ROCKSDB',
 })
 export class S2ProfileMatchMapName {
-    @PrimaryGeneratedColumn({
-        unsigned: true,
-    })
-    id: number;
-
     @ManyToOne(type => S2ProfileMatch, match => match.names, {
+        primary: true,
         nullable: false,
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE',
+        // foreign keys not supported on RocksDB
+        onDelete: 'NO ACTION',
+        onUpdate: 'NO ACTION',
     })
     @Index('match_idx')
     match: S2ProfileMatch;
 
     @Column({
-        type: 'enum',
-        enum: GameLocale,
         primary: true,
+        type: 'int',
+        unsigned: true,
     })
-    locale: GameLocale;
+    matchId: number;
+
+    @Column({
+        primary: true,
+        type: 'int',
+        unsigned: true,
+    })
+    locales: GameLocaleFlag;
 
     @Column({
         type: 'varchar',

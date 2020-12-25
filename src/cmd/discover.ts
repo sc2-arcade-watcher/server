@@ -1,14 +1,11 @@
 import * as orm from 'typeorm';
 import * as program from 'commander';
-import * as pMap from 'p-map';
 import pQueue from 'p-queue';
 import { S2Profile } from '../entity/S2Profile';
-import { S2ProfileTracking } from '../entity/S2ProfileTracking';
 import { logger } from '../logger';
 import { BattleAPI, BattleAPIGateway } from '../bnet/battleAPI';
 import { PlayerProfileParams, profileHandle } from '../bnet/common';
 import { retry, isAxiosError, sleep, throwErrIfNotDuplicateEntry } from '../helpers';
-import { subHours } from 'date-fns';
 import { BattleDataUpdater, getAvatarIdentifierFromUrl } from '../bnet/battleData';
 
 class BattleDiscovery {
@@ -54,10 +51,10 @@ class BattleDiscovery {
 }
 
 program.command('discover:profile')
-    .option<Number>('--region <number>', 'region id', (value, previous) => Number(value), 1)
-    .option<Number>('--offset <number>', 'offset', (value, previous) => Number(value), 0)
-    .option<Number>('--concurrency <number>', 'concurrency', (value, previous) => Number(value), 5)
-    .option<String>('--gateway <string>', 'blz blz-us blz-eu blz-kr blz-cn sc2', (value, previous) => String(value), 'sc2')
+    .option<Number>('--region <number>', 'region id', Number, 1)
+    .option<Number>('--offset <number>', 'offset', Number, 0)
+    .option<Number>('--concurrency <number>', 'concurrency', Number, 5)
+    .option<String>('--gateway <string>', 'blz blz-us blz-eu blz-kr blz-cn sc2', String, 'sc2')
     .action(async function (cmd: program.Command) {
         let gateway: BattleAPIGateway;
         switch (cmd.gateway) {
@@ -102,16 +99,7 @@ program.command('discover:profile')
         const bDiscovery = new BattleDiscovery(gateway);
         const activeJobIds = new Set<number>();
 
-        const profileQuery = conn.getRepository(S2Profile).createQueryBuilder().subQuery().select()
-            .from(S2Profile, 'profile')
-            .select('profile.id')
-            .andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId')
-            .limit(1)
-            .getQuery()
-        ;
         function fetchNext() {
-            let pTrack: S2ProfileTracking;
-
             queue.add(async () => {
                 let profParams: PlayerProfileParams;
 
@@ -125,29 +113,14 @@ program.command('discover:profile')
                     }
 
                     profParams = { regionId, realmId, profileId };
-                    logger.verbose(`Checking ${profileHandle(profParams)}`);
-                    const profResult = await conn.getRepository(S2ProfileTracking).createQueryBuilder('pTrack')
-                        .addSelect(profileQuery, 'pid')
-                        .andWhere('pTrack.regionId = :regionId AND pTrack.realmId = :realmId AND pTrack.profileId = :profileId', profParams)
+                    const profResult = await conn.getRepository(S2Profile).createQueryBuilder('profile')
+                        .andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId', profParams)
                         .limit(1)
-                        .getRawAndEntities()
+                        .getOne()
                     ;
 
-                    if (!profResult.raw.length || !profResult.raw[0].pid) {
-                        if (profResult.entities.length) {
-                            pTrack = profResult.entities[0];
-                            if (
-                                pTrack.battleAPIErrorCounter > 4 ||
-                                (pTrack.battleAPIErrorLast !== null && pTrack.battleAPIErrorLast > subHours(new Date(), 12))
-                            ) {
-                                continue;
-                            }
-                        }
-                        else {
-                            pTrack = new S2ProfileTracking();
-                            Object.assign(pTrack, profParams);
-                            pTrack.battleAPIErrorCounter = 0;
-                        }
+                    if (!profResult) {
+                        logger.debug(`Skipping ${profileHandle(profParams)}`);
                         break;
                     }
                 }
@@ -170,27 +143,15 @@ program.command('discover:profile')
                     }
                     catch (err) {
                         throwErrIfNotDuplicateEntry(err);
-                    }
-
-                    if (conn.getRepository(S2ProfileTracking).hasId(pTrack) || conn.getRepository(S2Profile).hasId(s2prof)) {
-                        pTrack.profileInfoUpdatedAt = new Date();
-                        pTrack.battleAPIErrorCounter = 0;
-                        pTrack.battleAPIErrorLast = null;
-                        await conn.getRepository(S2ProfileTracking).save(pTrack, { transaction: false });
+                        logger.warn(`duplicate`, s2prof);
                     }
                 }
                 catch (err) {
                     if (isAxiosError(err) && err.response) {
+                        logger.warn(`Failed ${profileHandle(profParams)} status ${err.response.status}`);
                         if (err.response.status !== 404) {
-                            logger.warn(`Failed ${profileHandle(profParams)} status ${err.response.status}`);
                             throw err;
                         }
-                        else {
-                            logger.verbose(`Failed ${profileHandle(profParams)} status ${err.response.status}`);
-                        }
-                        pTrack.battleAPIErrorLast = new Date();
-                        ++pTrack.battleAPIErrorCounter;
-                        await conn.getRepository(S2ProfileTracking).save(pTrack, { transaction: false });
                     }
                     else {
                         throw err;

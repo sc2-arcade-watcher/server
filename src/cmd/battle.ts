@@ -6,7 +6,7 @@ import pQueue from 'p-queue';
 import { BattleAPI } from '../bnet/battleAPI';
 import { BattleDataUpdater } from '../bnet/battleData';
 import { S2Profile } from '../entity/S2Profile';
-import { S2ProfileTracking } from '../entity/S2ProfileTracking';
+import { S2ProfileBattleTracking } from '../entity/S2ProfileBattleTracking';
 import { logger } from '../logger';
 import { parseProfileHandle, profileHandle } from '../bnet/common';
 import { sleep, isAxiosError, setupProcessTerminator } from '../helpers';
@@ -98,10 +98,10 @@ program.command('battle:sync-profile')
             logger.verbose(`Fetching next chunk..`);
             const qb = conn.getRepository(S2Profile).createQueryBuilder('profile')
                 .leftJoinAndMapOne(
-                    'profile.tracking',
-                    S2ProfileTracking,
+                    'profile.battleTracking',
+                    S2ProfileBattleTracking,
                     'pTrack',
-                    'profile.regionId = pTrack.regionId AND profile.realmId = pTrack.realmId AND profile.profileId = pTrack.profileId'
+                    'profile.regionId = pTrack.regionId AND profile.localProfileId = pTrack.localProfileId'
                 )
                 .andWhere('profile.deleted = 0')
             ;
@@ -193,9 +193,9 @@ program.command('battle:sync-profile')
 
                     if (
                         !forceUpdate &&
-                        profile.tracking &&
-                        (profile.tracking.battleAPIErrorCounter > 0 && profile.tracking.battleAPIErrorLast) &&
-                        (profile.tracking.battleAPIErrorLast > subHours(new Date(), Math.pow(1.2, profile.tracking.battleAPIErrorCounter)))
+                        profile.battleTracking &&
+                        (profile.battleTracking.battleAPIErrorCounter > 0 && profile.battleTracking.battleAPIErrorLast) &&
+                        (profile.battleTracking.battleAPIErrorLast > subHours(new Date(), Math.pow(1.2, profile.battleTracking.battleAPIErrorCounter)))
                     ) {
                         return;
                     }
@@ -205,10 +205,10 @@ program.command('battle:sync-profile')
                         if (
                             !cmd.skipMatchHistory && (
                                 forceUpdate ||
-                                !profile.tracking ||
-                                !profile.tracking.matchHistoryUpdatedAt ||
+                                !profile.battleTracking ||
+                                !profile.battleTracking.matchHistoryUpdatedAt ||
                                 !cmd.histDelay ||
-                                profile.tracking.matchHistoryUpdatedAt < subHours(new Date(), cmd.histDelay)
+                                profile.battleTracking.matchHistoryUpdatedAt < subHours(new Date(), cmd.histDelay)
                             )
                         ) {
                             logger.verbose(`[${idPadding}] Updating match history :: ${profile.nameAndIdPad} tdiff=${tdiff.toFixed(1).padStart(5, '0')}h`);
@@ -219,9 +219,9 @@ program.command('battle:sync-profile')
                             forceUpdate ||
                             (
                                 affectedMatches &&
-                                (!profile.tracking?.profileInfoUpdatedAt || profile.tracking?.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? new Date(), 14))
+                                (!profile.battleTracking?.profileInfoUpdatedAt || profile.battleTracking?.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? new Date(), 14))
                             ) ||
-                            // (!profile.tracking?.profileInfoUpdatedAt || profile.tracking?.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? new Date(), 90)) ||
+                            // (!profile.battleTracking?.profileInfoUpdatedAt || profile.battleTracking?.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? new Date(), 90)) ||
                             !profile.avatar
                         ) {
                             logger.verbose(`[${idPadding}] Updating meta data :: ${profile.nameAndIdPad}`);
