@@ -3,7 +3,7 @@ import { TypedEvent, sleep } from './helpers';
 import { JournalFeed, JournalFeedCursor } from './journal/feed';
 import { logger, logIt } from './logger';
 import { parseProfileHandle } from './bnet/common';
-import { oneLine } from 'common-tags';
+import { stripIndents } from 'common-tags';
 
 // TODO: replace with GameRegion from common.ts
 export enum GameRegion {
@@ -656,6 +656,20 @@ export interface GameLobbySlotDesc {
     profile?: GameLobbySlotProfile;
 }
 
+function formatLobbySlot(slot: GameLobbySlotDesc) {
+    const parts = [
+        ['N', 'A', 'O', 'H'][slot.kind] + slot.team.toString().padStart(2, '0'),
+    ];
+    if (slot.profile) {
+        parts.push(`${slot.profile.name}#${slot.profile.discriminator}`);
+        parts.push(`${slot.profile.regionId}-${slot.profile.realmId}-${slot.profile.profileId}`);
+    }
+    else if (slot.name) {
+        parts.push(`${slot.name}`);
+    }
+    return parts.join(' ');
+}
+
 function gameLobbySlotsFromPvEx(preview: DataLobbyPvEx) {
     const slots: GameLobbySlotDesc[] = [];
     for (const item of preview.slots) {
@@ -798,6 +812,41 @@ export class GameLobbyDesc {
         return true;
     }
 
+    protected handleSlotsBasicExtMissmatch(slBasic: string[], slExtended: string[], pendingSlots: GameLobbySlotDesc[]) {
+        const originalSlots = new Map<number, GameLobbySlotDesc>();
+
+        for (const [index, originalSlot] of this.slots.entries()) {
+            if (slBasic[index] === slExtended[index]) continue;
+            originalSlots.set(index, originalSlot);
+            this.slots[index] = pendingSlots[index];
+        }
+
+        for (const [index, prevSlot] of Array.from(originalSlots)) {
+            if (this.slots[index].kind !== LobbyPvExSlotKind.Human) continue;
+
+            const matchingReplacements = Array.from(originalSlots).filter(x => {
+                return x[1].kind === LobbyPvExSlotKind.Human && x[1].profile.name === this.slots[index].name;
+            });
+            if (matchingReplacements.length === 1) {
+                const recoveredIndex = matchingReplacements[0][0];
+                const recoveredSlot = matchingReplacements[0][1];
+                originalSlots.delete(recoveredIndex);
+                this.slots[index].profile = recoveredSlot.profile;
+                // logger.debug(`recovered ${formatLobbySlot(this.slots[index])} idx=${index} <-${recoveredIndex}`);
+                continue;
+            }
+
+            logger.verbose(stripIndents`
+                player slot incomplete ${this.region}/${this.initInfo.bucketId}/${this.initInfo.lobbyId} idx=${index}
+                ${formatLobbySlot(prevSlot)}  =>  ${formatLobbySlot(pendingSlots[index])}
+            `);
+
+            if (matchingReplacements.length >= 1) {
+                logger.warn(`multiple matchingReplacements`, matchingReplacements);
+            }
+        }
+    }
+
     close(closeData: TrackedLobbyRemove) {
         // make sure the basic preview is actually newer before falling back to it
         if (this.pendingBasicPreview && (
@@ -822,21 +871,7 @@ export class GameLobbyDesc {
                     logger.debug(`extended slot count missmatch`, slBasic, slExtended);
                 }
                 else if (slBasic.join('') !== slExtended.join('')) {
-                    this.slots.forEach((slot, index) => {
-                        if (slBasic[index] === slExtended[index]) return;
-                        if (this.slots[index].kind === LobbyPvExSlotKind.Human && pendingSlots[index].kind === LobbyPvExSlotKind.Human) {
-                            logger.verbose(
-                                oneLine`
-                                    player slot incomplete ${this.initInfo.bucketId}/${this.initInfo.lobbyId} idx=${index}
-                                `,
-                                {
-                                    p: this.slots[index],
-                                    n: pendingSlots[index],
-                                },
-                            );
-                        }
-                        this.slots[index] = pendingSlots[index];
-                    });
+                    this.handleSlotsBasicExtMissmatch(slBasic, slExtended, pendingSlots);
                     this.slotsPreviewUpdatedAt = this.basicPreviewUpdatedAt;
                 }
             }
