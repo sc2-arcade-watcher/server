@@ -56,6 +56,10 @@ export default fp(async (server, opts) => {
                         type: 'boolean',
                         default: true,
                     },
+                    includeSlotsProfile: {
+                        type: 'boolean',
+                        default: true,
+                    },
                     includeSlotsJoinInfo: {
                         type: 'boolean',
                         default: true,
@@ -67,7 +71,7 @@ export default fp(async (server, opts) => {
                     recentlyClosedThreshold: {
                         type: 'number',
                         minimum: 0,
-                        maximum: 20,
+                        maximum: 60,
                         default: 20,
                     },
                 }
@@ -109,8 +113,7 @@ export default fp(async (server, opts) => {
         const qb = lobbyRepo
             .createQueryBuilder('lobby')
             .select([])
-            .addOrderBy('lobby.createdAt', 'ASC')
-            .addOrderBy('lobby.id', 'DESC')
+            .addOrderBy('lobby.id', 'ASC')
         ;
 
         if (request.query.includeMapInfo) {
@@ -119,6 +122,10 @@ export default fp(async (server, opts) => {
 
         if (request.query.includeSlots) {
             lobbyRepo.addSlots(qb);
+            qb.addOrderBy('slot.slotNumber', 'ASC');
+            if (request.query.includeSlotsProfile) {
+                lobbyRepo.addSlotsProfile(qb);
+            }
             if (request.query.includeSlotsJoinInfo) {
                 lobbyRepo.addSlotsJoinInfo(qb);
             }
@@ -126,6 +133,7 @@ export default fp(async (server, opts) => {
 
         if (request.query.includeJoinHistory) {
             lobbyRepo.addJoinHistory(qb);
+            qb.addOrderBy('joinHistory.id', 'ASC');
         }
 
         if (request.query.recentlyClosedThreshold) {

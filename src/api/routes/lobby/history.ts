@@ -16,10 +16,28 @@ export default fp(async (server, opts) => {
         Querystring: any,
         Params: any,
     }>('/lobbies/history', {
+        config: {
+            rateLimit: {
+                max: 20,
+                timeWindow: 1000 * 40,
+            },
+        },
         schema: {
             tags: ['Lobbies'],
             summary: 'History of public lobbies.',
             description: stripIndents`
+                It allows to fetch history of lobbies of:
+                - specific region: provide \`regionId\`
+                - specific map: provide \`regionId\` and \`mapId\`
+                - specific player: provide \`profileHandle\`
+
+                The order in which lobbies are returned is based on internal ID (it's incremented whenever new lobby is being made). What means:
+                - Sorting is based on the time it has been hosted, not when it has been closed. However direction (newest/oldest) can be changed by using \`orderDirection\` parameter.
+                - Internal ID while exposed, should not be relied on. It's possible the database will be restructured at some point, and these internal IDs will change. To determine an unique lobby, a combination of \`{regionId},{bnetBucketId},{bnetRecordId}\` should be used - those IDs are Battle.net specific and can be trusted.
+
+                Known issues:
+                - It returns not only closed lobbies, but also those that are currently open - this isn't intended, and will be fixed in the future.
+
                 NOTICE: This endpoint is not yet stable and might be changed in the future.
             `,
             querystring: {
@@ -42,10 +60,31 @@ export default fp(async (server, opts) => {
                         ],
                         default: 'desc',
                     },
+                    includeMapInfo: {
+                        type: 'boolean',
+                        default: true,
+                    },
+                    includeSlots: {
+                        type: 'boolean',
+                        default: true,
+                    },
+                    includeSlotsProfile: {
+                        type: 'boolean',
+                        default: false,
+                    },
+                    includeSlotsJoinInfo: {
+                        type: 'boolean',
+                        default: false,
+                    },
+                    includeJoinHistory: {
+                        type: 'boolean',
+                        default: false,
+                    },
                 },
             },
         },
     }, async (request, reply) => {
+        const lobbyRepo = server.conn.getCustomRepository(S2GameLobbyRepository);
         let pQuery: CursorPaginationQuery;
         let qb: orm.SelectQueryBuilder<any>;
 
@@ -64,6 +103,22 @@ export default fp(async (server, opts) => {
                     bnetId: request.query.mapId,
                 })
                 .select('lobMap.lobby', 'id')
+            ;
+        }
+        else if (typeof request.query.regionId === 'number') {
+            pQuery = request.parseCursorPagination({
+                paginationKeys: ['lobby.id'],
+                toRawKey: (x) => 'id',
+                toQueryKey: (x) => x,
+                toFieldKey: (x) => x,
+            });
+
+            qb = lobbyRepo
+                .createQueryBuilder('lobby')
+                .andWhere('lobby.regionId = :regionId', {
+                    regionId: request.query.regionId,
+                })
+                .select('lobby.id', 'id')
             ;
         }
         else if (typeof request.query.profileHandle === 'string') {
@@ -108,17 +163,48 @@ export default fp(async (server, opts) => {
         }
 
         qb.limit(pQuery.fetchLimit);
-
-        pQuery.applyQuery(qb, request.query.orderDirection!.toUpperCase());
-
+        pQuery.applyQuery(qb, request.query.orderDirection?.toUpperCase() ?? 'DESC');
         const lbIds = await qb.getRawMany();
 
-        const qbFinal = server.conn.getCustomRepository(S2GameLobbyRepository).createQueryForEntriesInIds(
-            lbIds.length ? lbIds.map(x => x.id) : [0],
-            pQuery.getOrderDirection(request.query.orderDirection!.toUpperCase())
-        );
+        const qbFinal = server.conn.getCustomRepository(S2GameLobbyRepository).createQueryBuilder('lobby').select([]);
+        qbFinal.andWhereInIds(lbIds.length ? lbIds.map(x => x.id) : [0]);
+        qbFinal.addOrderBy('lobby.id', pQuery.getOrderDirection(request.query.orderDirection?.toUpperCase() ?? 'DESC'));
 
-        reply.header('Cache-control', 'private, max-age=60');
+        if (request.query.includeMapInfo) {
+            lobbyRepo.addMapInfo(qbFinal, true);
+        }
+
+        qbFinal.addSelect([
+            'lobby.id',
+            'lobby.regionId',
+            'lobby.bnetBucketId',
+            'lobby.bnetRecordId',
+            'lobby.mapBnetId',
+            'lobby.extModBnetId',
+            'lobby.multiModBnetId',
+            'lobby.createdAt',
+            'lobby.closedAt',
+            'lobby.status',
+            'lobby.mapVariantIndex',
+            'lobby.mapVariantMode',
+            'lobby.lobbyTitle',
+            'lobby.hostName',
+        ]);
+
+        if (request.query.includeSlots) {
+            lobbyRepo.addSlots(qbFinal);
+            if (request.query.includeSlotsProfile) {
+                lobbyRepo.addSlotsProfile(qbFinal);
+            }
+            if (request.query.includeSlotsJoinInfo) {
+                lobbyRepo.addSlotsJoinInfo(qbFinal);
+            }
+        }
+
+        if (request.query.includeJoinHistory) {
+            lobbyRepo.addJoinHistory(qbFinal);
+        }
+
         return reply.code(200).sendWithCursorPagination({
             raw: lbIds,
             entities: (await qbFinal.getRawAndEntities()).entities,

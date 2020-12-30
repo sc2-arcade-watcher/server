@@ -65,6 +65,12 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
                 'slot.kind',
                 'slot.name',
             ])
+        ;
+        return qb;
+    }
+
+    addSlotsProfile(qb: SelectQueryBuilder<S2GameLobby>) {
+        qb
             .leftJoin('slot.profile', 'profile')
             .addSelect([
                 'profile.regionId',
@@ -74,7 +80,6 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
                 'profile.discriminator',
                 'profile.avatar',
             ])
-            .addOrderBy('slot.slotNumber', 'ASC')
         ;
         return qb;
     }
@@ -103,7 +108,6 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
                 'joinHistoryProfile.name',
                 'joinHistoryProfile.discriminator',
             ])
-            .addOrderBy('joinHistory.id', 'ASC')
         ;
         return qb;
     }
@@ -123,50 +127,6 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
                 'titleHistoryProfile.discriminator',
             ])
             .addOrderBy('titleHistory.date', 'ASC')
-        ;
-        return qb;
-    }
-
-    createQueryForEntriesInIds(recordIds: number[], orderDirection: 'ASC' | 'DESC' = 'DESC') {
-        const qb = this.createQueryBuilder('lobby')
-            .select([])
-        ;
-        this.addMapInfo(qb, true);
-        qb
-            .addSelect([
-                'lobby.id',
-                'lobby.regionId',
-                'lobby.bnetBucketId',
-                'lobby.bnetRecordId',
-                'lobby.mapBnetId',
-                'lobby.extModBnetId',
-                'lobby.multiModBnetId',
-                'lobby.createdAt',
-                'lobby.closedAt',
-                'lobby.status',
-                'lobby.mapVariantIndex',
-                'lobby.mapVariantMode',
-                'lobby.lobbyTitle',
-                'lobby.hostName',
-            ])
-            .leftJoin('lobby.slots', 'slot')
-            .addSelect([
-                'slot.slotNumber',
-                'slot.team',
-                'slot.kind',
-                'slot.name',
-            ])
-            // .leftJoin('slot.profile', 'profile')
-            // .addSelect([
-            //     'profile.regionId',
-            //     'profile.realmId',
-            //     'profile.profileId',
-            //     'profile.name',
-            //     'profile.discriminator',
-            // ])
-            .andWhereInIds(recordIds)
-            .addOrderBy('lobby.id', orderDirection)
-            .addOrderBy('slot.slotNumber', 'ASC')
         ;
         return qb;
     }

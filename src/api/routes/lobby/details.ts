@@ -38,6 +38,7 @@ export default fp(async (server, opts) => {
 
         lobbyRepo.addMapInfo(qb, true);
         lobbyRepo.addSlots(qb);
+        lobbyRepo.addSlotsProfile(qb);
         lobbyRepo.addSlotsJoinInfo(qb);
         lobbyRepo.addJoinHistory(qb);
         lobbyRepo.addTitleHistory(qb);
@@ -71,6 +72,9 @@ export default fp(async (server, opts) => {
             'lobby.slotsHumansTotal',
             'lobby.snapshotUpdatedAt',
         ]);
+
+        qb.addOrderBy('slot.slotNumber', 'ASC');
+        qb.addOrderBy('joinHistory.id', 'ASC');
 
         const result = await qb.getOne();
         if (!result) {
