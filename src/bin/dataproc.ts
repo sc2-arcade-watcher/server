@@ -623,9 +623,9 @@ class DataProc {
         }
 
         if (s2profile.name !== infoProfile.name || s2profile.discriminator !== infoProfile.discriminator) {
-            // before changing name ensure we're not process some stale data, where new name isn't actually new
+            // before changing name ensure we're not processing some stale data, where *new* name isn't actually new
             const pTrack = await this.conn.getCustomRepository(S2ProfileTrackingRepository).fetchOrCreate(infoProfile);
-            if (!pTrack.nameUpdatedAt || pTrack.nameUpdatedAt < updatedAt) {
+            if (pTrack.nameUpdatedAt < updatedAt) {
                 logger.verbose(`updating profile ${s2profile.fullname} => ${infoProfile.name}#${infoProfile.discriminator} [${s2profile.phandle}]`);
                 const updateData: Partial<S2Profile> = {
                     name: infoProfile.name,
@@ -636,9 +636,15 @@ class DataProc {
 
                 await this.conn.transaction(async tsManager => {
                     await tsManager.getRepository(S2Profile).update(s2profile.id, updateData);
-                    await tsManager.getRepository(S2ProfileTracking).update(s2profile.id, {
+                    await tsManager.getRepository(S2ProfileTracking).update(pTrack.id, {
                         nameUpdatedAt: pTrack.nameUpdatedAt,
                     });
+                });
+            }
+            else {
+                logger.debug(`rename skipped ${s2profile.fullname} => ${infoProfile.name}#${infoProfile.discriminator} [${s2profile.phandle}]`, {
+                    nameUpdatedAt: pTrack.nameUpdatedAt,
+                    eventDate: updatedAt,
                 });
             }
         }

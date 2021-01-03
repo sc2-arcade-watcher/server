@@ -61,7 +61,7 @@ export class S2ProfileTracking {
     mapStatsUpdatedAt: Date | null;
 
     @Column({
-        default: '0000-00-00 00:00:00',
+        default: '1000-01-01 00:00:00',
     })
     nameUpdatedAt: Date;
 }
