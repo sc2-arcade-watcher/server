@@ -417,7 +417,8 @@ export class MapResolver {
             attrValueProcessor: (val, attrName) => he.decode(val, { isAttributeValue: true }),
             tagValueProcessor : (val, tagName) => he.decode(val),
         });
-        const stringMap = new Map<number, string>(data.Locale.e.map((x: { id: string, text: string }) => [Number(x.id), x.text ? String(x.text) : '']));
+        const stringsRaw = data.Locale.e ?? [];
+        const stringMap = new Map<number, string>(stringsRaw.map((x: { id: string, text: string }) => [Number(x.id), x.text ? String(x.text) : '']));
         return {
             locale: data.Locale.region,
             strings: stringMap,
