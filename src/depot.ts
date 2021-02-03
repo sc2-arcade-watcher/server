@@ -4,7 +4,7 @@ import * as fs from 'fs-extra';
 import * as os from 'os';
 import { spawn } from 'child_process';
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { execAsync, spawnWaitExit, SpawnWaitResult } from './helpers';
+import { execAsync, spawnWaitExit, SpawnWaitResult, retry, isAxiosError, sleep } from './helpers';
 import { logger } from './logger';
 
 export class NestedHashDir {
@@ -56,6 +56,29 @@ export class BattleDepot {
         }
     }
 
+    @retry({
+        onFailedAttempt: async err => {
+            const st = Math.min(
+                1000 * Math.pow(err.attemptNumber, 1.10 + (Math.random() * 0.2)),
+                6000
+            );
+
+            if (isAxiosError(err)) {
+                await sleep(st);
+            }
+            else {
+                throw err;
+            }
+        },
+        retries: 3,
+    })
+    protected async readFromRemote(region: string, filename: string) {
+        return (await axios.get(getDepotURL(region, filename), {
+            responseType: 'text',
+            timeout: 60000,
+        })).data as string;
+    }
+
     async retrieveHead(region: string, filename: string) {
         return axios.head(getDepotURL(region, filename), {
             timeout: 60000,
@@ -81,9 +104,7 @@ export class BattleDepot {
             return fs.readFile(targetFilename, { encoding: 'utf8' });
         }
 
-        return (await axios.get(getDepotURL(region, filename), {
-            responseType: 'text',
-        })).data as string;
+        return this.readFromRemote(region, filename);
     }
 }
 
