@@ -13,6 +13,8 @@ import { sleep, isAxiosError, setupProcessTerminator } from '../helpers';
 import { BnAccount } from '../entity/BnAccount';
 import { subDays, subHours } from 'date-fns';
 import { stripIndents } from 'common-tags';
+import { S2ProfileMatch } from '../entity/S2ProfileMatch';
+import { S2ProfileMatchMapName } from '../entity/S2ProfileMatchMapName';
 
 
 program.command('battle:sync-account')
@@ -76,7 +78,6 @@ program.command('battle:sync-profile')
     .option<Number>('--loop-delay <seconds>', '', Number, -1)
     .option<Number>('--offset <number>', 'initial offset id', Number, null)
     .option('--desc', '', false)
-    .option('--skip-match-history', '', false)
     .option('--retry-err', 'retry all profiles which failed to update in previous iteration(s)', false)
     .action(async (cmd: program.Command) => {
         const conn = await orm.createConnection();
@@ -200,32 +201,37 @@ program.command('battle:sync-profile')
                         return;
                     }
 
-                    let affectedMatches: number;
                     try {
                         if (
-                            !cmd.skipMatchHistory && (
-                                forceUpdate ||
-                                !profile.battleTracking ||
-                                !profile.battleTracking.matchHistoryUpdatedAt ||
-                                !cmd.histDelay ||
-                                profile.battleTracking.matchHistoryUpdatedAt < subHours(new Date(), cmd.histDelay)
-                            )
-                        ) {
-                            logger.verbose(`[${idPadding}] Updating match history :: ${profile.nameAndIdPad} tdiff=${tdiff.toFixed(1).padStart(5, '0')}h`);
-                            affectedMatches = await bData.updateProfileMatchHistory(profile);
-                        }
-
-                        if (
                             forceUpdate ||
-                            (
-                                affectedMatches &&
-                                (!profile.battleTracking?.profileInfoUpdatedAt || profile.battleTracking?.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? new Date(), 14))
-                            ) ||
-                            // (!profile.battleTracking?.profileInfoUpdatedAt || profile.battleTracking?.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? new Date(), 90)) ||
-                            !profile.avatar
+                            !profile.battleTracking ||
+                            !profile.battleTracking.matchHistoryUpdatedAt ||
+                            !cmd.histDelay ||
+                            profile.battleTracking.matchHistoryUpdatedAt < subHours(new Date(), cmd.histDelay)
                         ) {
-                            logger.verbose(`[${idPadding}] Updating meta data :: ${profile.nameAndIdPad}`);
-                            await bData.updateProfileMetaData(profile);
+                            logger.verbose(`[${idPadding}] Updating profile :: ${profile.nameAndIdPad} tdiff=${tdiff.toFixed(1).padStart(5, '0')}h`);
+                            const commonResult = await bData.updateProfileCommon(profile);
+
+                            if (Object.keys(commonResult.updatedProfileData).length) {
+                                Object.assign(profile, commonResult.updatedProfileData);
+                                await conn.getRepository(S2Profile).update(profile.id, commonResult.updatedProfileData);
+                            }
+                            if (Object.keys(commonResult.updatedBattleTracking).length) {
+                                Object.assign(profile.battleTracking, commonResult.updatedBattleTracking);
+                                await conn.getRepository(S2ProfileBattleTracking).update(
+                                    conn.getRepository(S2ProfileBattleTracking).getId(profile.battleTracking),
+                                    commonResult.updatedBattleTracking
+                                );
+                            }
+                            if (commonResult.mapNames.length > 0) {
+                                await conn.transaction(async (tsManager) => {
+                                    await tsManager.getRepository(S2ProfileMatch).insert(commonResult.matches);
+                                    await tsManager.getRepository(S2ProfileMatchMapName).insert(commonResult.mapNames);
+                                });
+                            }
+                            else if (commonResult.matches.length) {
+                                await conn.getRepository(S2ProfileMatch).insert(commonResult.matches);
+                            }
                         }
                     }
                     catch (err) {
