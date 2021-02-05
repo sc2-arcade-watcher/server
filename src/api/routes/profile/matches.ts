@@ -2,8 +2,9 @@ import fp from 'fastify-plugin';
 import { S2ProfileMatch } from '../../../entity/S2ProfileMatch';
 import { S2Map } from '../../../entity/S2Map';
 import { ProfileAccessAttributes } from '../../plugins/accessManager';
-import { localProfileId, GameLocale } from '../../../common';
+import { localProfileId, GameLocale, GameLocaleFlag, GameLocaleType } from '../../../common';
 import { PlayerProfileParams } from '../../../bnet/common';
+import { S2ProfileMatchMapName } from '../../../entity/S2ProfileMatchMapName';
 
 export default fp(async (server, opts) => {
     server.get<{
@@ -62,9 +63,6 @@ export default fp(async (server, opts) => {
         const qb = server.conn.getRepository(S2ProfileMatch)
             .createQueryBuilder('profMatch')
             .leftJoinAndMapOne('profMatch.map', S2Map, 'map', 'map.regionId = profMatch.regionId AND map.bnetId = profMatch.mapId')
-            .leftJoinAndSelect('profMatch.names', 'mapNames', 'profMatch.mapId = 0 AND mapNames.locale = :mainLocale', {
-                mainLocale: GameLocale.enUS,
-            })
             .select([
                 'profMatch.id',
                 'profMatch.date',
@@ -74,8 +72,6 @@ export default fp(async (server, opts) => {
                 'map.bnetId',
                 'map.name',
                 'map.iconHash',
-                'mapNames.locale',
-                'mapNames.name',
             ])
             .andWhere('profMatch.regionId = :regionId AND profMatch.localProfileId = :localProfileId', {
                 regionId: request.params.regionId,
@@ -88,6 +84,38 @@ export default fp(async (server, opts) => {
 
         reply.header('Cache-control', 'private, max-age=60');
         const results = await qb.getRawAndEntities();
+
+        const unknownMaps = new Map(
+            Array.from(results.entities.entries())
+            .filter(x => x[1].map === null)
+            .map(x => [x[1].id, x[0]])
+        );
+        if (unknownMaps.size) {
+            const matchMapNames = await server.conn.getRepository(S2ProfileMatchMapName)
+                .createQueryBuilder('matchMapName')
+                .andWhere('matchMapName.match IN (:matchIds)', {
+                    matchIds: Array.from(unknownMaps.keys()),
+                })
+                .getMany()
+            ;
+            for (const item of matchMapNames) {
+                const rIdx = unknownMaps.get(item.matchId);
+                const profMatchItem = results.entities[rIdx];
+                if (typeof profMatchItem.mapNames === 'undefined') {
+                    profMatchItem.mapNames = {} as any;
+                    for (const x of Object.values(GameLocale)) {
+                        profMatchItem.mapNames[x] = void 0;
+                    }
+                }
+                for (const localeFlag of Object.values(GameLocaleFlag)) {
+                    if (typeof localeFlag !== 'number') continue;
+                    if (item.locales & localeFlag) {
+                        profMatchItem.mapNames[GameLocaleFlag[localeFlag] as GameLocaleType] = item.name;
+                    }
+                }
+            }
+        }
+
         return reply.code(200).sendWithCursorPagination(results, pQuery);
     });
 });

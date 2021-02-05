@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, Index, ManyToOne, OneToMany } f
 import { S2Map } from './S2Map';
 import { S2Profile } from './S2Profile';
 import { S2ProfileMatchMapName } from './S2ProfileMatchMapName';
+import { GameLocale } from '../common';
 
 export enum S2MatchDecision {
     Left = 'left',
@@ -89,6 +90,8 @@ export class S2ProfileMatch {
         cascade: false,
     })
     names: S2ProfileMatchMapName[];
+
+    mapNames?: {[key in GameLocale]: string};
 
     map?: S2Map;
 

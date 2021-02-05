@@ -28,22 +28,40 @@ export enum GameLocaleFlag {
     plPL = 0x40000000,
 }
 
+export type GameLocaleType =
+    'enUS' |
+    'koKR' |
+    'frFR' |
+    'deDE' |
+    'zhCN' |
+    'esES' |
+    'zhTW' |
+    'enGB' |
+    'esMX' |
+    'ruRU' |
+    'ptBR' |
+    'itIT' |
+    'ptPT' |
+    'enSG' |
+    'plPL'
+;
+
 export enum GameLocale {
-    deDE = 'deDE',
-    enGB = 'enGB',
-    esES = 'esES',
-    frFR = 'frFR',
-    itIT = 'itIT',
-    plPL = 'plPL',
-    ptPT = 'ptPT',
-    ruRU = 'ruRU',
-    zhCN = 'zhCN',
-    zhTW = 'zhTW',
-    koKR = 'koKR',
-    enSG = 'enSG',
     enUS = 'enUS',
+    koKR = 'koKR',
+    frFR = 'frFR',
+    deDE = 'deDE',
+    zhCN = 'zhCN',
+    esES = 'esES',
+    zhTW = 'zhTW',
+    enGB = 'enGB',
     esMX = 'esMX',
+    ruRU = 'ruRU',
     ptBR = 'ptBR',
+    itIT = 'itIT',
+    ptPT = 'ptPT',
+    enSG = 'enSG',
+    plPL = 'plPL',
 }
 
 export interface PlayerProfile {
