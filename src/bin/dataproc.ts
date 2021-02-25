@@ -243,7 +243,11 @@ class DataProc {
 
             // bind shared entities manually to ensure we're using the same instances within the scope of GameLobby object
             s2lobby.slots.forEach(slot => {
-                if (!slot.joinInfoId && !slot.profileId) return;
+                if (!slot.joinInfoId && !slot.profileId) {
+                    slot.joinInfo = null;
+                    slot.profile = null;
+                    return;
+                }
 
                 slot.joinInfo = s2lobby.joinHistory.find(x => x.id === slot.joinInfoId);
                 if (!slot.joinInfo) {
@@ -311,7 +315,11 @@ class DataProc {
 
             // determine profile of player who changed lobby title
             // try by name looking in slots
-            if ((matchedPlSlots.length >= 1 && isInitialTitle) || matchedPlSlots.length === 1) {
+            if (
+                ((matchedPlSlots.length >= 1 && isInitialTitle) || matchedSlots.length === 1) &&
+                matchedSlots.length === matchedPlSlots.length
+            ) {
+                // use first match
                 recentTitle.profileId = matchedPlSlots[0].profile.id;
             }
             else if (recentTitle.accountId !== null) {
