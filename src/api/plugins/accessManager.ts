@@ -8,6 +8,7 @@ import { defaultAccountSettings, UserPrivacyPreferences } from '../../entity/BnA
 import { S2MapHeader } from '../../entity/S2MapHeader';
 import { BnAccount } from '../../entity/BnAccount';
 import { PlayerProfileParams } from '../../bnet/common';
+import { realmIdFromLocalProfileId } from '../../common';
 
 export enum MapAccessAttributes {
     Details,
@@ -69,14 +70,12 @@ class AccessManager implements IAccessManager {
 
         if (
             mapOrHeader instanceof S2Map &&
-            typeof mapOrHeader.author?.regionId === 'number' &&
-            typeof mapOrHeader.author?.realmId === 'number' &&
-            typeof mapOrHeader.author?.profileId === 'number'
+            typeof mapOrHeader?.regionId === 'number' &&
+            typeof mapOrHeader?.authorLocalProfileId === 'number'
         ) {
             qb.andWhere('plink.regionId = :regionId AND plink.realmId = :realmId AND plink.profileId = :profileId', {
-                regionId: mapOrHeader.author.regionId,
-                realmId: mapOrHeader.author.realmId,
-                profileId: mapOrHeader.author.profileId,
+                regionId: mapOrHeader.regionId,
+                ...realmIdFromLocalProfileId(mapOrHeader.authorLocalProfileId)
             });
         }
         else if (mhead.regionId && mhead.bnetId) {
@@ -84,7 +83,7 @@ class AccessManager implements IAccessManager {
                 regionId: mhead.regionId,
                 bnetId: mhead.bnetId,
             });
-            qb.innerJoin(S2Profile, 'profile', 'profile.id = map.author');
+            qb.innerJoin(S2Profile, 'profile', 'map.regionId = profile.regionId AND map.authorLocalProfileId = profile.localProfileId');
             qb.andWhere('plink.regionId = profile.regionId AND plink.realmId = profile.realmId AND plink.profileId = profile.profileId');
         }
         else {

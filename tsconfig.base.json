@@ -1,13 +1,14 @@
 {
     "compilerOptions": {
         "module": "commonjs",
-        "target": "es2019",
+        "target": "es2020",
         "rootDir": ".",
         "outDir": "out",
         "lib": [
             "es2017",
             "es2018",
             "es2019",
+            "es2020",
             "esnext.asynciterable",
             "DOM", // due to axios-case-converter
         ],

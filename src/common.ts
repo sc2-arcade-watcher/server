@@ -76,6 +76,13 @@ export function localProfileId(params: PlayerProfileParams) {
     return params.profileId + (params.realmId === 2 ? 1 << 31 >>> 0 : 0);
 }
 
+export function realmIdFromLocalProfileId(localProfileId: number) {
+    return {
+        realmId: (localProfileId & (1 << 31)) ? 2 : 1,
+        profileId: localProfileId & ~(1 << 31),
+    };
+}
+
 export function regionCode(regionCodeOrId: GameRegion | string) {
     let regionId: number;
     if (typeof regionCodeOrId === 'string') {

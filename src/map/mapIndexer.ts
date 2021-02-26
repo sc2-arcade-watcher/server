@@ -516,6 +516,7 @@ export class MapIndexer {
 
         if (!map.author) {
             map.author = await this.conn.getCustomRepository(S2ProfileRepository).fetchOrCreate(msg.author);
+            map.authorLocalProfileId = map.author.localProfileId;
             updatedMap = true;
         }
 

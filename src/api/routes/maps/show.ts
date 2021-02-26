@@ -1,5 +1,6 @@
 import fp from 'fastify-plugin';
 import { S2Map } from '../../../entity/S2Map';
+import { S2Profile } from '../../../entity/S2Profile';
 
 export default fp(async (server, opts) => {
     server.get<{
@@ -26,8 +27,26 @@ export default fp(async (server, opts) => {
         const map = await server.conn.getRepository(S2Map)
             .createQueryBuilder('map')
             .innerJoin('map.currentVersion', 'currRev')
-            .leftJoin('map.author', 'author')
-            .addSelect([
+            .leftJoinAndMapOne('map.author', S2Profile, 'author', 'map.regionId = author.regionId AND map.authorLocalProfileId = author.localProfileId')
+            .select([
+                'map.id',
+                'map.regionId',
+                'map.bnetId',
+                'map.type',
+                'map.availableLocales',
+                'map.mainLocale',
+                'map.mainLocaleHash',
+                'map.iconHash',
+                'map.thumbnailHash',
+                'map.name',
+                'map.description',
+                'map.website',
+                'map.mainCategoryId',
+                'map.maxPlayers',
+                'map.maxHumanPlayers',
+                'map.updatedAt',
+                'map.publishedAt',
+                'map.removed',
                 'currRev.id',
                 'currRev.majorVersion',
                 'currRev.minorVersion',

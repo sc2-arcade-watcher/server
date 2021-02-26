@@ -62,7 +62,10 @@ program.command('profile:update-last-online')
                 const recentMapUpload = await conn.getRepository(S2Map).createQueryBuilder('map')
                     .select([])
                     .addSelect('map.updatedAt', 'date')
-                    .andWhere('map.author = :pid', { pid: profile.id })
+                    .andWhere('map.regionId = :regionId AND map.authorLocalProfileId = :localProfileId', {
+                        regionId: profile.regionId,
+                        localProfileId: profile.localProfileId,
+                    })
                     .orderBy('map.updatedAt', 'DESC')
                     .limit(1)
                     .getRawOne()
@@ -70,10 +73,9 @@ program.command('profile:update-last-online')
                 const recentMatch = await conn.getRepository(S2ProfileMatch).createQueryBuilder('profMatch')
                     .select([])
                     .addSelect('profMatch.date', 'date')
-                    .andWhere('profMatch.regionId = :regionId AND profMatch.realmId = :realmId AND profMatch.profileId = :profileId', {
+                    .andWhere('profMatch.regionId = :regionId AND profMatch.localProfileId = :localProfileId', {
                         regionId: profile.regionId,
-                        realmId: profile.realmId,
-                        profileId: profile.profileId,
+                        localProfileId: profile.localProfileId,
                     })
                     .orderBy('profMatch.id', 'DESC')
                     .limit(1)

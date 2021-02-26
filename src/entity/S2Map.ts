@@ -15,6 +15,7 @@ export enum S2MapType {
 
 @Entity()
 @Unique('region_bnet_idx', ['regionId', 'bnetId'])
+@Index('local_profile_region_idx', ['authorLocalProfileId', 'regionId'])
 @Index('category_type_region_idx', ['mainCategoryId', 'type', 'regionId'])
 @Index('type_region_idx', ['type', 'regionId'])
 export class S2Map {
@@ -33,13 +34,6 @@ export class S2Map {
     })
     bnetId: number;
 
-    @ManyToOne(type => S2Profile, {
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
-    })
-    @Index('author_idx')
-    author: S2Profile;
-
     @Column({
         type: 'enum',
         enum: S2MapType,
@@ -57,6 +51,12 @@ export class S2Map {
     })
     @Index('initial_version_idx')
     initialVersion: S2MapHeader;
+
+    @Column({
+        unsigned: true,
+        type: 'int',
+    })
+    authorLocalProfileId: number;
 
     @Column({
         type: 'int',
@@ -150,6 +150,8 @@ export class S2Map {
         cascade: false,
     })
     variants: S2MapVariant[];
+
+    author?: S2Profile;
 
     revisions?: S2MapHeader[];
 
