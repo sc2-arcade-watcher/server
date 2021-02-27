@@ -7,6 +7,14 @@ export enum GameRegion {
     CN = 5,
 }
 
+export enum GameRegionSite {
+    US = 'US',
+    EU = 'EU',
+    KR = 'KR',
+    TW = 'TW',
+    CN = 'CN',
+}
+
 export type DepotRegion = 'us' | 'eu' | 'kr' | 'cn';
 
 export enum GameLocaleFlag {
@@ -83,11 +91,12 @@ export function realmIdFromLocalProfileId(localProfileId: number) {
     };
 }
 
-export function regionCode(regionCodeOrId: GameRegion | string) {
+export function regionSiteCode(regionCodeOrId: GameRegion | GameRegionSite | string) {
     let regionId: number;
     if (typeof regionCodeOrId === 'string') {
-        regionId = (GameRegion as any)[regionCodeOrId.toUpperCase()];
+        regionId = (GameRegionSite as any)[regionCodeOrId.toUpperCase()];
         if (regionId === void 0) return void 0;
+        return regionCodeOrId as keyof typeof GameRegionSite;
     }
     else {
         regionId = regionCodeOrId;

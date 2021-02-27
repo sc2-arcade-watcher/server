@@ -12,7 +12,7 @@ import { S2ProfileMatch, S2MatchSpeed, S2MatchDecision, S2MatchType } from '../e
 import { S2Map, S2MapType } from '../entity/S2Map';
 import { S2MapLocale } from '../entity/S2MapLocale';
 import { oneLine } from 'common-tags';
-import { GameRegion, GameLocale, GameLocaleFlag } from '../common';
+import { GameRegion, GameLocale, GameLocaleFlag, GameRegionSite } from '../common';
 import { S2ProfileMatchMapName } from '../entity/S2ProfileMatchMapName';
 import { S2ProfileBattleTrackingRepository } from '../repository/S2ProfileBattleTrackingRepository';
 import { S2ProfileRepository } from '../repository/S2ProfileRepository';
@@ -453,19 +453,23 @@ export class BattleDataUpdater {
         }),
         us: new BattleAPI({
             gateway: { sc2: '{region}.api.blizzard.com' },
-            region: GameRegion.US,
+            region: GameRegionSite.US,
         }),
         eu: new BattleAPI({
             gateway: { sc2: '{region}.api.blizzard.com' },
-            region: GameRegion.EU,
+            region: GameRegionSite.EU,
         }),
         kr: new BattleAPI({
             gateway: { sc2: '{region}.api.blizzard.com' },
-            region: GameRegion.KR,
+            region: GameRegionSite.KR,
+        }),
+        tw: new BattleAPI({
+            gateway: { sc2: '{region}.api.blizzard.com' },
+            region: GameRegionSite.TW,
         }),
         cn: new BattleAPI({
             gateway: { sc2: 'gateway.battlenet.com.cn' },
-            region: GameRegion.CN,
+            region: GameRegionSite.CN,
         }),
     };
     protected bMapper = new BattleMatchEntryMapper(this.conn);
@@ -488,7 +492,9 @@ export class BattleDataUpdater {
                 return this.bAPIEntry.kr;
             }
             case GameRegion.CN: {
-                return this.bAPIEntry.cn;
+                // return this.bAPIEntry.cn;
+                // TW gateway supports CN and is faster to respond
+                return this.bAPIEntry.tw;
             }
         }
     }
@@ -592,7 +598,7 @@ export class BattleDataUpdater {
 
     protected handleAxiosError(err: AxiosError, profile: S2Profile, updatedTrackingData: Partial<S2ProfileBattleTracking>) {
         logger.warn(oneLine`
-            Profile ${profile.nameAndId}
+            [${profile.id.toString().padStart(8, ' ')}] ${profile.nameAndId}
             req=${err.config.url}
             code=${err?.code}
             status=${err.response?.status}
@@ -693,7 +699,7 @@ export class BattleDataUpdater {
 
     @retry({
         onFailedAttempt: async err => {
-            if (isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 500)) {
+            if (isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 429 || err.response?.status === 500)) {
                 if (
                     err.response?.status === 404 &&
                     (
@@ -715,7 +721,7 @@ export class BattleDataUpdater {
                 throw err;
             }
         },
-        retries: 4,
+        retries: 3,
     })
     protected async retrieveMatchHistorySingle(bAPI: BattleAPI, profile: S2Profile, locale: GameLocale) {
         const bLocale = `${locale.substr(0, 2)}_${locale.substr(2, 2)}`;
@@ -735,7 +741,13 @@ export class BattleDataUpdater {
         };
 
         try {
-            const bAPI = this.getAPIForRegion(profile.regionId, profile.battleTracking.publicGatewaySince !== null);
+            let bAPI: BattleAPI;
+            if (profile.regionId === GameRegion.CN && profile.battleTracking.battleAPIErrorCounter % 2 === 1) {
+                bAPI = this.bAPIEntry.cn;
+            }
+            else {
+                bAPI = this.getAPIForRegion(profile.regionId, profile.battleTracking.publicGatewaySince !== null);
+            }
             const tdiff = profile.battleTracking.matchHistoryUpdatedAt ? (
                 (new Date()).getTime() - profile.battleTracking.matchHistoryUpdatedAt.getTime()
             ) / 1000 / 3600.0 : 0;
@@ -875,7 +887,7 @@ export class BattleDataUpdater {
             !profile.avatar ||
             (
                 matchResult.matches.length &&
-                (!profile.battleTracking?.profileInfoUpdatedAt || profile.battleTracking?.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? new Date(), 14))
+                (!profile.battleTracking?.profileInfoUpdatedAt || profile.battleTracking?.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? new Date(), 21))
             )
         ) {
             metaResult = await this.updateProfileMetaData(profile);

@@ -5,7 +5,7 @@ import * as https from 'https';
 import Axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosTransformer } from 'axios';
 import applyCaseMiddleware from 'axios-case-converter';
 import * as snakecaseKeys from 'snakecase-keys';
-import { GameRegion, regionCode } from '../common';
+import { GameRegionSite, regionSiteCode } from '../common';
 import { isAxiosError, sleep, TypedEvent } from '../helpers';
 import { logger } from '../logger';
 
@@ -29,7 +29,7 @@ export interface BattleAPIClientConfig {
         oauth?: BattleAPIGateway;
         sc2?: BattleAPIGateway;
     };
-    region?: GameRegion;
+    region?: GameRegionSite;
     clientId?: string;
     clientSecret?: string;
     accessToken?: string;
@@ -40,8 +40,8 @@ interface BattleAPIModuleConfig {
     axios: AxiosRequestConfig;
 }
 
-function gatewayURL(gateway: BattleAPIGateway, region: GameRegion) {
-    return `https://${gateway.replace('{region}', regionCode(region).toLowerCase())}`;
+function gatewayURL(gateway: BattleAPIGateway, region: GameRegionSite) {
+    return `https://${gateway.replace('{region}', regionSiteCode(region).toLowerCase())}`;
 }
 
 abstract class BattleAPIBase {
@@ -51,7 +51,7 @@ abstract class BattleAPIBase {
     constructor(params: Partial<BattleAPIModuleConfig> = {}) {
         this.mConfig = {
             client: Object.assign(<Partial<BattleAPIClientConfig>>{
-                region: GameRegion.US,
+                region: GameRegionSite.US,
                 gateway: {},
             }, params?.client ?? {}),
             axios: params?.axios ?? {},
@@ -357,8 +357,11 @@ export class BattleAPI {
                     }
                     error.config.headers['Authorization'] = `Bearer ${accessToken}`;
                 }
-                else if (error?.response?.status === 503 || error?.response?.status === 429) {
-                    await sleep(350 * Math.pow((error.config as any).retryAttempt, 1.4));
+                else if (error?.response?.status === 429) {
+                    await sleep(700 * Math.pow((error.config as any).retryAttempt, 1.5));
+                }
+                else if (error?.response?.status === 503) {
+                    await sleep(350 * Math.pow((error.config as any).retryAttempt, 1.3));
                 }
                 else if (error?.response?.status === 504) {
                     await sleep(300 * Math.pow((error.config as any).retryAttempt, 1.1));

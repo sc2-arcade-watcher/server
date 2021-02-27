@@ -77,6 +77,7 @@ program.command('battle:sync-profile')
     .option<Number>('--hist-delay <hours>', 'match history scan delay', Number, null)
     .option<Number>('--loop-delay <seconds>', '', Number, -1)
     .option<Number>('--offset <number>', 'initial offset id', Number, null)
+    .option<Number>('--err-limit <number>', '', Number, 10)
     .option('--desc', '', false)
     .option('--retry-err', 'retry all profiles which failed to update in previous iteration(s)', false)
     .action(async (cmd: program.Command) => {
@@ -158,7 +159,9 @@ program.command('battle:sync-profile')
                 if (cmd.onlineMax) {
                     qb.andWhere('profile.lastOnlineAt > DATE_SUB(UTC_TIMESTAMP(), INTERVAL :onlineMax HOUR)', { onlineMax: cmd.onlineMax });
                 }
-                qb.andWhere('(pTrack.battleAPIErrorCounter IS NULL OR pTrack.battleAPIErrorCounter < 10)');
+                qb.andWhere('(pTrack.battleAPIErrorCounter IS NULL OR pTrack.battleAPIErrorCounter < :errLimit)', {
+                    errLimit: cmd.errLimit,
+                });
             }
 
             qb.limit(chunkLimit);
@@ -196,7 +199,7 @@ program.command('battle:sync-profile')
                         !forceUpdate &&
                         profile.battleTracking &&
                         (profile.battleTracking.battleAPIErrorCounter > 0 && profile.battleTracking.battleAPIErrorLast) &&
-                        (profile.battleTracking.battleAPIErrorLast > subHours(new Date(), Math.pow(1.2, profile.battleTracking.battleAPIErrorCounter)))
+                        (profile.battleTracking.battleAPIErrorLast > subHours(new Date(), Math.pow(profile.battleTracking.battleAPIErrorCounter * 1.5, 1.25)))
                     ) {
                         return;
                     }

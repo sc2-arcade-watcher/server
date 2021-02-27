@@ -2,7 +2,7 @@ import * as pMap from 'p-map';
 import { User, TextChannel, Message, RichEmbed, RichEmbedOptions, Snowflake, DiscordAPIError, PartialTextBasedChannelFields, DMChannel } from 'discord.js';
 import { BotTask, DiscordErrorCode, GeneralCommand, formatObjectAsMessage, ExtendedCommandInfo } from '../dscommon';
 import { S2GameLobby } from '../../entity/S2GameLobby';
-import { GameLobbyStatus, GameRegion } from '../../gametracker';
+import { GameLobbyStatus } from '../../gametracker';
 import { S2GameLobbySlot, S2GameLobbySlotKind } from '../../entity/S2GameLobbySlot';
 import { sleep, sleepUnless } from '../../helpers';
 import { logger, logIt } from '../../logger';
@@ -10,6 +10,7 @@ import { DsGameLobbySubscription } from '../../entity/DsGameLobbySubscription';
 import { DsGameLobbyMessage } from '../../entity/DsGameLobbyMessage';
 import { S2GameLobbyRepository } from '../../repository/S2GameLobbyRepository';
 import deepEqual = require('deep-equal');
+import { GameRegion } from '../../common';
 
 export interface DestChannelOpts {
     userId: string;

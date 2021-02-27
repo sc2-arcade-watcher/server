@@ -4,14 +4,7 @@ import { JournalFeed, JournalFeedCursor } from './journal/feed';
 import { logger, logIt } from './logger';
 import { parseProfileHandle } from './bnet/common';
 import { stripIndents } from 'common-tags';
-
-// TODO: replace with GameRegion from common.ts
-export enum GameRegion {
-    US = 1,
-    EU = 2,
-    KR = 3,
-    CN = 5,
-}
+import { GameRegion } from './common';
 
 interface GameLobbyPreview {
     lastUpdateAt: Date;

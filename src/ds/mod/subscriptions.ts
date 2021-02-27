@@ -2,12 +2,12 @@ import * as orm from 'typeorm';
 import { User, TextChannel, RichEmbedOptions, DMChannel, GroupDMChannel } from 'discord.js';
 import { DsBot } from '../../bin/dsbot';
 import { BotTask, DiscordErrorCode, GeneralCommand, formatObjectAsMessage, ExtendedCommandInfo } from '../dscommon';
-import { GameRegion } from '../../gametracker';
 import { logger, logIt } from '../../logger';
 import { DsGameLobbySubscription } from '../../entity/DsGameLobbySubscription';
 import { CommandMessage, FriendlyError } from 'discord.js-commando';
 import { S2Region } from '../../entity/S2Region';
 import { stripIndents } from 'common-tags';
+import { GameRegion } from '../../common';
 
 
 interface SubscriptionArgs {
