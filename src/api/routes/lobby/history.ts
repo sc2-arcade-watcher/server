@@ -10,6 +10,7 @@ import { parseProfileHandle } from '../../../bnet/common';
 import { S2Profile } from '../../../entity/S2Profile';
 import { ProfileAccessAttributes } from '../../plugins/accessManager';
 import { CursorPaginationQuery } from '../../plugins/cursorPagination';
+import { S2GameLobbyPlayerJoin } from '../../../entity/S2GameLobbyPlayerJoin';
 
 export default fp(async (server, opts) => {
     server.get<{
@@ -62,11 +63,11 @@ export default fp(async (server, opts) => {
                     },
                     includeMapInfo: {
                         type: 'boolean',
-                        default: true,
+                        default: false,
                     },
                     includeSlots: {
                         type: 'boolean',
-                        default: true,
+                        default: false,
                     },
                     includeSlotsProfile: {
                         type: 'boolean',
@@ -77,6 +78,14 @@ export default fp(async (server, opts) => {
                         default: false,
                     },
                     includeJoinHistory: {
+                        type: 'boolean',
+                        default: false,
+                    },
+                    includeMatchResult: {
+                        type: 'boolean',
+                        default: false,
+                    },
+                    includeMatchPlayers: {
                         type: 'boolean',
                         default: false,
                     },
@@ -123,7 +132,7 @@ export default fp(async (server, opts) => {
         }
         else if (typeof request.query.profileHandle === 'string') {
             pQuery = request.parseCursorPagination({
-                paginationKeys: ['lobSlot.lobby'],
+                paginationKeys: ['lobJoinInfo.lobby'],
                 toRawKey: (x) => 'id',
                 toQueryKey: (x) => x,
                 toFieldKey: (x) => x,
@@ -148,14 +157,25 @@ export default fp(async (server, opts) => {
                 .getQuery()
             ;
 
-            qb = server.conn.getRepository(S2GameLobbySlot)
-                .createQueryBuilder('lobSlot')
-                .andWhere('lobSlot.profile = ' + profileQuery, {
+            // qb = server.conn.getRepository(S2GameLobbySlot)
+            //     .createQueryBuilder('lobSlot')
+            //     .andWhere('lobSlot.profile = ' + profileQuery, {
+            //         regionId: requestedProfile.regionId,
+            //         realmId: requestedProfile.realmId,
+            //         profileId: requestedProfile.profileId,
+            //     })
+            //     .select('lobSlot.lobby', 'id')
+            // ;
+
+            qb = server.conn.getRepository(S2GameLobbyPlayerJoin)
+                .createQueryBuilder('lobJoinInfo')
+                .andWhere('lobJoinInfo.profile = ' + profileQuery, {
                     regionId: requestedProfile.regionId,
                     realmId: requestedProfile.realmId,
                     profileId: requestedProfile.profileId,
                 })
-                .select('lobSlot.lobby', 'id')
+                .select('lobJoinInfo.lobby', 'id')
+                .distinct()
             ;
         }
         else {
@@ -170,8 +190,32 @@ export default fp(async (server, opts) => {
         qbFinal.andWhereInIds(lbIds.length ? lbIds.map(x => x.id) : [0]);
         qbFinal.addOrderBy('lobby.id', pQuery.getOrderDirection(request.query.orderDirection?.toUpperCase() ?? 'DESC'));
 
+        if (request.query.includeMatchResult) {
+            lobbyRepo.addMatchResult(qbFinal, {
+                playerProfiles: request.query.includeMatchPlayers,
+            });
+        }
+
         if (request.query.includeMapInfo) {
             lobbyRepo.addMapInfo(qbFinal, true);
+        }
+
+        if (request.query.includeMatchResult) {
+            qbFinal.addSelect([
+                'lobMatch.result',
+                'lobMatch.completedAt',
+            ]);
+            if (request.query.includeMatchPlayers) {
+                qbFinal.addSelect([
+                    'profMatch.decision',
+                    'pmProfile.regionId',
+                    'pmProfile.realmId',
+                    'pmProfile.profileId',
+                    'pmProfile.name',
+                    'pmProfile.discriminator',
+                    'pmProfile.avatar',
+                ]);
+            }
         }
 
         qbFinal.addSelect([
@@ -189,6 +233,8 @@ export default fp(async (server, opts) => {
             'lobby.mapVariantMode',
             'lobby.lobbyTitle',
             'lobby.hostName',
+            'lobby.slotsHumansTaken',
+            'lobby.slotsHumansTotal',
         ]);
 
         if (request.query.includeSlots) {

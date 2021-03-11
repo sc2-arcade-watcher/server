@@ -1,0 +1,25 @@
+[Unit]
+Description=starc battle tracker
+Wants=network-online.target mariadb.service
+Requires=mariadb.service
+After=network-online.target mariadb.service
+PartOf=mariadb.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=notify
+NotifyAccess=all
+WorkingDirectory=/home/sc2arcade/server
+Environment="LOG_LEVEL=ERROR"
+ExecStart=/usr/bin/node /home/sc2arcade/server/out/src/bin/bTrack.js
+KillMode=process
+Restart=on-failure
+RestartPreventExitStatus=255
+User=sc2arcade
+TimeoutSec=20
+RestartSec=500ms
+FinalKillSignal=SIGQUIT
+
+[Install]
+WantedBy=multi-user.target

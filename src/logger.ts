@@ -31,7 +31,7 @@ export const logger = createLogger({
                     depth: 3,
                     compact: true,
                     maxArrayLength: 500,
-                    breakLength: 140,
+                    breakLength: 180,
                 }));
             }
 

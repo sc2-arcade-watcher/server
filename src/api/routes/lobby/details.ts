@@ -42,6 +42,7 @@ export default fp(async (server, opts) => {
         lobbyRepo.addSlotsJoinInfo(qb);
         lobbyRepo.addJoinHistory(qb);
         lobbyRepo.addTitleHistory(qb);
+        // lobbyRepo.addMatchResult(qb);
 
         qb.addSelect([
             'profile.avatar',

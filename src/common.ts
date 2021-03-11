@@ -72,6 +72,13 @@ export enum GameLocale {
     plPL = 'plPL',
 }
 
+export enum GameLobbyStatus {
+    Open = 'open',
+    Started = 'started',
+    Abandoned = 'abandoned',
+    Unknown = 'unknown',
+}
+
 export interface PlayerProfile {
     regionId: number;
     realmId: number;

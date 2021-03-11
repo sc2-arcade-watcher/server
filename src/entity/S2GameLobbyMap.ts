@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { S2GameLobby } from './S2GameLobby';
 
 export enum S2GameLobbyMapKind {
@@ -13,7 +13,7 @@ export class S2GameLobbyMap {
     @PrimaryGeneratedColumn()
     id: number;
 
-    @ManyToOne(type => S2GameLobby, {
+    @ManyToOne(type => S2GameLobby, x => x.maps, {
         nullable: false,
         onDelete: 'CASCADE',
         onUpdate: 'CASCADE',

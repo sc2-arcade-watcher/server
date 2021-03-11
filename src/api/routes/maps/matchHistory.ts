@@ -1,6 +1,7 @@
 import fp from 'fastify-plugin';
 import { S2ProfileMatch } from '../../../entity/S2ProfileMatch';
 import { S2Profile } from '../../../entity/S2Profile';
+import { S2LobbyMatch } from '../../../entity/S2LobbyMatch';
 
 export default fp(async (server, opts) => {
     server.get<{
@@ -23,6 +24,9 @@ export default fp(async (server, opts) => {
                 },
             },
             querystring: {
+                date: {
+                    type: ['number', 'string'],
+                },
                 orderBy: {
                     type: 'string',
                     enum: [
@@ -38,6 +42,14 @@ export default fp(async (server, opts) => {
                         'desc',
                     ],
                     default: 'desc',
+                },
+                includeMatchResult: {
+                    type: 'boolean',
+                    default: false,
+                },
+                includeMatchLobby: {
+                    type: 'boolean',
+                    default: false,
                 },
             },
         }
@@ -60,7 +72,7 @@ export default fp(async (server, opts) => {
 
         const qb = server.conn.getRepository(S2ProfileMatch)
             .createQueryBuilder('profMatch')
-            .innerJoinAndMapOne(
+            .leftJoinAndMapOne(
                 'profMatch.profile',
                 S2Profile,
                 'profile',
@@ -82,6 +94,40 @@ export default fp(async (server, opts) => {
                 mapId: request.params.mapId,
             })
         ;
+
+        if (request.query.includeMatchResult) {
+            qb
+                .leftJoin('profMatch.lobbyMatchProfile', 'lobMatchProf')
+                .leftJoinAndMapOne('profMatch.lobbyMatch', S2LobbyMatch, 'lobbyMatch', 'lobbyMatch.lobbyId = lobMatchProf.lobbyId')
+            ;
+            qb.expressionMap.selects.pop();
+            qb.addSelect([
+                'lobbyMatch.result',
+                // 'lobbyMatch.lobbyId',
+            ]);
+
+            if (request.query.includeMatchLobby) {
+                qb.leftJoin('lobbyMatch.lobby', 'lobby');
+                qb.addSelect([
+                    'lobby.regionId',
+                    'lobby.bnetBucketId',
+                    'lobby.bnetRecordId',
+                    'lobby.closedAt',
+                ]);
+            }
+        }
+
+        if (request.query.date) {
+            console.log(request.query);
+            const mDate = new Date(
+                !isNaN(Number(request.query.date)) ? Number(request.query.date) * 1000 : request.query.date
+            );
+            console.log(mDate.toISOString(), mDate.toUTCString(), mDate.getTime() / 1000);
+            if (isNaN(mDate.getTime())) {
+                return reply.code(400).send();
+            }
+            qb.andWhere('profMatch.date = :date', { date: mDate });
+        }
 
         qb.limit(pQuery.fetchLimit);
         pQuery.applyQuery(qb, request.query.orderDirection!.toUpperCase());

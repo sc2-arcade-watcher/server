@@ -15,6 +15,9 @@ import { subDays, subHours } from 'date-fns';
 import { stripIndents } from 'common-tags';
 import { S2ProfileMatch } from '../entity/S2ProfileMatch';
 import { S2ProfileMatchMapName } from '../entity/S2ProfileMatchMapName';
+import { BattleMatchTracker } from '../bnet/battleTracker';
+import { GameRegion, GameLobbyStatus } from '../common';
+import { S2GameLobbyRepository } from '../repository/S2GameLobbyRepository';
 
 
 program.command('battle:sync-account')
@@ -78,6 +81,7 @@ program.command('battle:sync-profile')
     .option<Number>('--loop-delay <seconds>', '', Number, -1)
     .option<Number>('--offset <number>', 'initial offset id', Number, null)
     .option<Number>('--err-limit <number>', '', Number, 10)
+    .option('--no-btrack', '', false)
     .option('--desc', '', false)
     .option('--retry-err', 'retry all profiles which failed to update in previous iteration(s)', false)
     .action(async (cmd: program.Command) => {
@@ -140,6 +144,9 @@ program.command('battle:sync-profile')
             else if (cmd.retryErr) {
                 qb.andWhere('pTrack.battleAPIErrorCounter > 0');
             }
+            else if (!cmd.btrack) {
+                qb.andWhere('pTrack.localProfileId IS NULL');
+            }
             else {
                 // `(pTrack.profileInfoUpdatedAt IS NULL OR pTrack.profileInfoUpdatedAt < DATE_SUB(profile.lastOnlineAt, INTERVAL 14 DAY))`,
                 if (cmd.histDelay) {
@@ -195,6 +202,11 @@ program.command('battle:sync-profile')
                         (new Date()).getTime() - profile.lastOnlineAt.getTime()
                     ) / 1000 / 3600.0 : 0;
 
+                    if (!profile.battleTracking) {
+                        profile.battleTracking = S2ProfileBattleTracking.create(profile);
+                        await conn.getRepository(S2ProfileBattleTracking).insert(profile.battleTracking);
+                    }
+
                     if (
                         !forceUpdate &&
                         profile.battleTracking &&
@@ -215,25 +227,37 @@ program.command('battle:sync-profile')
                             logger.verbose(`[${idPadding}] Updating profile :: ${profile.nameAndIdPad} tdiff=${tdiff.toFixed(1).padStart(5, '0')}h`);
                             const commonResult = await bData.updateProfileCommon(profile);
 
-                            if (Object.keys(commonResult.updatedProfileData).length) {
-                                Object.assign(profile, commonResult.updatedProfileData);
-                                await conn.getRepository(S2Profile).update(profile.id, commonResult.updatedProfileData);
-                            }
-                            if (Object.keys(commonResult.updatedBattleTracking).length) {
-                                Object.assign(profile.battleTracking, commonResult.updatedBattleTracking);
-                                await conn.getRepository(S2ProfileBattleTracking).update(
-                                    conn.getRepository(S2ProfileBattleTracking).getId(profile.battleTracking),
-                                    commonResult.updatedBattleTracking
-                                );
-                            }
-                            if (commonResult.mapNames.length > 0) {
+                            Object.assign(profile, commonResult.updatedProfileData);
+                            Object.assign(profile.battleTracking, commonResult.updatedBattleTracking);
+                            if (commonResult.matches.length > 0) {
                                 await conn.transaction(async (tsManager) => {
-                                    await tsManager.getRepository(S2ProfileMatch).insert(commonResult.matches);
-                                    await tsManager.getRepository(S2ProfileMatchMapName).insert(commonResult.mapNames);
+                                    if (Object.keys(commonResult.updatedProfileData).length) {
+                                        await tsManager.getRepository(S2Profile).update(profile.id, commonResult.updatedProfileData);
+                                    }
+                                    if (Object.keys(commonResult.updatedBattleTracking).length) {
+                                        await tsManager.getRepository(S2ProfileBattleTracking).update(
+                                            tsManager.getRepository(S2ProfileBattleTracking).getId(profile.battleTracking),
+                                            commonResult.updatedBattleTracking
+                                        );
+                                    }
+                                    if (commonResult.matches.length > 0) {
+                                        await tsManager.getRepository(S2ProfileMatch).insert(commonResult.matches);
+                                    }
+                                    if (commonResult.mapNames.length > 0) {
+                                        await tsManager.getRepository(S2ProfileMatchMapName).insert(commonResult.mapNames);
+                                    }
                                 });
                             }
-                            else if (commonResult.matches.length) {
-                                await conn.getRepository(S2ProfileMatch).insert(commonResult.matches);
+                            else {
+                                if (Object.keys(commonResult.updatedProfileData).length) {
+                                    await conn.getRepository(S2Profile).update(profile.id, commonResult.updatedProfileData);
+                                }
+                                if (Object.keys(commonResult.updatedBattleTracking).length) {
+                                    await conn.getRepository(S2ProfileBattleTracking).update(
+                                        conn.getRepository(S2ProfileBattleTracking).getId(profile.battleTracking),
+                                        commonResult.updatedBattleTracking
+                                    );
+                                }
                             }
                         }
                     }
@@ -269,6 +293,164 @@ program.command('battle:sync-profile')
             lastRecordId = null;
             await sleep(cmd.loopDelay * 1000);
         }
+        await conn.close();
+    })
+;
+
+
+program.command('battle:sync-lobby')
+    .option<Number>('--concurrency <number>', '', Number, 20)
+    .option<Number>('--limit <number>', '', Number, 1)
+    .option<Number>('--region <regionId>', '', Number, null)
+    .option<Number>('--map <mapId>', '', Number, null)
+    .option<String>('--lobby <lobbyId>', '', String, null)
+    .option<String>('--after <date>', '', String, null)
+    .option<String>('--before <date>', '', String, null)
+    .option('--desc', '', false)
+    .option('--debug', '', false)
+    .option('--continue', '', false)
+    .action(async (cmd: program.Command) => {
+        const conn = await orm.createConnection();
+
+        const qb = conn.getCustomRepository(S2GameLobbyRepository).createQueryBuilder('lobby')
+            .select([
+                'lobby.id',
+                'lobby.closedAt',
+            ])
+            .limit(cmd.limit)
+        ;
+
+        const orderDirection = cmd.desc ? 'DESC' : 'ASC';
+
+        if (cmd.lobby && cmd.lobby.indexOf('/') !== -1) {
+            const [ bnetBucketId, bnetRecordId ] = (cmd.lobby as string).split('/').map(Number);
+            qb.andWhere('lobby.bnetBucketId = :bnetBucketId AND lobby.bnetRecordId = :bnetRecordId', {
+                bnetBucketId: bnetBucketId,
+                bnetRecordId: bnetRecordId,
+            });
+            qb.orderBy('lobby.id', orderDirection);
+        }
+        else {
+            if (!cmd.debug) {
+                qb
+                    .leftJoin('lobby.match', 'lobMatch')
+                    .andWhere('lobMatch.lobbyId IS NULL')
+                ;
+            }
+            // qb
+            //     .andWhere('lobby.status = :status', {
+            //         status: GameLobbyStatus.Started,
+            //     })
+            // ;
+            // qb.andWhere('(lobby.closedAt IS NOT NULL AND lobby.closedAt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 60 SECOND))');
+            if (cmd.region) {
+                qb.andWhere('lobby.regionId = :region', {
+                    region: cmd.region,
+                });
+            }
+            if (cmd.map) {
+                qb.andWhere('lobby.mapBnetId = :map', {
+                    map: cmd.map,
+                });
+            }
+
+            if (cmd.after) {
+                qb.andWhere('lobby.closedAt > :dateFrom', {
+                    dateFrom: new Date(cmd.after),
+                });
+            }
+            if (cmd.before) {
+                qb.andWhere('lobby.closedAt < :dateBefore', {
+                    dateBefore: new Date(cmd.before),
+                });
+            }
+
+            if (cmd.lobby && orderDirection === 'ASC') {
+                qb.andWhere('lobby.id >= :lobbyId', { lobbyId: Number(cmd.lobby) });
+            }
+            else if (cmd.lobby && orderDirection === 'DESC') {
+                qb.andWhere('lobby.id <= :lobbyId', { lobbyId: Number(cmd.lobby) });
+            }
+
+            if (cmd.after || cmd.before) {
+                qb.orderBy('lobby.closedAt', orderDirection);
+            }
+            else {
+                qb.orderBy('lobby.id', orderDirection);
+            }
+        }
+
+        let terminated = false;
+        const bmTracker = new BattleMatchTracker(conn);
+        setupProcessTerminator(() => {
+            terminated = true;
+            bmTracker.close();
+        });
+
+        async function fetchLobbies() {
+            if (terminated) return;
+            const lbResults = await qb.getMany();
+            logger.verbose(
+                `Retrieved ${lbResults.length} records..`,
+                lbResults.length > 0 ? lbResults[0].id : 0,
+                lbResults.length > 1 ? lbResults[lbResults.length - 1].id : 0,
+            );
+
+            if (lbResults.length > 0) {
+                if (cmd.debug) {
+                    const findResult = await bmTracker.findLobbyCandidates(lbResults[0].id, {
+                        considerMatched: true,
+                        dontQuitEarly: true,
+                    });
+                    logger.info(
+                        `lobby match candidates`,
+                        findResult.allCandidates,
+                        findResult.validCandidates,
+                        Array.from(findResult.allCandidates).map(x => [x[0], x[1].length])
+                    );
+                    return;
+                }
+                else {
+                    const tmp = lbResults.find(x => x.closedAt === null);
+                    if (tmp) {
+                        logger.warn(`unclosed lobby ${tmp.id}`);
+                        return;
+                    }
+                    await bmTracker.addLobby(lbResults.map(x => x.id));
+                }
+            }
+
+            if (cmd.continue || lbResults.length === 0) {
+                if (cmd.lobby) {
+                    if (lbResults.length > 0) {
+                        if (orderDirection === 'ASC') {
+                            qb.setParameter('lobbyId', lbResults[lbResults.length - 1].id + 1);
+                        }
+                        else {
+                            qb.setParameter('lobbyId', lbResults[lbResults.length - 1].id - 1);
+                        }
+                    }
+                    while (!terminated && bmTracker.trackedLobbiesCount > 2000) {
+                        await sleep(100);
+                    }
+                    setImmediate(fetchLobbies);
+                }
+                else {
+                    throw new Error('cant continue');
+                }
+            }
+            else {
+                await bmTracker.onDone();
+                bmTracker.close();
+            }
+        }
+
+        await fetchLobbies();
+        if (!cmd.debug) {
+            await bmTracker.work();
+            await bmTracker.onDone();
+        }
+
         await conn.close();
     })
 ;

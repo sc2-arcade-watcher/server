@@ -24,7 +24,6 @@ export class S2Profile implements BareS2Profile {
     @Column({
         unsigned: true,
         type: 'int',
-        default: 0,
     })
     localProfileId: number;
 
@@ -65,6 +64,7 @@ export class S2Profile implements BareS2Profile {
         collation: 'ascii_bin',
         nullable: false,
     })
+    @Index('avatar_idx')
     avatar: string;
 
     @Column({

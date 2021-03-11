@@ -1,8 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, Index, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Index, ManyToOne, OneToMany, OneToOne } from 'typeorm';
 import { S2Map } from './S2Map';
 import { S2Profile } from './S2Profile';
 import { S2ProfileMatchMapName } from './S2ProfileMatchMapName';
 import { GameLocale } from '../common';
+import { S2LobbyMatchProfile } from './S2LobbyMatchProfile';
+import { S2GameLobby } from './S2GameLobby';
+import { S2LobbyMatch } from './S2LobbyMatch';
 
 export enum S2MatchDecision {
     Left = 'left',
@@ -91,9 +94,19 @@ export class S2ProfileMatch {
     })
     names: S2ProfileMatchMapName[];
 
+    @OneToOne(type => S2LobbyMatchProfile, x => x.profileMatch, {
+        persistence: false,
+        cascade: false,
+    })
+    lobbyMatchProfile: S2LobbyMatchProfile;
+
     mapNames?: {[key in GameLocale]: string};
 
     map?: S2Map;
 
     profile?: S2Profile;
+
+    lobby?: S2GameLobby;
+
+    lobbyMatch?: S2LobbyMatch;
 }

@@ -19,6 +19,7 @@ import { S2ProfileRepository } from '../repository/S2ProfileRepository';
 import { S2ProfileAccountLink } from '../entity/S2ProfileAccountLink';
 import { AxiosError } from 'axios';
 import { subDays } from 'date-fns';
+import { ProfileManager } from '../manager/profileManager';
 
 const reSpecialChars = /[^a-z0-9]+/g;
 
@@ -63,10 +64,20 @@ export interface BattleMatchesSource {
     entries: BattleSC2MatchEntry[];
 }
 
+export interface BattleMatchEntryMapperOptions {
+    unknownMapWaitThresholdSecs: number;
+}
+
 export class BattleMatchEntryMapper {
     protected mapCache = lru<MapLocalizedResult[]>(3000, 1000 * 3600 * 2);
+    protected opts: BattleMatchEntryMapperOptions = {
+        unknownMapWaitThresholdSecs: 0,
+    };
 
-    constructor (protected conn: orm.Connection) {
+    constructor (protected conn: orm.Connection, opts?: Partial<BattleMatchEntryMapperOptions>) {
+        if (opts) {
+            Object.assign(this.opts, opts);
+        }
     }
 
     async fetchMaps(params: { regionId?: number | number[], mapId?: number, name?: string | string[] }): Promise<MapLocalizedResult[]> {
@@ -172,14 +183,14 @@ export class BattleMatchEntryMapper {
     async mapFromSource(
         bSrcs: BattleMatchesSource[],
         profile: S2Profile,
-        mostRecentMatch?: S2ProfileMatch,
+        lastMatchAt: Date | null,
         integritySince?: Date,
         sourcesLimit: number = 2,
     ): Promise<BattleMatchMappingResult | boolean> {
         const firstSrc = bSrcs.find(x => x.locale === GameLocale.enUS);
 
-        if (mostRecentMatch && firstSrc.entries.length === 0) {
-            logger.error(`${profile.nameAndId}, got empty match history result, where latest recorded was=${mostRecentMatch.date.toISOString()}`);
+        if (lastMatchAt && firstSrc.entries.length === 0) {
+            logger.error(`${profile.nameAndId}, got empty match history result, where latest recorded was=${lastMatchAt.toISOString()}`);
             return false;
         }
 
@@ -188,8 +199,8 @@ export class BattleMatchEntryMapper {
         }
 
         let latestKnownMatchIndex = -1;
-        if (mostRecentMatch) {
-            const mostRecentMatchEpochSecs = mostRecentMatch.date.getTime() / 1000;
+        if (lastMatchAt) {
+            const mostRecentMatchEpochSecs = lastMatchAt.getTime() / 1000;
             for (let i = firstSrc.entries.length - 1; i >= 0; --i) {
                 const item = firstSrc.entries[i];
                 if (item.date > mostRecentMatchEpochSecs) break;
@@ -384,24 +395,21 @@ export class BattleMatchEntryMapper {
                     );
                 }
             }
-            else if (bSrcs.length >= sourcesLimit) {
-                logger.warn(
-                    `${profile.nameAndId} matchedMapsRegional=${matchedMapsRegional.length}`,
-                    entryMapNamesUnique,
-                    matchedMapsRegional
-                );
-            }
-
 
             if (bSrcs.length >= sourcesLimit) {
-                const tdiffDays = (((new Date()).getTime() / 1000) - firstSrc.entries[entryIndex].date) / (3600 * 24);
-                if (tdiffDays <= 0.2) {
+                const tdiffSecs = ((new Date()).getTime() / 1000) - firstSrc.entries[entryIndex].date;
+                if (tdiffSecs < this.opts.unknownMapWaitThresholdSecs) {
+                    logger.debug(
+                        `${profile.nameAndId} matchedMapsRegional=${matchedMapsRegional.length}`,
+                        entryMapNamesUnique,
+                        matchedMapsRegional
+                    );
                     // hold on - it might be just not yet indexed map
                     break;
                 }
 
-                logger.warn(
-                    `${profile.nameAndId} couldn't identify map, tdiff=${tdiffDays.toFixed(1)}`,
+                logger.debug(
+                    `${profile.nameAndId} couldn't identify map, tdiff=${(tdiffSecs / 3600).toFixed(1)}h`,
                     bSrcs.map(x => [x.locale, x.entries[entryIndex].map, x.entries[entryIndex].date]),
                     Array.from(bnetIdMap.values()).map(x => `${Array.from(x.regions.keys()).join(',')}/${x.mapId}`),
                 );
@@ -429,7 +437,6 @@ export interface BattleUpdatedMatchHistory {
     matches: S2ProfileMatch[];
     mapNames: S2ProfileMatchMapName[];
     lastOnlineAt: Date | null;
-    lastStoredMatch: S2ProfileMatch | null;
 }
 
 export interface BattleUpdatedProfileMeta {
@@ -531,11 +538,11 @@ export class BattleDataUpdater {
         // ensure profiles exists & update avatars
         const affectedProfiles = await Promise.all(bProfiles.map(async bCurrProfile => {
             const bCurrAvatar = getAvatarIdentifierFromUrl(bCurrProfile.avatarUrl);
-            const s2profile = await this.conn.getCustomRepository(S2ProfileRepository).fetchOrCreate({
+            const s2profile = await ProfileManager.fetchOrCreate({
                 ...bCurrProfile,
                 discriminator: 0,
                 avatar: bCurrAvatar,
-            });
+            }, this.conn);
             if (s2profile.avatar !== bCurrAvatar) {
                 s2profile.avatar = bCurrAvatar;
                 await this.conn.getRepository(S2Profile).update(s2profile.id, {
@@ -588,12 +595,6 @@ export class BattleDataUpdater {
             addedProfileLinks,
             removedProfileLinks,
         };
-    }
-
-    protected async profileEnsureTracking(profile: S2Profile) {
-        if (profile.battleTracking === null) {
-            profile.battleTracking = await this.conn.getCustomRepository(S2ProfileBattleTrackingRepository).fetchOrCreate(profile);
-        }
     }
 
     protected handleAxiosError(err: AxiosError, profile: S2Profile, updatedTrackingData: Partial<S2ProfileBattleTracking>) {
@@ -658,8 +659,6 @@ export class BattleDataUpdater {
     }
 
     async updateProfileMetaData(profile: S2Profile) {
-        await this.profileEnsureTracking(profile);
-
         const result: BattleUpdatedProfileMeta = {
             profile: profile,
             updatedBattleTracking: {},
@@ -678,7 +677,7 @@ export class BattleDataUpdater {
             result.updatedBattleTracking.profileInfoUpdatedAt = new Date();
 
             if (result.avatar) {
-                logger.info(oneLine`
+                logger.verbose(oneLine`
                     [${profile.id.toString().padStart(8, ' ')}] Updated metadata
                     pavatar=${profile.avatar.padEnd(6)} navatar=${result.avatar.padEnd(6)}
                     :: ${profile.nameAndIdPad}
@@ -729,15 +728,12 @@ export class BattleDataUpdater {
     }
 
     async updateProfileMatchHistory(profile: S2Profile) {
-        await this.profileEnsureTracking(profile);
-
         const result: BattleUpdatedMatchHistory = {
             profile: profile,
             updatedBattleTracking: {},
             matches: [],
             mapNames: [],
             lastOnlineAt: null,
-            lastStoredMatch: null,
         };
 
         try {
@@ -751,19 +747,6 @@ export class BattleDataUpdater {
             const tdiff = profile.battleTracking.matchHistoryUpdatedAt ? (
                 (new Date()).getTime() - profile.battleTracking.matchHistoryUpdatedAt.getTime()
             ) / 1000 / 3600.0 : 0;
-
-            const latestStoredRecord = await this.conn.getRepository(S2ProfileMatch).createQueryBuilder('profMatch')
-                .andWhere('profMatch.regionId = :regionId AND profMatch.localProfileId = :localProfileId', {
-                    regionId: profile.regionId,
-                    localProfileId: profile.localProfileId,
-                })
-                .orderBy('profMatch.id', 'DESC')
-                .limit(1)
-                .getOne()
-            ;
-            if (latestStoredRecord) {
-                result.lastStoredMatch = latestStoredRecord;
-            }
 
             const dateOfRequest = new Date();
             const bMatchSrcs: BattleMatchesSource[] = [];
@@ -792,7 +775,7 @@ export class BattleDataUpdater {
                 bMatchHistoryResult = await this.bMapper.mapFromSource(
                     bMatchSrcs,
                     profile,
-                    latestStoredRecord,
+                    profile.battleTracking.lastMatchAt,
                     profile.battleTracking.matchHistoryIntegritySince,
                     srcLocales.length
                 );
@@ -812,7 +795,7 @@ export class BattleDataUpdater {
 
                 if (bMatchHistoryResult.matches.length) {
                     const bUnknownMatches = bMatchHistoryResult.matches.filter(x => x.mapId === 0);
-                    logger.info(oneLine`
+                    logger.verbose(oneLine`
                         [${profile.id.toString().padStart(8, ' ')}]
                         recv=${bMatchHistoryResult.matches.length.toString().padStart(2, '0')}
                         sreq=${bMatchSrcs.length}
@@ -842,6 +825,7 @@ export class BattleDataUpdater {
                     }
 
                     const tmpDate = new Date(bMatchHistoryResult.matches[bMatchHistoryResult.matches.length - 1].date * 1000);
+                    result.updatedBattleTracking.lastMatchAt = tmpDate;
                     if (!profile.lastOnlineAt || tmpDate > profile.lastOnlineAt) {
                         result.lastOnlineAt = tmpDate;
                     }
@@ -872,7 +856,7 @@ export class BattleDataUpdater {
         return result;
     }
 
-    async updateProfileCommon(profile: S2Profile) {
+    async updateProfileCommon(profile: S2Profile): Promise<BattleUpdatedProfileCommon> {
         const updatedProfileData: Partial<S2Profile> = {};
         const updatedBattleTracking: Partial<S2ProfileBattleTracking> = {};
 
@@ -885,9 +869,10 @@ export class BattleDataUpdater {
         let metaResult: BattleUpdatedProfileMeta;
         if (
             !profile.avatar ||
+            !profile.battleTracking.profileInfoUpdatedAt ||
             (
                 matchResult.matches.length &&
-                (!profile.battleTracking?.profileInfoUpdatedAt || profile.battleTracking?.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? new Date(), 21))
+                profile.battleTracking.profileInfoUpdatedAt < subDays(profile.lastOnlineAt ?? Date.now(), 21)
             )
         ) {
             metaResult = await this.updateProfileMetaData(profile);
@@ -897,7 +882,7 @@ export class BattleDataUpdater {
             Object.assign(updatedBattleTracking, metaResult.updatedBattleTracking);
         }
 
-        return <BattleUpdatedProfileCommon>{
+        return {
             profile: profile,
             updatedProfileData: updatedProfileData,
             updatedBattleTracking: updatedBattleTracking,

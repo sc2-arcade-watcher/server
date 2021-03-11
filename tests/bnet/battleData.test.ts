@@ -48,7 +48,9 @@ describe('BattleMatchEntryMapper', () => {
     });
 
     test('partial data processing if unknown maps are found', async () => {
-        const bMapper = new BattleMatchEntryMapper(orm.getConnection());
+        const bMapper = new BattleMatchEntryMapper(orm.getConnection(), {
+            unknownMapWaitThresholdSecs: 3600 * 4,
+        });
         const s2profile = mockupProfile({ regionId: 1 });
 
         const tnow = new Date();
@@ -124,7 +126,7 @@ describe('BattleMatchEntryMapper', () => {
                 },
             ],
             s2profile,
-            mostRecentMatch,
+            mostRecentMatch.date,
             integritySince
         )) as BattleMatchMappingResult;
         expect(mappedResultIncomplete).toBeFalsy();
@@ -141,7 +143,7 @@ describe('BattleMatchEntryMapper', () => {
                 },
             ],
             s2profile,
-            mostRecentMatch,
+            mostRecentMatch.date,
             integritySince
         )) as BattleMatchMappingResult;
 
@@ -224,7 +226,7 @@ describe('BattleMatchEntryMapper', () => {
                 }
             ],
             s2profile,
-            mostRecentMatch,
+            mostRecentMatch.date,
             integritySince
         )) as BattleMatchMappingResult;
 
@@ -278,7 +280,7 @@ describe('BattleMatchEntryMapper', () => {
                 }
             ],
             s2profile,
-            mostRecentMatch,
+            mostRecentMatch.date,
             integritySince
         )) as BattleMatchMappingResult;
 

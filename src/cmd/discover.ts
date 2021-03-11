@@ -7,6 +7,7 @@ import { BattleAPI, BattleAPIGateway } from '../bnet/battleAPI';
 import { PlayerProfileParams, profileHandle } from '../bnet/common';
 import { retry, isAxiosError, sleep, throwErrIfNotDuplicateEntry } from '../helpers';
 import { BattleDataUpdater, getAvatarIdentifierFromUrl } from '../bnet/battleData';
+import { ProfileManager } from '../manager/profileManager';
 
 class BattleDiscovery {
     protected bAPI: BattleAPI;
@@ -116,11 +117,12 @@ program.command('discover:profile')
                     const profResult = await conn.getRepository(S2Profile).createQueryBuilder('profile')
                         .andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId', profParams)
                         .limit(1)
-                        .getOne()
+                        .getCount()
                     ;
-
-                    if (!profResult) {
+                    if (profResult) {
                         logger.debug(`Skipping ${profileHandle(profParams)}`);
+                    }
+                    else {
                         break;
                     }
                 }
@@ -132,18 +134,22 @@ program.command('discover:profile')
 
                     const bResult = await bDiscovery.retrieveProfileMeta(profParams);
                     const bCurrAvatar = getAvatarIdentifierFromUrl(bResult.avatarUrl);
-                    const s2prof = S2Profile.create(profParams);
-                    s2prof.name = bResult.name;
-                    s2prof.avatar = bCurrAvatar;
 
-                    checkpointId = Array.from(activeJobIds.values()).sort((a, b) => a - b)[0];
-                    logger.info(`Discovered ${s2prof.nameAndIdPad} :: checkpoint ${checkpointId}`);
+                    let s2profile: S2Profile;
                     try {
-                        await conn.getRepository(S2Profile).save(s2prof, { transaction: false });
+                        s2profile = await ProfileManager.create({
+                            ...profParams,
+                            name: bResult.name,
+                            discriminator: 0,
+                            avatar: bCurrAvatar,
+                        }, conn);
                     }
                     catch (err) {
                         throwErrIfNotDuplicateEntry(err);
-                        logger.warn(`duplicate`, s2prof);
+                        logger.warn(`Duplicate ${profileHandle(profParams)} :: checkpoint ${checkpointId}`);
+                    }
+                    if (s2profile) {
+                        logger.info(`Discovered ${s2profile.nameAndIdPad} :: checkpoint ${checkpointId}`);
                     }
                 }
                 catch (err) {

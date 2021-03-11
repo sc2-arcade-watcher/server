@@ -16,6 +16,7 @@ import { S2MapRepository } from '../repository/S2MapRepository';
 import { S2MapLocale } from '../entity/S2MapLocale';
 import { S2MapDependency } from '../entity/S2MapDependency';
 import { S2ProfileRepository } from '../repository/S2ProfileRepository';
+import { ProfileManager } from '../manager/profileManager';
 
 export class MapIndexer {
     public readonly resolver = new MapResolver(this.conn);
@@ -515,7 +516,7 @@ export class MapIndexer {
         }
 
         if (!map.author) {
-            map.author = await this.conn.getCustomRepository(S2ProfileRepository).fetchOrCreate(msg.author);
+            map.author = await ProfileManager.fetchOrCreate(msg.author, this.conn);
             map.authorLocalProfileId = map.author.localProfileId;
             updatedMap = true;
         }

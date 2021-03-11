@@ -14,7 +14,6 @@ import { stripIndents } from 'common-tags';
 import { MapResolver } from '../map/mapResolver';
 
 dotenv.config();
-setupFileLogger('webapi');
 
 const server = fastify({
     logger: false,
@@ -134,6 +133,7 @@ server.register(require('../api/routes/profile/mostPlayed').default);
 server.register(require('../api/routes/lobby/openGames').default);
 server.register(require('../api/routes/lobby/active').default);
 server.register(require('../api/routes/lobby/details').default);
+server.register(require('../api/routes/lobby/match').default);
 server.register(require('../api/routes/lobby/history').default);
 
 server.register(require('../api/routes/maps/list').default);
@@ -157,6 +157,7 @@ process.on('unhandledRejection', e => { throw e; });
     if (process.env.NOTIFY_SOCKET) {
         await systemdNotifyReady();
     }
+    setupFileLogger('webapi');
 
     server.listen(webapiPort, process.env.ENV === 'dev' ? '127.0.0.1' : '0.0.0.0', (err, address) => {
         if (err) throw err;

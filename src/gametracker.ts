@@ -2,9 +2,13 @@ import { LobbyPreviewSlot, DataLobbyCreate, JournalDecoder, SignalBase, SignalLo
 import { TypedEvent, sleep } from './helpers';
 import { JournalFeed, JournalFeedCursor } from './journal/feed';
 import { logger, logIt } from './logger';
+import { GameLobbyStatus } from './common';
 import { parseProfileHandle } from './bnet/common';
 import { stripIndents } from 'common-tags';
 import { GameRegion } from './common';
+
+// TODO: remove once all references are cleaned up
+export { GameLobbyStatus } from './common';
 
 interface GameLobbyPreview {
     lastUpdateAt: Date;
@@ -632,13 +636,6 @@ export class JournalReader {
     }
 }
 
-
-export enum GameLobbyStatus {
-    Open = 'open',
-    Started = 'started',
-    Abandoned = 'abandoned',
-    Unknown = 'unknown',
-}
 
 export type GameLobbySlotProfile = LobbyPvExProfile;
 

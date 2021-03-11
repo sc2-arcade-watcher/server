@@ -5,6 +5,7 @@ import { ProfileAccessAttributes } from '../../plugins/accessManager';
 import { localProfileId, GameLocale, GameLocaleFlag, GameLocaleType } from '../../../common';
 import { PlayerProfileParams } from '../../../bnet/common';
 import { S2ProfileMatchMapName } from '../../../entity/S2ProfileMatchMapName';
+import { S2GameLobby } from '../../../entity/S2GameLobby';
 
 export default fp(async (server, opts) => {
     server.get<{
@@ -63,6 +64,8 @@ export default fp(async (server, opts) => {
         const qb = server.conn.getRepository(S2ProfileMatch)
             .createQueryBuilder('profMatch')
             .leftJoinAndMapOne('profMatch.map', S2Map, 'map', 'map.regionId = profMatch.regionId AND map.bnetId = profMatch.mapId')
+            .leftJoin('profMatch.lobbyMatchProfile', 'lobMatchProf')
+            .leftJoinAndMapOne('profMatch.lobby', S2GameLobby, 'lobby', 'lobby.id = lobMatchProf.lobbyId')
             .select([
                 'profMatch.id',
                 'profMatch.date',
@@ -72,6 +75,12 @@ export default fp(async (server, opts) => {
                 'map.bnetId',
                 'map.name',
                 'map.iconHash',
+                'lobby.regionId',
+                'lobby.bnetBucketId',
+                'lobby.bnetRecordId',
+                'lobby.createdAt',
+                'lobby.closedAt',
+                'lobby.slotsHumansTaken',
             ])
             .andWhere('profMatch.regionId = :regionId AND profMatch.localProfileId = :localProfileId', {
                 regionId: request.params.regionId,

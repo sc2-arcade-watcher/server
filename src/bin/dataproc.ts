@@ -23,6 +23,7 @@ import { GameRegion } from '../common';
 import { S2ProfileTracking } from '../entity/S2ProfileTracking';
 import { S2ProfileRepository } from '../repository/S2ProfileRepository';
 import { S2ProfileTrackingRepository } from '../repository/S2ProfileTrackingRepository';
+import { ProfileManager } from '../manager/profileManager';
 
 const slotKindMap = {
     [LobbyPvExSlotKind.Computer]: S2GameLobbySlotKind.AI,
@@ -626,7 +627,7 @@ class DataProc {
         const profKey = `${infoProfile.realmId}-${infoProfile.profileId}`;
         let s2profile = this.profilesCache.get(profKey);
         if (!s2profile) {
-            s2profile = await this.conn.getCustomRepository(S2ProfileRepository).fetchOrCreate(infoProfile);
+            s2profile = await ProfileManager.fetchOrCreate(infoProfile, this.conn);
             this.profilesCache.set(profKey, s2profile);
         }
 

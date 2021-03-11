@@ -1,11 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne, OneToMany, OneToOne } from 'typeorm';
 import { S2Region } from './S2Region';
-import { GameLobbyStatus } from '../gametracker';
 import { S2GameLobbySlot, S2GameLobbySlotKind } from './S2GameLobbySlot';
 import { S2GameLobbyPlayerJoin } from './S2GameLobbyPlayerJoin';
 import { S2Map } from './S2Map';
 import { S2GameLobbyTitle } from './S2GameLobbyTitle';
-import { GameRegion } from '../common';
+import { GameRegion, GameLobbyStatus } from '../common';
+import { S2LobbyMatch } from './S2LobbyMatch';
+import { S2GameLobbyMap } from './S2GameLobbyMap';
 
 @Entity()
 @Unique('bnet_id', ['bnetBucketId', 'bnetRecordId'])
@@ -121,11 +122,23 @@ export class S2GameLobby {
     })
     joinHistory: S2GameLobbyPlayerJoin[];
 
+    @OneToMany(type => S2GameLobbyMap, x => x.lobby, {
+        cascade: false,
+        persistence: false,
+    })
+    maps: S2GameLobbyMap[];
+
     @OneToMany(type => S2GameLobbyTitle, title => title.lobby, {
         cascade: false,
         persistence: false,
     })
     titleHistory: S2GameLobbyTitle[];
+
+    @OneToOne(type => S2LobbyMatch, x => x.lobby, {
+        cascade: false,
+        persistence: false,
+    })
+    match: S2LobbyMatch;
 
     map?: S2Map;
     extMod?: S2Map;
