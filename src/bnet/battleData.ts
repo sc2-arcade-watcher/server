@@ -626,7 +626,10 @@ export class BattleDataUpdater {
         }
 
         updatedTrackingData.battleAPIErrorLast = new Date();
-        updatedTrackingData.battleAPIErrorCounter = profile.battleTracking.battleAPIErrorCounter + 1;
+        updatedTrackingData.battleAPIErrorCounter = Math.min(
+            profile.battleTracking.battleAPIErrorCounter + 1,
+            200
+        );
         if (profile.battleTracking.battleAPIErrorCounter > 3 && profile.regionId !== GameRegion.CN) {
             updatedTrackingData.publicGatewaySince = new Date();
         }

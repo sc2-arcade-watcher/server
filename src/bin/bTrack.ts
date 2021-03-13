@@ -36,7 +36,7 @@ process.on('unhandledRejection', e => {
     const conn = await orm.createConnection();
     const bProfUpdater = new BattleProfileUpdater(conn);
     const bmTracker = new BattleMatchTracker(conn, {
-        concurrency: 10,
+        concurrency: 15,
     });
     const bmProvider = new BattleLobbyProvider(conn, bmTracker);
     const bWorkers: BattleWorker[] = [];

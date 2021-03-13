@@ -334,6 +334,7 @@ export class BattleMatchTracker {
     async processLobby(lobbyId: number) {
         const lobbyInfo = this.trackedLobbies.get(lobbyId);
         const dateThreshold = addSeconds(lobbyInfo.closedAt, battleMatchMaxSecs);
+        const dateThresholdHalf = addSeconds(lobbyInfo.closedAt, battleMatchMaxSecs / 2);
         let pMatches = (await this.findLobbyCandidates(lobbyInfo, { dateThreshold }))?.finalCandidate;
 
         if (pMatches?.length && !lobbyInfo.isStartConfirmed) {
@@ -358,8 +359,8 @@ export class BattleMatchTracker {
             ;
             if (totalCandidateCount > pMatches.length) {
                 logger.warn(`lobby=${lobbyInfo.globalId} matching=${pMatches.length} foundTotal=${totalCandidateCount} cc=${lobbyInfo.checkCounter}`);
-                logger.debug('pMatches', pMatches);
-                if (lobbyInfo.checkCounter > 6 || Date.now() > dateThreshold.getTime() || this.trackedLobbies.size === 1) {
+                if (lobbyInfo.checkCounter > 6 || Date.now() > dateThresholdHalf.getTime() || this.trackedLobbies.size === 1) {
+                    logger.debug('pMatches', pMatches);
                     return this.completeLobbyAsFailed(lobbyInfo, S2LobbyMatchResult.UncertainTimestampAdditionalMatches);
                 }
                 else {
@@ -575,10 +576,10 @@ export class BattleMatchTracker {
         this.isRunning = true;
         let firstCycle = true;
         const maxCheckPeriod = {
-            [GameRegion.US]: 180,
-            [GameRegion.EU]: 180,
-            [GameRegion.KR]: 300,
-            [GameRegion.CN]: 600,
+            [GameRegion.US]: 300,
+            [GameRegion.EU]: 300,
+            [GameRegion.KR]: 600,
+            [GameRegion.CN]: 1200,
         };
         while (true) {
             if (!this.isRunning) {
@@ -594,7 +595,7 @@ export class BattleMatchTracker {
                     const tLobbyDiffMins = differenceInMinutes(tnow, lobbyInfo.closedAt);
                     const checkPeriodSecs = Math.min(
                         maxCheckPeriod[lobbyInfo.regionId as GameRegion],
-                        30 + Math.pow(1.05, tLobbyDiffMins)
+                        (lobbyInfo.isStartConfirmed ? 30 : 150) + Math.pow(1.05, tLobbyDiffMins)
                     );
                     if (differenceInSeconds(tnow, lobbyInfo.lastCheckedAt) < checkPeriodSecs) continue;
                 }
@@ -778,8 +779,8 @@ export class BattleLobbyProvider extends ServiceProcess {
             for (let i = 0;; i++) {
                 if (this.isShuttingDown) break;
                 if (
-                    (lobNewResults.length >= qLimit && this.bmTracker.trackedLobbiesCount < 5000) ||
-                    (i >= 300)
+                    ((lobNewResults.length >= qLimit && this.bmTracker.trackedLobbiesCount < 4000) || (i >= 300)) &&
+                    this.bmTracker.trackedLobbiesCount < 8000 // safety check
                 ) {
                     break;
                 }
