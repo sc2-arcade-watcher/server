@@ -155,6 +155,10 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
                 // )
                 .leftJoinAndMapMany('lobMatch.profileMatches', S2ProfileMatch, 'profMatch', 'profMatch.id = lobMatchProf.profileMatch')
             ;
+            qb.expressionMap.selects.pop();
+            qb.addSelect([
+                'profMatch.decision',
+            ]);
             if (opts?.playerProfiles) {
                 qb
                     .leftJoinAndMapOne(
@@ -164,6 +168,15 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
                         'pmProfile.regionId = profMatch.regionId AND pmProfile.localProfileId = profMatch.localProfileId'
                     )
                 ;
+                qb.expressionMap.selects.pop();
+                qb.addSelect([
+                    'pmProfile.regionId',
+                    'pmProfile.realmId',
+                    'pmProfile.profileId',
+                    'pmProfile.name',
+                    'pmProfile.discriminator',
+                    'pmProfile.avatar',
+                ]);
             }
         }
         return qb;

@@ -200,24 +200,6 @@ export default fp(async (server, opts) => {
             lobbyRepo.addMapInfo(qbFinal, true);
         }
 
-        if (request.query.includeMatchResult) {
-            qbFinal.addSelect([
-                'lobMatch.result',
-                'lobMatch.completedAt',
-            ]);
-            if (request.query.includeMatchPlayers) {
-                qbFinal.addSelect([
-                    'profMatch.decision',
-                    'pmProfile.regionId',
-                    'pmProfile.realmId',
-                    'pmProfile.profileId',
-                    'pmProfile.name',
-                    'pmProfile.discriminator',
-                    'pmProfile.avatar',
-                ]);
-            }
-        }
-
         qbFinal.addSelect([
             'lobby.id',
             'lobby.regionId',
