@@ -38,7 +38,7 @@ export class DsBot extends CommandoClient {
             disabledEvents: ['TYPING_START', 'VOICE_SERVER_UPDATE', 'VOICE_STATE_UPDATE']
         } as CommandoClientOptions, options);
         super(options);
-        this.issueTracker = 'https://github.com/sc2-arcade-watcher/server/issues';
+        this.issueTracker = 'https://github.com/sc2-arcade-watcher/issue-tracker/issues?q=is%3Aissue+';
         this.doShutdown = false;
 
         this.on('error', (e) => logger.error(e.message, e));
