@@ -42,8 +42,8 @@
         "sqlite": "^2.9.3",
         "sugar": "^2.0.6",
         "tiny-lru": "7.0.6",
-        "typeorm": "^0.2.22",
-        "typeorm-naming-strategies": "^2.0.0",
+        "typeorm": "0.2.28",
+        "typeorm-naming-strategies": "2.0.0",
         "winston": "^3.2.1",
         "winston-daily-rotate-file": "^4.4.2",
         "ws": "^7.2.1"

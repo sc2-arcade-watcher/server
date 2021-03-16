@@ -29,6 +29,7 @@ export default fp(async (server, opts) => {
         const lobbyRepo = server.conn.getCustomRepository(S2GameLobbyRepository);
         const qb = lobbyRepo
             .createQueryBuilder('lobby')
+            .select([])
             .andWhere('lobby.regionId = :regionId AND lobby.bnetBucketId = :bnetBucketId AND lobby.bnetRecordId = :bnetRecordId', {
                 regionId: request.params.regionId,
                 bnetBucketId: request.params.bnetBucketId,
@@ -36,7 +37,7 @@ export default fp(async (server, opts) => {
             })
         ;
 
-        lobbyRepo.addMapInfo(qb, true);
+        lobbyRepo.addMapInfo(qb);
         lobbyRepo.addSlots(qb);
         lobbyRepo.addSlotsProfile(qb);
         lobbyRepo.addSlotsJoinInfo(qb);

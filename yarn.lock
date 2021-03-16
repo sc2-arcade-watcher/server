@@ -5056,15 +5056,15 @@ throat@^5.0.0:
   resolved "https://registry.yarnpkg.com/throat/-/throat-5.0.0.tgz#c5199235803aad18754a667d659b5e72ce16764b"
   integrity sha512-fcwX4mndzpLQKBS1DVYhGAcYaYt7vsHNIvQV+WXMvnow5cgjPphq5CaayLaGsjRdSCKZFNGt7/GYAuXaNOiYCA==
 
+tiny-lru@7.0.6:
+  version "7.0.6"
+  resolved "https://registry.yarnpkg.com/tiny-lru/-/tiny-lru-7.0.6.tgz#b0c3cdede1e5882aa2d1ae21cb2ceccf2a331f24"
+  integrity sha512-zNYO0Kvgn5rXzWpL0y3RS09sMK67eGaQj9805jlK9G6pSadfriTczzLHFXa/xcW4mIRfmlB9HyQ/+SgL0V1uow==
+
 tiny-lru@^7.0.0:
   version "7.0.2"
   resolved "https://registry.yarnpkg.com/tiny-lru/-/tiny-lru-7.0.2.tgz#6a8853deb1e355f4c8863bf1289337e3e3a7e973"
   integrity sha512-cmc9OOwmnAJtyFBYaznKR3abypEhWecarFrvS5db6qwSgoaDUWV0JX+mdh6B9wN60Wux3+gE1vjzxkoqxFBjqw==
-
-tiny-lru@^7.0.6:
-  version "7.0.6"
-  resolved "https://registry.yarnpkg.com/tiny-lru/-/tiny-lru-7.0.6.tgz#b0c3cdede1e5882aa2d1ae21cb2ceccf2a331f24"
-  integrity sha512-zNYO0Kvgn5rXzWpL0y3RS09sMK67eGaQj9805jlK9G6pSadfriTczzLHFXa/xcW4mIRfmlB9HyQ/+SgL0V1uow==
 
 tmpl@1.0.x:
   version "1.0.4"
@@ -5259,12 +5259,12 @@ typedarray-to-buffer@^3.1.5:
   dependencies:
     is-typedarray "^1.0.0"
 
-typeorm-naming-strategies@^2.0.0:
+typeorm-naming-strategies@2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/typeorm-naming-strategies/-/typeorm-naming-strategies-2.0.0.tgz#c7c10bc768ddce2592ef9ad4d2dca55fd5fa6ad6"
   integrity sha512-nsJ5jDjhBBEG6olFmxojkO4yrW7hEv38sH7ZXWWx9wnDoo9uaoH/mo2mBYAh/VKgwoFHBLu+CYxGmzXz2GUMcA==
 
-typeorm@^0.2.22:
+typeorm@0.2.28:
   version "0.2.28"
   resolved "https://registry.yarnpkg.com/typeorm/-/typeorm-0.2.28.tgz#828df288d01ca75b38e990fa1628a7cd5a29f39f"
   integrity sha512-BTtUBGwsFzODvHY+AlWL9pvJ2uEj8qpHwmo03z43RvZkG8BAryQJQ3lZ7HlGvI9IQU8y1IYGWe97HsVr8kXB9g==

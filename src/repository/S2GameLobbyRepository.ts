@@ -29,32 +29,28 @@ export class S2GameLobbyRepository extends Repository<S2GameLobby> {
         ;
     }
 
-    addMapInfo(qb: SelectQueryBuilder<S2GameLobby>, resetSelect = false) {
-        qb
-            .leftJoinAndMapOne('lobby.map', S2Map, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId')
-            .leftJoinAndMapOne('lobby.extMod', S2Map, 'extMod', 'extMod.regionId = lobby.regionId AND extMod.bnetId = lobby.extModBnetId')
-            .leftJoinAndMapOne('lobby.multiMod', S2Map, 'multiMod', 'multiMod.regionId = lobby.regionId AND multiMod.bnetId = lobby.multiModBnetId')
-            .select(resetSelect ? [] : void 0)
-            .addSelect([
-                'map.regionId',
-                'map.bnetId',
-                'map.name',
-                'map.iconHash',
-                'map.mainCategoryId',
-            ])
-            .addSelect([
-                'extMod.regionId',
-                'extMod.bnetId',
-                'extMod.name',
-                'extMod.iconHash',
-            ])
-            .addSelect([
-                'multiMod.regionId',
-                'multiMod.bnetId',
-                'multiMod.name',
-                'multiMod.iconHash',
-            ])
-        ;
+    addMapInfo(qb: SelectQueryBuilder<S2GameLobby>) {
+        qb.leftJoinAndMapOne('lobby.map', S2Map, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId');
+        qb.expressionMap.selects.pop();
+        qb.leftJoinAndMapOne('lobby.extMod', S2Map, 'extMod', 'extMod.regionId = lobby.regionId AND extMod.bnetId = lobby.extModBnetId');
+        qb.expressionMap.selects.pop();
+        qb.leftJoinAndMapOne('lobby.multiMod', S2Map, 'multiMod', 'multiMod.regionId = lobby.regionId AND multiMod.bnetId = lobby.multiModBnetId');
+        qb.expressionMap.selects.pop();
+        qb.addSelect([
+            'map.regionId',
+            'map.bnetId',
+            'map.name',
+            'map.iconHash',
+            'map.mainCategoryId',
+            'extMod.regionId',
+            'extMod.bnetId',
+            'extMod.name',
+            'extMod.iconHash',
+            'multiMod.regionId',
+            'multiMod.bnetId',
+            'multiMod.name',
+            'multiMod.iconHash',
+        ]);
         return qb;
     }
 

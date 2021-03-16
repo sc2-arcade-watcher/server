@@ -132,7 +132,7 @@ export default fp(async (server, opts) => {
         }
         else if (typeof request.query.profileHandle === 'string') {
             pQuery = request.parseCursorPagination({
-                paginationKeys: ['lobJoinInfo.lobby'],
+                paginationKeys: ['lobProfile.lobby'],
                 toRawKey: (x) => 'id',
                 toQueryKey: (x) => x,
                 toFieldKey: (x) => x,
@@ -157,26 +157,32 @@ export default fp(async (server, opts) => {
                 .getQuery()
             ;
 
-            // qb = server.conn.getRepository(S2GameLobbySlot)
-            //     .createQueryBuilder('lobSlot')
-            //     .andWhere('lobSlot.profile = ' + profileQuery, {
-            //         regionId: requestedProfile.regionId,
-            //         realmId: requestedProfile.realmId,
-            //         profileId: requestedProfile.profileId,
-            //     })
-            //     .select('lobSlot.lobby', 'id')
-            // ;
+            // started lobbies where player has participated
+            if (true) {
+                qb = server.conn.getRepository(S2GameLobbySlot)
+                    .createQueryBuilder('lobProfile')
+                    .andWhere('lobProfile.profile = ' + profileQuery, {
+                        regionId: requestedProfile.regionId,
+                        realmId: requestedProfile.realmId,
+                        profileId: requestedProfile.profileId,
+                    })
+                    .select('lobProfile.lobby', 'id')
+                ;
+            }
 
-            qb = server.conn.getRepository(S2GameLobbyPlayerJoin)
-                .createQueryBuilder('lobJoinInfo')
-                .andWhere('lobJoinInfo.profile = ' + profileQuery, {
-                    regionId: requestedProfile.regionId,
-                    realmId: requestedProfile.realmId,
-                    profileId: requestedProfile.profileId,
-                })
-                .select('lobJoinInfo.lobby', 'id')
-                .distinct()
-            ;
+            // ANY lobbies where player was seen
+            if (false) {
+                qb = server.conn.getRepository(S2GameLobbyPlayerJoin)
+                    .createQueryBuilder('lobProfile')
+                    .andWhere('lobProfile.profile = ' + profileQuery, {
+                        regionId: requestedProfile.regionId,
+                        realmId: requestedProfile.realmId,
+                        profileId: requestedProfile.profileId,
+                    })
+                    .select('lobProfile.lobby', 'id')
+                    .distinct()
+                ;
+            }
         }
         else {
             return reply.code(400).send();
@@ -197,7 +203,7 @@ export default fp(async (server, opts) => {
         }
 
         if (request.query.includeMapInfo) {
-            lobbyRepo.addMapInfo(qbFinal, true);
+            lobbyRepo.addMapInfo(qbFinal);
         }
 
         qbFinal.addSelect([

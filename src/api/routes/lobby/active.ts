@@ -117,7 +117,7 @@ export default fp(async (server, opts) => {
         ;
 
         if (request.query.includeMapInfo) {
-            lobbyRepo.addMapInfo(qb, true);
+            lobbyRepo.addMapInfo(qb);
         }
 
         if (request.query.includeSlots) {
