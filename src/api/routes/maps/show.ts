@@ -46,6 +46,8 @@ export default fp(async (server, opts) => {
                 'map.maxHumanPlayers',
                 'map.updatedAt',
                 'map.publishedAt',
+                'map.userReviewsCount',
+                'map.userReviewsRating',
                 'map.removed',
                 'currRev.id',
                 'currRev.majorVersion',

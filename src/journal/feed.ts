@@ -268,6 +268,14 @@ export class JournalFeed {
             this.cursor.session === this.options.initCursor.session &&
             this.cursor.offset === this.options.initCursor.offset
         ) {
+            await fs.ensureDir(this.baseDir);
+            const exists = await fs.pathExists(this.currFilename);
+            if (!exists) {
+                await this.refreshFileList();
+                logger.error(`feed file doesn't exist ${this.currFilename}`, this.sessionFileList);
+                throw new Error(`feed file doesn't exist ${this.currFilename}`);
+            }
+
             this.firstRead = false;
             if (this.options.initCursor.offset !== 0) {
                 const headProc = spawn('head', [

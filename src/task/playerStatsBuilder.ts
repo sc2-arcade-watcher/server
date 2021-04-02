@@ -9,6 +9,7 @@ import { S2StatsPlayerStatus } from '../entity/S2StatsPlayerStatus';
 import { S2StatsPlayerMap } from '../entity/S2StatsPlayerMap';
 import { S2ProfileTracking } from '../entity/S2ProfileTracking';
 import { S2Profile } from '../entity/S2Profile';
+import { S2ProfileTrackingRepository } from '../repository/S2ProfileTrackingRepository';
 
 interface PlayerMapStats {
     mapId: number;
@@ -76,20 +77,7 @@ export class StatsBuilderPlayers {
     }
 
     protected async mergePlayerStats(periodStats: PlayerPeriodMapStats) {
-        let profTracking = await this.conn.getRepository(S2ProfileTracking).findOne({
-            where: {
-                regionId: periodStats.regionId,
-                realmId: periodStats.realmId,
-                profileId: periodStats.profileId,
-            },
-        });
-        if (!profTracking) {
-            profTracking = new S2ProfileTracking();
-            profTracking.regionId = periodStats.regionId;
-            profTracking.realmId = periodStats.realmId;
-            profTracking.profileId = periodStats.profileId;
-            await this.conn.getRepository(S2ProfileTracking).save(profTracking, { transaction: false });
-        }
+        const profTracking = await this.conn.getCustomRepository(S2ProfileTrackingRepository).fetchOrCreate(periodStats);
         if (profTracking.mapStatsUpdatedAt && profTracking.mapStatsUpdatedAt >= periodStats.toDate) {
             // logger.debug(`skipping ${profileHandle(periodStats)} - map stats up-to-date`);
             return;

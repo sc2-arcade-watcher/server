@@ -18,7 +18,7 @@ Restart=on-failure
 RestartPreventExitStatus=255
 User=sc2arcade
 TimeoutSec=20
-RestartSec=500ms
+RestartSec=1000ms
 FinalKillSignal=SIGQUIT
 
 [Install]

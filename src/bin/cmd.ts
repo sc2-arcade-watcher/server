@@ -8,6 +8,7 @@ import '../cmd/profile';
 import '../cmd/battle';
 import '../cmd/discover';
 import '../cmd/stats';
+import '../cmd/s2cmd';
 
 process.on('unhandledRejection', e => { throw e; });
 program.parse(process.argv);

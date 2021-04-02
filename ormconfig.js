@@ -24,7 +24,7 @@ module.exports = {
         'out/src/subscriber/**/*.js'
     ],
     supportBigNumbers: true,
-    bigNumberStrings: true,
+    bigNumberStrings: false,
     cache: {
         type: 'database',
         tableName: 'tmp_query_cache',

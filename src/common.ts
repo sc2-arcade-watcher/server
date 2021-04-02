@@ -7,6 +7,13 @@ export enum GameRegion {
     CN = 5,
 }
 
+export const AllGameRegions = [
+    GameRegion.US,
+    GameRegion.EU,
+    GameRegion.KR,
+    GameRegion.CN,
+];
+
 export enum GameRegionSite {
     US = 'US',
     EU = 'EU',

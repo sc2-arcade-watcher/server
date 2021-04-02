@@ -9,6 +9,9 @@ export class ProfileManager {
         profile.name = params.name;
         profile.discriminator = params.discriminator;
         profile.avatar = params.avatar ?? '';
+        if (params.profileGameId) {
+            profile.profileGameId = params.profileGameId;
+        }
         profile.battleTracking = S2ProfileBattleTracking.create(params);
 
         await conn.transaction(async (tsManager) => {

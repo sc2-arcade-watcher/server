@@ -1,8 +1,9 @@
+
 import * as dotenv from 'dotenv';
 import * as orm from 'typeorm';
 import { setupFileLogger, logger } from '../logger';
 import { systemdNotifyReady, setupProcessTerminator } from '../helpers';
-import { ExecutiveServer } from '../server/executiveServer';
+import { DataRecordPersistence } from '../proc/dataPersistence';
 
 process.on('unhandledRejection', e => {
     if (logger) logger.error('unhandledRejection', e);
@@ -13,18 +14,17 @@ process.on('unhandledRejection', e => {
     if (process.env.NOTIFY_SOCKET) {
         await systemdNotifyReady();
     }
-    setupFileLogger('datahost');
+    setupFileLogger('drec');
 
     const conn = await orm.createConnection();
-    const eSrv = new ExecutiveServer(conn);
-    await eSrv.load();
+    const dataRec = new DataRecordPersistence(conn);
+    await dataRec.start();
 
     setupProcessTerminator(async () => {
-        await Promise.all([
-            eSrv.close()
-        ]);
-
-        logger.verbose(`Closing database connection..`);
-        await conn.close();
+        await dataRec.shutdown();
     });
+
+    await dataRec.onDone();
+    logger.verbose(`Closing database connection..`);
+    await conn.close();
 })();

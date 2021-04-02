@@ -1,5 +1,5 @@
 [Unit]
-Description=starc Data Host
+Description=starc Data Recorder
 Wants=network.target mariadb.service starc-redis-main.service
 Requires=mariadb.service starc-redis-main.service
 After=network.target mariadb.service starc-redis-main.service
@@ -12,7 +12,7 @@ Type=notify
 NotifyAccess=all
 WorkingDirectory=/home/sc2arcade/server
 Environment="LOG_LEVEL=ERROR"
-ExecStart=/usr/bin/node /home/sc2arcade/server/out/src/bin/datahost.js
+ExecStart=/usr/bin/node /home/sc2arcade/server/out/src/bin/drec.js
 KillMode=process
 Restart=on-failure
 RestartPreventExitStatus=255

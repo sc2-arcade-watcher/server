@@ -5,6 +5,7 @@ export type SignalKind =
     'TMCR' |
     'QUIT' |
     'DISC' |
+    'LBLR' |
     'LBLS' |
     'LBCR' |
     'LBRM' |
@@ -47,6 +48,12 @@ export interface DataDisconnect {
 }
 export interface SignalDisconnect extends SignalBase, DataDisconnect {
     $kind: 'DISC';
+}
+
+export interface DataLobbyListRequest {
+}
+export interface SignalLobbyListRequest extends SignalBase, DataLobbyListRequest {
+    $kind: 'LBLR';
 }
 
 export interface DataLobbyList {
@@ -118,6 +125,7 @@ export interface LobbyPreviewSlot {
 export interface DataLobbyPreview {
     lobbyId: number;
     slots: LobbyPreviewSlot[];
+    hostIndex: number | null;
     teamsNumber: number;
 }
 export interface SignalLobbyPreview extends SignalBase, DataLobbyPreview {
@@ -183,6 +191,7 @@ export type SignalDesc = SignalInit
     | SignalTimeCorrection
     | SignalQuit
     | SignalDisconnect
+    | SignalLobbyListRequest
     | SignalLobbyList
     | SignalLobbyCreate
     | SignalLobbyRemove
@@ -213,7 +222,7 @@ function myunescape(s: string) {
 }
 
 function fixLobbyTitle(s: string) {
-    if (s.indexOf('!@#$') !== -1) {
+    if (s.indexOf('!@#') !== -1) {
         return '';
     }
     return s;
@@ -231,6 +240,7 @@ export class JournalDecoder {
         'TMCR': this.unserializeTimeCorrection.bind(this),
         'QUIT': this.unserializeQuit.bind(this),
         'DISC': this.unserializeDisconnect.bind(this),
+        'LBLR': this.unserializeLobbyListRequest.bind(this),
         'LBLS': this.unserializeLobbyList.bind(this),
         'LBCR': this.unserializeLobbyCreate.bind(this),
         'LBRM': this.unserializeLobbyRemove.bind(this),
@@ -262,6 +272,10 @@ export class JournalDecoder {
     }
 
     unserializeDisconnect(version: number, args: string[]): DataDisconnect {
+        return {};
+    }
+
+    unserializeLobbyListRequest(version: number, args: string[]): DataLobbyListRequest {
         return {};
     }
 
@@ -359,12 +373,22 @@ export class JournalDecoder {
     unserializeLobbyPreview(version: number, args: string[]): DataLobbyPreview {
         const ed = {} as DataLobbyPreview;
         ed.lobbyId = Number(popFirst(args));
+        if (version >= 2) {
+            popFirst(args);
+            // hasChanged: boolean(int)
+        }
         ed.slots = popFirst(args)
             .split('\x02')
             .map(v => this.unserializeLobbySlot(version, v.split('$')))
             .filter(v => v.kind as string !== '' && v.kind !== 'C')
             .sort((a, b) => a.team - b.team)
         ;
+        if (version >= 2) {
+            ed.hostIndex = Number(popFirst(args));
+        }
+        else {
+            ed.hostIndex = null;
+        }
         ed.teamsNumber = Number(popFirst(args));
         return ed;
     }

@@ -1,24 +1,26 @@
-import { Entity, PrimaryGeneratedColumn, Column, Index, Unique } from 'typeorm';
+import { Entity, Column, Index, Unique } from 'typeorm';
 
-@Entity()
-@Unique('region_bnet_idx', ['regionId', 'bnetId'])
+@Entity({
+    engine: 'ROCKSDB',
+})
 export class S2MapTracking {
-    @PrimaryGeneratedColumn()
-    id: number;
+    @Column({
+        type: 'mediumint',
+        unsigned: true,
+        primary: true,
+    })
+    mapId: number;
 
     @Column({
         type: 'tinyint',
         unsigned: true,
+        primary: true,
     })
     regionId: number;
 
     @Column({
-        type: 'mediumint',
-        unsigned: true,
+        nullable: true,
     })
-    bnetId: number;
-
-    @Column()
     @Index('last_checked_at_idx')
     lastCheckedAt: Date;
 
@@ -33,7 +35,32 @@ export class S2MapTracking {
     firstSeenUnvailableAt: Date;
 
     @Column({
+        type: 'smallint',
+        unsigned: true,
         default: 0,
     })
-    unavailabilityCounter: number = 0;
+    @Index('unavailability_counter_idx')
+    unavailabilityCounter: number;
+
+    @Column({
+        nullable: true,
+    })
+    @Index('reviews_updated_entirely_at_idx')
+    reviewsUpdatedEntirelyAt: Date;
+
+    @Column({
+        nullable: true,
+    })
+    reviewsUpdatedPartiallyAt: Date;
+
+    static create(params: { regionId: number, mapId: number }): S2MapTracking {
+        return Object.assign(new S2MapTracking(), <S2MapTracking>{
+            lastCheckedAt: null,
+            lastSeenAvailableAt: null,
+            firstSeenUnvailableAt: null,
+            unavailabilityCounter: 0,
+            reviewsUpdatedEntirelyAt: null,
+            reviewsUpdatedPartiallyAt: null,
+        }, params);
+    }
 }

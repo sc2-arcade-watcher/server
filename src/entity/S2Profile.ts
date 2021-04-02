@@ -11,12 +11,14 @@ export interface BareS2Profile {
     profileId: number;
     name: string;
     discriminator: number;
+    profileGameId?: number;
     avatar?: string;
 }
 
 @Entity()
 @Unique('bnet_id', ['regionId', 'realmId', 'profileId'])
 @Unique('local_profile_region_idx', ['localProfileId', 'regionId'])
+@Unique('profile_game_region_idx', ['profileGameId', 'regionId'])
 export class S2Profile implements BareS2Profile {
     @PrimaryGeneratedColumn()
     id: number;
@@ -45,6 +47,13 @@ export class S2Profile implements BareS2Profile {
     profileId: number;
 
     @Column({
+        type: 'bigint',
+        unsigned: true,
+        nullable: true,
+    })
+    profileGameId: number;
+
+    @Column({
         type: 'varchar',
         length: 12,
         nullable: true,
@@ -57,6 +66,14 @@ export class S2Profile implements BareS2Profile {
         unsigned: true,
     })
     discriminator: number;
+
+    @Column({
+        type: 'varchar',
+        length: 32,
+        nullable: true,
+    })
+    @Index('battle_tag_idx')
+    battleTag: string;
 
     @Column({
         type: 'varchar',
@@ -117,6 +134,7 @@ export class S2Profile implements BareS2Profile {
         prof.discriminator = 0;
         prof.avatar = '';
         prof.deleted = false;
+        prof.profileGameId = null;
 
         return prof;
     }

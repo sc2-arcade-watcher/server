@@ -39,13 +39,15 @@ export default fp(async (server, opts) => {
                 'profile.name',
                 'profile.discriminator',
                 'profile.avatar',
-                'profile.lastOnlineAt',
+                'profile.profileGameId',
+                'profile.battleTag',
             ])
             .andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId', {
                 regionId: request.params.regionId,
                 realmId: request.params.realmId,
                 profileId: request.params.profileId,
             })
+            .limit(1)
             .getOne()
         ;
 

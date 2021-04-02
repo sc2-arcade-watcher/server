@@ -10,6 +10,7 @@ import { S2Map, S2MapType } from '../entity/S2Map';
 import { S2MapCategory } from '../entity/S2MapCategory';
 import { S2Profile } from '../entity/S2Profile';
 import { S2MapTracking } from '../entity/S2MapTracking';
+import { S2MapTrackingRepository } from '../repository/S2MapTrackingRepository';
 import { S2MapVariant } from '../entity/S2MapVariant';
 import { AttributeSystemNamespaceId, AttributeId, lobbyDelayValues } from './attributes';
 import { S2MapRepository } from '../repository/S2MapRepository';
@@ -429,27 +430,21 @@ export class MapIndexer {
             await tsManager.getRepository(S2MapLocale).save(map.locales, { transaction: false });
 
             if (dateQuery) {
-                let mtrack = await tsManager.getRepository(S2MapTracking).findOne({
-                    where: {
-                        regionId: map.regionId,
-                        bnetId: map.bnetId,
-                    },
+                const mpTrack = await tsManager.getCustomRepository(S2MapTrackingRepository).fetchOrCreate({
+                    regionId: map.regionId,
+                    mapId: map.bnetId,
                 });
-                if (!mtrack) {
-                    mtrack = new S2MapTracking();
-                    mtrack.regionId = map.regionId;
-                    mtrack.bnetId = map.bnetId;
-                    mtrack.lastCheckedAt = dateQuery;
-                    mtrack.lastSeenAvailableAt = dateQuery;
+                if (!mpTrack.lastCheckedAt || dateQuery > mpTrack.lastCheckedAt) {
+                    await tsManager.getRepository(S2MapTracking).update(
+                        tsManager.getRepository(S2MapTracking).getId(mpTrack),
+                        {
+                            lastCheckedAt: dateQuery,
+                            lastSeenAvailableAt: dateQuery,
+                            firstSeenUnvailableAt: null,
+                            unavailabilityCounter: 0,
+                        }
+                    );
                 }
-                else if (dateQuery > mtrack.lastCheckedAt) {
-                    mtrack.lastCheckedAt = dateQuery;
-                    mtrack.lastSeenAvailableAt = dateQuery;
-                    mtrack.firstSeenUnvailableAt = null;
-                    mtrack.unavailabilityCounter = 0;
-                }
-
-                await tsManager.getRepository(S2MapTracking).save(mtrack, { transaction: false });
             }
         });
     }
@@ -574,19 +569,20 @@ export class MapIndexer {
                 map.currentVersion.minorVersion === mapRevision.mhead.minorVersion
             )
         ) {
-            const mtrack = await this.conn.getRepository(S2MapTracking).findOne({
-                where: {
-                    regionId: mapRevision.mhead.regionId,
-                    bnetId: mapRevision.mhead.bnetId,
-                },
+            const mpTrack = await this.conn.getCustomRepository(S2MapTrackingRepository).fetchOrCreate({
+                regionId: mapRevision.mhead.regionId,
+                mapId: mapRevision.mhead.bnetId,
             });
-            if (mtrack && (dateQuery > mtrack.lastCheckedAt || mtrack.unavailabilityCounter > 0)) {
-                await this.conn.getRepository(S2MapTracking).update(mtrack.id, {
-                    lastCheckedAt: dateQuery,
-                    lastSeenAvailableAt: dateQuery,
-                    firstSeenUnvailableAt: null,
-                    unavailabilityCounter: 0,
-                });
+            if (!mpTrack.lastCheckedAt || dateQuery > mpTrack.lastCheckedAt || mpTrack.unavailabilityCounter > 0) {
+                await this.conn.getCustomRepository(S2MapTrackingRepository).update(
+                    this.conn.getCustomRepository(S2MapTrackingRepository).getId(mpTrack),
+                    {
+                        lastCheckedAt: dateQuery,
+                        lastSeenAvailableAt: dateQuery,
+                        firstSeenUnvailableAt: null,
+                        unavailabilityCounter: 0,
+                    }
+                );
             }
         }
     }

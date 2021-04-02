@@ -13,6 +13,7 @@ export { GameLobbyStatus } from './common';
 interface GameLobbyPreview {
     lastUpdateAt: Date;
     slots: LobbyPreviewSlot[];
+    hostIndex: number | null;
     teamsNumber: number;
 }
 
@@ -343,6 +344,7 @@ export class JournalReader {
         gm.preview = {
             lastUpdateAt: this.dateFromEvent(ev),
             slots: ev.slots,
+            hostIndex: ev.hostIndex,
             teamsNumber: ev.teamsNumber,
         };
 
@@ -383,6 +385,7 @@ export class JournalReader {
             $version: 1,
             lobbyId: ev.lobbyId,
             slots: gm.preview.slots,
+            hostIndex: gm.preview.hostIndex,
             teamsNumber: gm.preview.teamsNumber,
         });
     }
@@ -715,6 +718,7 @@ export class GameLobbyDesc {
     slotsHumansTaken: number;
     slotsHumansTotal: number;
 
+    hostIndex: number | null;
     slots?: GameLobbySlotDesc[];
     slotsPreviewUpdatedAt?: Date;
     basicPreviewUpdatedAt?: Date;
@@ -745,6 +749,7 @@ export class GameLobbyDesc {
         this.slotsHumansTaken = this.initInfo.slotsHumansTaken;
         this.slotsHumansTotal = this.initInfo.slotsHumansTotal;
         this.slotTakenSnapshotUpdatedAt = lobbyData.createdAt;
+        this.hostIndex = null;
     }
 
     get globalId(): string {
@@ -785,14 +790,24 @@ export class GameLobbyDesc {
     }
 
     updatePreview(previewData: TrackedLobbyPreview) {
-        this.pendingBasicPreview = void 0;
-        this.basicPreviewUpdatedAt = void 0;
+        if (previewData.basicPreview) {
+            this.hostIndex = previewData.basicPreview.hostIndex;
+        }
 
         if (previewData.extendedPreview) {
             const newSlots = gameLobbySlotsFromPvEx(previewData.extendedPreview);
+            if (
+                (this.hostIndex !== null && !previewData.basicPreview) &&
+                (newSlots.length <= this.hostIndex || newSlots[this.hostIndex].name !== (this?.slots ?? this.pendingBasicPreview.slots)[this.hostIndex].name)
+            ) {
+                this.hostIndex = null;
+            }
             this.slots = newSlots;
             this.slotsPreviewUpdatedAt = previewData.requstedAt;
             this.extendedPreview = previewData.extendedPreview;
+
+            this.pendingBasicPreview = void 0;
+            this.basicPreviewUpdatedAt = void 0;
         }
         else {
             this.basicPreviewUpdatedAt = previewData.requstedAt;
@@ -842,6 +857,7 @@ export class GameLobbyDesc {
         if (this.pendingBasicPreview && (
             !this.slotsPreviewUpdatedAt || this.basicPreviewUpdatedAt > this.slotsPreviewUpdatedAt
         )) {
+            this.hostIndex = this.pendingBasicPreview.hostIndex;
             const pendingSlots = gameLobbySlotsFromBasicPreview(this.pendingBasicPreview);
             if (this.extendedPreview) {
                 const slBasic = serializeBasicPreview(this.pendingBasicPreview);
@@ -887,7 +903,7 @@ export class GameLobbyDesc {
         }
         else {
             const snapshotTimeDiff = this.slotTakenSnapshotUpdatedAt.getTime() - this.slotsPreviewUpdatedAt.getTime();
-            const humanSlotsOccupiedCount = snapshotTimeDiff > 17000 ? this.slotsHumansTaken : this.previewHumanTakenSlots;
+            const humanSlotsOccupiedCount = snapshotTimeDiff > 13000 ? this.slotsHumansTaken : this.previewHumanTakenSlots;
             const hostInPreview = this.slots.filter(x => x.name === this.hostName).length;
             if (humanSlotsOccupiedCount <= 1) {
                 this.status = GameLobbyStatus.Abandoned;

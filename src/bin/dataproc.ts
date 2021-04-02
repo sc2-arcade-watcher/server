@@ -602,6 +602,13 @@ class DataProc {
             await this.updateProfileLastOnline(updatedSlots.filter(x => x.profile).map(x => x.profile), lobbyData.slotsPreviewUpdatedAt);
         }
 
+        if (lobbyData.hostIndex !== null) {
+            const newHostSlot = s2lobby.slots[lobbyData.hostIndex];
+            if (s2lobby.hostName !== newHostSlot.name) {
+                logger.verbose(`host has changed from preview ${s2lobby.globalId} curr=${s2lobby.hostName} new=${newHostSlot.name}`);
+            }
+        }
+
         return updatedSlots.length;
     }
 
@@ -634,7 +641,7 @@ class DataProc {
         if (s2profile.name !== infoProfile.name || s2profile.discriminator !== infoProfile.discriminator) {
             // before changing name ensure we're not processing some stale data, where *new* name isn't actually new
             const pTrack = await this.conn.getCustomRepository(S2ProfileTrackingRepository).fetchOrCreate(infoProfile);
-            if (pTrack.nameUpdatedAt < updatedAt) {
+            if (!pTrack.nameUpdatedAt || pTrack.nameUpdatedAt < updatedAt) {
                 logger.verbose(`updating profile ${s2profile.fullname} => ${infoProfile.name}#${infoProfile.discriminator} [${s2profile.phandle}]`);
                 const updateData: Partial<S2Profile> = {
                     name: infoProfile.name,
@@ -645,7 +652,7 @@ class DataProc {
 
                 await this.conn.transaction(async tsManager => {
                     await tsManager.getRepository(S2Profile).update(s2profile.id, updateData);
-                    await tsManager.getRepository(S2ProfileTracking).update(pTrack.id, {
+                    await tsManager.getRepository(S2ProfileTracking).update(tsManager.getRepository(S2ProfileTracking).getId(pTrack), {
                         nameUpdatedAt: pTrack.nameUpdatedAt,
                     });
                 });

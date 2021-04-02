@@ -1,27 +1,24 @@
-import { Entity, PrimaryGeneratedColumn, Column, Unique, Index } from 'typeorm';
+import { Entity, Column } from 'typeorm';
+import { PlayerProfileParams } from '../bnet/common';
+import { localProfileId } from '../common';
 
-@Entity()
-@Unique('region_bnet_idx', ['regionId', 'realmId', 'profileId'])
+@Entity({
+    engine: 'ROCKSDB',
+})
 export class S2ProfileTracking {
-    @PrimaryGeneratedColumn()
-    id: number;
+    @Column({
+        primary: true,
+        type: 'int',
+        unsigned: true,
+    })
+    localProfileId: number;
 
     @Column({
+        primary: true,
         type: 'tinyint',
         unsigned: true,
     })
     regionId: number;
-
-    @Column({
-        type: 'tinyint',
-        unsigned: true,
-    })
-    realmId: number;
-
-    @Column({
-        unsigned: true,
-    })
-    profileId: number;
 
     @Column({
         nullable: true,
@@ -29,7 +26,25 @@ export class S2ProfileTracking {
     mapStatsUpdatedAt: Date | null;
 
     @Column({
-        default: '1000-01-01 00:00:00',
+        nullable: true,
     })
-    nameUpdatedAt: Date;
+    nameUpdatedAt: Date | null;
+
+    @Column({
+        nullable: true,
+    })
+    battleTagUpdatedAt: Date | null;
+
+    static create(params: PlayerProfileParams) {
+        const obj = new S2ProfileTracking();
+
+        obj.regionId = params.regionId;
+        obj.localProfileId = localProfileId(params);
+
+        obj.mapStatsUpdatedAt = null;
+        obj.nameUpdatedAt = null;
+        obj.battleTagUpdatedAt = null;
+
+        return obj;
+    }
 }

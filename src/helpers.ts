@@ -51,8 +51,14 @@ export class TypedEvent<T> {
         };
     }
 
-    once(listener: Listener<T>): void {
+    once(listener: Listener<T>): Disposable {
         this.listenersOncer.push(listener);
+        return {
+            dispose: () => {
+                let callbackIndex = this.listenersOncer.indexOf(listener);
+                if (callbackIndex > -1) this.listenersOncer.splice(callbackIndex, 1);
+            }
+        };
     }
 
     off(listener: Listener<T>) {

@@ -141,6 +141,24 @@ export class S2Map {
     publishedAt: Date;
 
     @Column({
+        type: 'smallint',
+        unsigned: true,
+        default: 0,
+    })
+    @Index('user_reviews_count_idx')
+    userReviewsCount: number;
+
+    @Column({
+        type: 'decimal',
+        unsigned: true,
+        precision: 4,
+        scale: 3,
+        default: 0,
+    })
+    @Index('user_reviews_rating')
+    userReviewsRating: number;
+
+    @Column({
         default: false,
     })
     removed: boolean;
