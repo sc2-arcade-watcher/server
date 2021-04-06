@@ -6,6 +6,7 @@ import { parseProfileHandle } from '../../../bnet/common';
 import { S2Profile } from '../../../entity/S2Profile';
 import { ProfileAccessAttributes } from '../../plugins/accessManager';
 import { localProfileId } from '../../../common';
+import { S2MapHeader } from '../../../entity/S2MapHeader';
 
 export default fp(async (server, opts) => {
     const fulltextStopWords = ['a', 'about', 'an', 'are', 'as', 'at', 'be', 'by', 'com', 'de', 'en', 'for', 'from', 'how', 'i', 'in', 'is', 'it', 'la', 'of', 'on', 'or', 'that', 'the', 'this', 'to', 'was', 'what', 'when', 'where', 'who', 'will', 'with', 'und', 'the', 'www'];
@@ -36,6 +37,11 @@ export default fp(async (server, opts) => {
                     },
                     mainCategoryId: {
                         type: ['number', 'null'],
+                    },
+                    archiveHash: {
+                        type: 'string',
+                        minLength: 64,
+                        maxLength: 64,
                     },
                     showPrivate: {
                         type: 'boolean',
@@ -201,6 +207,31 @@ export default fp(async (server, opts) => {
 
         if (typeof request.query.mainCategoryId === 'number') {
             qb.andWhere('map.mainCategoryId = :mainCategoryId', { mainCategoryId: request.query.mainCategoryId });
+        }
+
+        if (request.query.archiveHash !== void 0) {
+            const archiveHashQb = server.conn.getRepository(S2MapHeader)
+                .createQueryBuilder('mhead')
+                .select([
+                    'mhead.regionId',
+                    'mhead.bnetId',
+                ])
+                .andWhere('mhead.archiveHash = :archiveHash', { archiveHash: request.query.archiveHash.toLowerCase() })
+                .addGroupBy('mhead.regionId')
+                .addGroupBy('mhead.bnetId')
+                .limit(500)
+            ;
+            const matchingVersions = await archiveHashQb.getMany();
+            if (!matchingVersions.length) {
+                qb.andWhere('0');
+            }
+            else {
+                qb.andWhere((qb) => {
+                    return '(' + matchingVersions.map(mhead => {
+                        return `(map.regionId = ${mhead.regionId} AND map.bnetId = ${mhead.bnetId})`;
+                    }).join(' OR ') + ')';
+                });
+            }
         }
 
         if (!request.query.showPrivate) {
