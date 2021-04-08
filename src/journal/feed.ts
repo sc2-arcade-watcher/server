@@ -96,6 +96,43 @@ export class JournalFeed {
         this.sessionFileList = (await fs.readdir(this.baseDir)).filter(v => v.match(/^\d+$/)).map(v => Number(v)).sort();
     }
 
+    protected async waitForFeed(timeout = 3600) {
+        logger.verbose(`waiting for feed, src: ${this.name} timeout: ${timeout}`);
+        const args = [
+            '--event', 'create,modify',
+            '--quiet',
+            '--csv',
+        ];
+        if (timeout > 0) {
+            args.push('--timeout', String(timeout));
+        }
+        const inotifyWaitProc = spawn(
+            'inotifywait',
+            args.concat(this.baseDir),
+            {
+                stdio: ['pipe', 'pipe', 'pipe'],
+            }
+        );
+        const pRes = await spawnWaitExit(inotifyWaitProc, { captureStdout: true, captureStderr: true });
+        logger.verbose(`waiting for feed completed, src: ${this.name} timeout: ${timeout}`);
+        if (pRes.rcode === 0) {
+            return true;
+        }
+        else if (pRes.rcode === 2) {
+            // timeout
+            return false;
+        }
+        else {
+            // killed
+            if (pRes.signal === 'SIGINT') {
+                return false;
+            }
+
+            logger.error(`waiting for feed, src: ${this.name}, proc rcode: ${pRes.rcode}`, pRes);
+            return false;
+        }
+    }
+
     protected isCurrSessionLast() {
         return this.cursor.session === this.sessionFileList[this.sessionFileList.length - 1];
     }
@@ -127,9 +164,19 @@ export class JournalFeed {
                 this.clearBuffers();
             });
 
-            const tmpDataTimeout = setInterval(async () => {
+            let tmpDataTimeout: NodeJS.Timeout;
+
+            const handleTimeout = async () => {
                 logger.debug(`tailProc dataTimeout src=${this.name} sname=${sessName} chunkBuffLen=${this.chunkBuff?.length} readableLen=${this.rs.readableLength} waitingForData=${this.waitingForData}`);
                 if (this.chunkBuff || this.rs.readableLength) return;
+
+                clearInterval(tmpDataTimeout);
+                if (tmpDataTimeout !== this.dataTimeout) {
+                    throw new Error('dataTimeout ref missmatch: how, why?');
+                }
+                this.dataTimeout = void 0;
+
+                await this.waitForFeed(-1);
                 await this.refreshFileList();
                 if (!this.isCurrSessionLast()) {
                     logger.warn(`tailProc timeout, src=${this.name} sname=${sessName} pid=${tmpTailProc.pid}, new file detected`);
@@ -137,7 +184,16 @@ export class JournalFeed {
                     this.cursor.session = this.sessionFileList[this.sessionFileList.findIndex(v => v === this.cursor.session) + 1];
                     this.cursor.offset = 0;
                 }
-            }, 3000);
+                else {
+                    if (this.dataTimeout !== void 0) {
+                        throw new Error('dataTimeout ref already set: how, why?');
+                    }
+                    tmpDataTimeout = setInterval(handleTimeout, 3000).unref();
+                    this.dataTimeout = tmpDataTimeout;
+                }
+            }
+
+            tmpDataTimeout = setInterval(handleTimeout, 3000).unref();
             this.dataTimeout = tmpDataTimeout;
 
             tmpTailProc.on('exit', (code, signal) => {

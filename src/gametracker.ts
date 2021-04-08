@@ -84,9 +84,9 @@ export class JournalReader {
     protected recentPreviewRequests = new Map<number, PreviewRequestStatus>();
     protected recentExPvResponses = new Set<SignalLobbyPvEx>();
 
+    protected nextSignal: SignalDesc;
     protected prevCursorPos: JournalFeedCursor;
     protected initEntry: SignalInit;
-    protected nextSignal: SignalDesc;
     protected bucketId: number;
     protected isNewSession = false;
     protected sessLbls: number = void 0;
@@ -95,7 +95,11 @@ export class JournalReader {
     protected lblsCursor: JournalFeedCursor;
     protected timezoneOffset = 0;
 
+    protected feedLastSignalAt: number = Date.now();
+    protected feedStaleEventSentAt: number = 0;
+
     protected _onFeedEnd = new TypedEvent<JournalFeed>();
+    protected _onFeedStale = new TypedEvent<JournalFeed>();
     protected _onLobbyCreate = new TypedEvent<TrackedLobbyCreate>();
     protected _onLobbyRemove = new TypedEvent<TrackedLobbyRemove>();
     protected _onLobbyUpdate = new TypedEvent<TrackedLobbyHeadUpdate>();
@@ -103,6 +107,7 @@ export class JournalReader {
     protected _onLobbyListCount = new TypedEvent<TrackedLobbyListCount>();
 
     readonly onFeedEnd = this._onFeedEnd.on.bind(this._onFeedEnd);
+    readonly onFeedStale = this._onFeedStale.on.bind(this._onFeedStale);
     readonly onLobbyCreate = this._onLobbyCreate.on.bind(this._onLobbyCreate);
     readonly onLobbyRemove = this._onLobbyRemove.on.bind(this._onLobbyRemove);
     readonly onLobbyUpdate = this._onLobbyUpdate.on.bind(this._onLobbyUpdate);
@@ -114,6 +119,10 @@ export class JournalReader {
 
     get supportsPreviewRequests(): boolean {
         return this.initEntry.$version >= 3;
+    }
+
+    get isStale(): boolean {
+        return this.feedLastSignalAt === this.feedStaleEventSentAt;
     }
 
     async close() {
@@ -133,6 +142,15 @@ export class JournalReader {
             else if (tmp === false) {
                 this._onFeedEnd.emit(this.jfeed);
             }
+            else if (tmp === void 0) {
+                if (!this.nextSignal && this.feedStaleEventSentAt !== this.feedLastSignalAt) {
+                    const tdiff = Date.now() - this.feedLastSignalAt;
+                    if (tdiff > (3600 * 1000)) {
+                        this.feedStaleEventSentAt = this.feedLastSignalAt;
+                        this._onFeedStale.emit(this.jfeed);
+                    }
+                }
+            }
             return this.nextSignal;
         }
     }
@@ -142,6 +160,7 @@ export class JournalReader {
             await this.peek();
         }
         if (this.nextSignal) {
+            this.feedLastSignalAt = Date.now();
             this.processSignal(this.nextSignal);
             this.nextSignal = void 0;
         }
@@ -1082,6 +1101,29 @@ export class JournalMultiProcessor {
         logger.info(`onFeedEnd: ${evFeed.name} (${this.gtracks.size})`);
     }
 
+    protected handleFeedStale(jreader: JournalReader, evFeed: JournalFeed) {
+        logger.info(`onFeedStale: ${evFeed.name} (${this.gtracks.size})`);
+
+        for (const [lobbyId, lob] of this.gameLobbies) {
+            const activeTrackers = Array.from(lob.trackedBy.values()).filter(x => !x.isStale);
+            logger.warn(`lobby ${lob.initInfo.lobbyId} orphaned by ${jreader.jfeed.name} due to stale feed, activeTrackers: ${activeTrackers.map(x => x.jfeed.name)}`);
+            if (activeTrackers.length === 0) {
+                lob.close({
+                    lobbyId: lobbyId,
+                    orphan: true,
+                    seenLastAt: lob.slotsPreviewUpdatedAt ?? lob.snapshotUpdatedAt,
+                    removedAt: new Date(),
+                });
+                // don't delete just yet so it can be recovered if journal will resume
+                // this.gameLobbies.delete(lobbyId);
+                this.pushEvent<JournalEventCloseLobby>(jreader, {
+                    kind: JournalEventKind.CloseLobby,
+                    lobby: lob,
+                });
+            }
+        }
+    }
+
     async close() {
         if (this.closed) {
             logger.warn(`already closed`);
@@ -1100,6 +1142,7 @@ export class JournalMultiProcessor {
         jreader.onLobbyPreview(this.handleLobbyPreview.bind(this, jreader));
         jreader.onLobbyListCount(this.handleLobbyListCount.bind(this, jreader));
         jreader.onFeedEnd(this.handleFeedEnd.bind(this, jreader));
+        jreader.onFeedStale(this.handleFeedStale.bind(this, jreader));
     }
 
     async proceed(timeout: number = -1): Promise<JournalEvent> {

@@ -460,7 +460,7 @@ class DataProc {
         return false;
     }
 
-    @logIt({ when: 'out', profTime: true })
+    // @logIt({ when: 'out', profTime: true })
     protected async doUpdateSlots(s2lobby: S2GameLobby, lobbyData: GameLobbyDesc, ev: JournalEventBase) {
         if (!lobbyData.slots || lobbyData.slotsPreviewUpdatedAt <= s2lobby.slotsUpdatedAt) return false;
 
@@ -691,7 +691,7 @@ class DataProc {
         return mapVariant;
     }
 
-    @logIt({ when: 'out', profTime: true })
+    // @logIt({ when: 'out', profTime: true })
     async onNewLobby(ev: JournalEventNewLobby) {
         const info = ev.lobby.initInfo;
 
@@ -799,7 +799,7 @@ class DataProc {
         }
     }
 
-    @logIt({ when: 'out', profTime: true })
+    // @logIt({ when: 'out', profTime: true })
     async onCloseLobby(ev: JournalEventCloseLobby) {
         const s2lobby = await this.getLobby(ev.lobby);
         if (!s2lobby) return;
@@ -872,7 +872,7 @@ class DataProc {
         logger.info(`CLOSED src=${ev.feedName} ${s2lobby.globalId} ${ev.lobby.closedAt.toISOString()} status=${ev.lobby.status}`);
     }
 
-    @logIt({ when: 'out', profTime: true })
+    // @logIt({ when: 'out', profTime: true })
     async onUpdateLobbySnapshot(ev: JournalEventUpdateLobbySnapshot) {
         const s2lobby = await this.getLobby(ev.lobby);
         if (!s2lobby) return;
@@ -927,7 +927,7 @@ class DataProc {
         });
     }
 
-    @logIt({ when: 'out', profTime: true })
+    // @logIt({ when: 'out', profTime: true })
     async onUpdateLobbySlots(ev: JournalEventUpdateLobbySlots) {
         const s2lobby = await this.getLobby(ev.lobby);
         if (!s2lobby) return;
