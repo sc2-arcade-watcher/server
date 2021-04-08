@@ -181,6 +181,7 @@ export interface LobbyPvExSlot {
 }
 export interface DataLobbyPvEx {
     slots: LobbyPvExSlot[];
+    hostIndex: number | null;
     teamsNumber: number;
 }
 export interface SignalLobbyPvEx extends SignalBase, DataLobbyPvEx {
@@ -411,7 +412,7 @@ export class JournalDecoder {
             .split('\x02').map((pslot, idx): LobbyPvExSlot => {
                 const slotArgs = pslot.split('\x03');
                 const slotDesc: LobbyPvExSlot = {
-                    slotIdx: idx + 1,
+                    slotIdx: idx,
                     team: Number(popFirst(slotArgs)),
                     kind: Number(popFirst(slotArgs)),
                 };
@@ -428,15 +429,41 @@ export class JournalDecoder {
                 return slotDesc;
             })
         ;
-        // if first slot is unused it means payload isn't complete and should be ignored
-        if (!ed.slots.length || ed.slots[0].kind === 0) {
-            ed.slots = [];
-            ed.teamsNumber = 0;
+
+        if (version >= 4) {
+            ed.hostIndex = Number(popFirst(args));
         }
         else {
-            ed.slots = ed.slots.filter(v => v.kind).sort((a, b) => a.team - b.team);
-            ed.teamsNumber = (new Set(ed.slots.map(x => x.team))).size;
+            ed.hostIndex = null;
         }
+
+        // since v4 payloads should always be complete and valid
+        if (version <= 3) {
+            // if first slot is unused it means payload is likely incomplete and should be ignored
+            if (!ed.slots.length || ed.slots[0].kind === 0) {
+                ed.slots = [];
+                ed.teamsNumber = 0;
+                return ed;
+            }
+        }
+
+        ed.slots = ed.slots.filter(v => v.kind).sort((a, b) => a.team - b.team);
+        ed.teamsNumber = (new Set(ed.slots.map(x => x.team))).size;
+
+        if (ed.hostIndex !== null) {
+            const correctHostIndex = ed.slots.findIndex(x => x.slotIdx === ed.hostIndex);
+            if (correctHostIndex === -1) {
+                logger.error(`couldn't correct hostIndex`, ed, args);
+            }
+
+            if (correctHostIndex === -1) {
+                ed.hostIndex = null;
+            }
+            else {
+                ed.hostIndex = correctHostIndex;
+            }
+        }
+
         return ed;
     }
 

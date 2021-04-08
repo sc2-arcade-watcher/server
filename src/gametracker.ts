@@ -790,13 +790,24 @@ export class GameLobbyDesc {
     }
 
     updatePreview(previewData: TrackedLobbyPreview) {
+        if (
+            (previewData.basicPreview && previewData.extendedPreview) &&
+            (previewData.basicPreview?.hostIndex !== null && previewData.extendedPreview?.hostIndex !== null) &&
+            (previewData.basicPreview.hostIndex !== previewData.extendedPreview.hostIndex)
+        ) {
+            logger.warn(`hostIndex missmatch between basic preview and extended`, previewData.basicPreview, previewData.extendedPreview);
+        }
+
         if (previewData.basicPreview) {
             this.hostIndex = previewData.basicPreview.hostIndex;
         }
 
         if (previewData.extendedPreview) {
             const newSlots = gameLobbySlotsFromPvEx(previewData.extendedPreview);
-            if (
+            if (previewData.extendedPreview.hostIndex !== null) {
+                this.hostIndex = previewData.extendedPreview.hostIndex;
+            }
+            else if (
                 (this.hostIndex !== null && !previewData.basicPreview) &&
                 (newSlots.length <= this.hostIndex || newSlots[this.hostIndex].name !== (this?.slots ?? this.pendingBasicPreview.slots)[this.hostIndex].name)
             ) {
