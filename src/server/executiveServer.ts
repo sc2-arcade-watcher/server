@@ -241,7 +241,7 @@ class RunnerCmdProcessor<T = any, R = any> {
             throw new Error(response.error);
         }
 
-        const djob = await this.dataRecQueue.add(job.name, {
+        const djob = await this.dataRecQueue.add(`${GameRegion[this.cr.context.region].toLowerCase()}_${job.name}`, {
             dkind: cmdKindToRecordKind(this.ckind),
             payload: response.result as any,
         });

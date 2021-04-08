@@ -315,7 +315,7 @@ interface ProfileRefreshPlan {
 
 export class BattleProfileRefreshDirector extends ServiceProcess {
     protected queue = new pQueue({
-        concurrency: 40,
+        concurrency: 35,
     });
     protected plans: ProfileRefreshPlan[] = [];
 
@@ -342,7 +342,7 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
             {
                 name: 'stale',
                 qb: this.createQueryStale(),
-                cycleInterval: 60 * 60 * 12,
+                cycleInterval: 60 * 60 * 8,
                 priority: 0,
             },
         ];
@@ -368,11 +368,7 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
                 profile.lastOnlineAt > DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 MINUTE)
             )`)
             .andWhere(stripIndents`(
-                bTrack.profileInfoUpdatedAt IS NULL OR
-                (
-                    bTrack.matchHistoryUpdatedAt IS NOT NULL AND
-                    bTrack.matchHistoryUpdatedAt < DATE_SUB(profile.lastOnlineAt, INTERVAL 60 MINUTE)
-                )
+                bTrack.profileInfoUpdatedAt IS NULL
             )`)
         ;
         return qb;

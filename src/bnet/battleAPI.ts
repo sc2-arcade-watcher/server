@@ -344,7 +344,7 @@ export class BattleAPI {
         }, async (error) => {
             if (isAxiosError(error)) {
                 if ((error.config as any).retryAttempt && (error.config as any).retryAttempt > 3) {
-                    logger.error(`exceeded retry limit`);
+                    logger.warn(`exceeded retry limit reqUrl=${error.config.url}`);
                     throw error;
                 }
                 (error.config as any).retryAttempt = ((error.config as any).retryAttempt ?? 0) + 1;
