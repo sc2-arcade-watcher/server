@@ -1,4 +1,4 @@
-import { Command, CommandoClient, CommandMessage } from 'discord.js-commando';
+import { Command, CommandoClient, CommandoMessage } from 'discord.js-commando';
 import { Message, ReactionEmoji, DiscordAPIError } from 'discord.js';
 import { oneLine, stripIndents } from 'common-tags';
 import { GeneralCommand } from '../dscommon';
@@ -35,9 +35,9 @@ export class HelpCommand extends GeneralCommand {
         });
     }
 
-    public async exec(msg: CommandMessage, args: HelpArgs): Promise<Message | Message[]> {
+    public async exec(msg: CommandoMessage, args: HelpArgs): Promise<Message | Message[]> {
         const groups = this.client.registry.groups;
-        const commands = this.client.registry.findCommands(args.command, false, msg.message);
+        const commands = this.client.registry.findCommands(args.command, false, msg);
         const messages: Message[] = [];
 
         try {
@@ -54,15 +54,15 @@ export class HelpCommand extends GeneralCommand {
                     if (commands[0].aliases.length > 0) help += `\n**Aliases:** ${commands[0].aliases.join(', ')}`;
                     if (commands[0].details) help += `\n**Details:** ${commands[0].details}`;
                     if (commands[0].examples) help += `\n**Examples:**\n${commands[0].examples.join('\n')}`;
-                    messages.push(<Message>await msg.direct(help));
+                    messages.push(await msg.direct(help));
                 } else if (commands.length > 1) {
-                    messages.push(<Message>await msg.direct(disambiguation(commands, 'commands')));
+                    messages.push(await msg.direct(disambiguation(commands, 'commands')));
                 } else {
-                    messages.push(<Message>await msg.direct(`Unable to identify command.`));
+                    messages.push(await msg.direct(`Unable to identify command.`));
                 }
             }
             else {
-                messages.push(<Message>await msg.direct(stripIndents`
+                messages.push(...(await msg.direct(stripIndents`
                     Website: <https://sc2arcade.com>
                     Support: <https://discord.gg/VxAJYjF> (SC2Mapster server, \`#arcade-watcher\` channel)
                     Issue tracker: <${this.client.issueTracker}>
@@ -75,7 +75,7 @@ export class HelpCommand extends GeneralCommand {
                             ${(grp.commands).map(cmd => `**${cmd.name}** — ${cmd.description}`).join('\n')}
                         `).join('\n\n')
                     }
-                `, { split: true }));
+                `, { split: true })));
             }
 
             if (msg.channel.type !== 'dm') {

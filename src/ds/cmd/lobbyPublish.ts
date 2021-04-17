@@ -1,6 +1,6 @@
 import { DsBot } from '../../bin/dsbot';
 import { GeneralCommand } from '../dscommon';
-import { CommandMessage } from 'discord.js-commando';
+import { CommandoMessage } from 'discord.js-commando';
 import { S2GameLobbyRepository } from '../../repository/S2GameLobbyRepository';
 import { TextChannel, Message } from 'discord.js';
 import { GameLobbyStatus } from '../../gametracker';
@@ -165,7 +165,7 @@ export class LobbyPublishCommand extends GeneralCommand {
         });
     }
 
-    public async exec(msg: CommandMessage, args: string) {
+    public async exec(msg: CommandoMessage, args: string) {
         let qparams: LobbyQueryParams;
         if (args.length) {
             const tmp = parseQuery(args);
@@ -227,7 +227,7 @@ export class LobbyPublishCommand extends GeneralCommand {
             Looking for lobby which matches following criteria:
             > ${criteriaText}
             Hold on.. if the lobby was just made public, it might take few seconds before it'll appear.`,
-            { disableEveryone: true }
+            { disableMentions: 'all', reply: msg.author }
         ) as Message;
 
         let qb = this.conn.getCustomRepository(S2GameLobbyRepository)
@@ -293,11 +293,11 @@ export class LobbyPublishCommand extends GeneralCommand {
         }
 
         let results: S2GameLobby[];
-        for (let i = 0; i < 15; i++) {
+        for (let i = 0; i < 10; i++) {
             results = await qb.getMany();
             if (results.length) {
                 await this.tasks.lreporter.bindMessageWithLobby(tmpMessage, results[0].id);
-                return [];
+                return [] as Message[];
             }
             await sleep(1000);
         }
@@ -306,6 +306,9 @@ export class LobbyPublishCommand extends GeneralCommand {
             Couldn't find a public game lobby which meets requested criteria:
             > ${criteriaText}
             Try again?`
-        );
+        , {
+            // @ts-expect-error: it's handled correctly, but not covered by TS typings
+            reply: msg.author,
+        });
     }
 }

@@ -37,18 +37,18 @@ export class DsGameLobbyMessage {
         type: 'bigint',
         nullable: true,
     })
-    guildId: string;
+    guildId: string | BigInt;
 
     @Column({
         type: 'bigint',
         nullable: true,
     })
-    channelId: string;
+    channelId: string | BigInt;
 
     @Column({
         type: 'bigint',
     })
-    messageId: string;
+    messageId: string | BigInt;
 
     @Column({
         default: false,

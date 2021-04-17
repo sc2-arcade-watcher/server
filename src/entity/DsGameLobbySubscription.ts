@@ -21,19 +21,19 @@ export class DsGameLobbySubscription {
         type: 'bigint',
         nullable: true,
     })
-    userId: string;
+    userId: string | BigInt;
 
     @Column({
         type: 'bigint',
         nullable: true,
     })
-    guildId: string;
+    guildId: string | BigInt;
 
     @Column({
         type: 'bigint',
         nullable: true,
     })
-    channelId: string;
+    channelId: string | BigInt;
 
     @Column()
     mapName: string;

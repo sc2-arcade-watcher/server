@@ -7,7 +7,7 @@ import { BotTask } from '../ds/dscommon';
 import { LobbyReporterTask } from '../ds/mod/lobbyReporter';
 import { InviteCommand } from '../ds/cmd/general';
 import { StatusTask } from '../ds/mod/status';
-import { DMChannel } from 'discord.js';
+import { DMChannel, Intents } from 'discord.js';
 import { sleep, execAsync } from '../helpers';
 import { SubscriptionsTask } from '../ds/mod/subscriptions';
 import { LobbyPublishCommand } from '../ds/cmd/lobbyPublish';
@@ -25,18 +25,39 @@ export class DsBot extends CommandoClient {
     doShutdown: boolean;
 
     constructor(options?: CommandoClientOptions) {
-        options = Object.assign({
+        options = Object.assign<CommandoClientOptions, CommandoClientOptions>({
+            // commando
             owner: process.env.DS_BOT_OWNER,
             commandPrefix: '.',
-            disableEveryone: true,
-            unknownCommandResponse: false,
-            nonCommandEditable: true,
             // commandEditableDuration: 300,
+            nonCommandEditable: false,
+
+            // discord.js
             messageCacheMaxSize: 30,
             messageCacheLifetime: 60 * 20,
             messageSweepInterval: 600,
-            disabledEvents: ['TYPING_START', 'VOICE_SERVER_UPDATE', 'VOICE_STATE_UPDATE']
-        } as CommandoClientOptions, options);
+            messageEditHistoryMaxSize: 0,
+            disableMentions: 'everyone',
+            ws: {
+                intents: [
+                    'GUILDS',
+                    // 'GUILD_MEMBERS',
+                    // 'GUILD_BANS',
+                    // 'GUILD_EMOJIS',
+                    // 'GUILD_INTEGRATIONS',
+                    // 'GUILD_WEBHOOKS',
+                    // 'GUILD_INVITES',
+                    // 'GUILD_VOICE_STATES',
+                    // 'GUILD_PRESENCES',
+                    'GUILD_MESSAGES',
+                    // 'GUILD_MESSAGE_REACTIONS',
+                    // 'GUILD_MESSAGE_TYPING',
+                    'DIRECT_MESSAGES',
+                    // 'DIRECT_MESSAGE_REACTIONS',
+                    // 'DIRECT_MESSAGE_TYPING',
+                ],
+            }
+        }, options);
         super(options);
         this.issueTracker = 'https://github.com/sc2-arcade-watcher/issue-tracker/issues?q=is%3Aissue+';
         this.doShutdown = false;
@@ -46,27 +67,28 @@ export class DsBot extends CommandoClient {
         this.on('debug', (s) => logger.debug(s));
         this.on('ready', async () => {
             logger.info(`Logged in as ${this.user.tag} (${this.user.id})`);
-            logger.info(`Guilds: ${this.guilds.size} Channels: ${this.channels.size}`);
-            for (const guild of this.guilds.sort((a, b) => a.joinedTimestamp - b.joinedTimestamp).values()) {
-                logger.info(`Connected with guild "${guild.name}" (${guild.memberCount}) id=${guild.id}`);
-                for (const chan of guild.channels.values()) {
-                    logger.verbose(`Connected with text channel "${chan.name}" id=${chan.id}`);
-                }
-            }
+            logger.info(`Cached guilds: ${this.guilds.cache.size} , channels: ${this.channels.cache.size}`);
+            // for (const guild of this.guilds.sort((a, b) => a.joinedTimestamp - b.joinedTimestamp).values()) {
+            //     logger.info(`Connected with guild "${guild.name}" (${guild.memberCount}) id=${guild.id}`);
+            //     for (const chan of guild.channels.values()) {
+            //         logger.verbose(`Connected with text channel "${chan.name}" id=${chan.id}`);
+            //     }
+            // }
         });
         this.on('disconnect', () => logger.warn('Disconnected!'));
-        this.on('reconnecting', () => logger.warn('Reconnecting...'));
+        this.on('shardReconnecting', (id) => logger.warn(`Shard reconnecting ${id} ..`));
         this.on('commandRun', (cmd, p, msg) => {
             logger.info(`Command run ${cmd.memberName}, Author '${msg.author.username}', msg: ${msg.content}`);
         });
-        this.on('commandError', (cmd, err) => {
-            if (err instanceof FriendlyError) {
-                logger.warn(`Error in command ${cmd.groupID}:${cmd.memberName}`, err);
-            }
-            else {
-                logger.error(`Error in command ${cmd.groupID}:${cmd.memberName}`, err);
-            }
-        });
+        // FIXME:
+        // this.on('commandError', (cmd, err) => {
+        //     if (err instanceof FriendlyError) {
+        //         logger.warn(`Error in command ${cmd.groupID}:${cmd.memberName}`, err);
+        //     }
+        //     else {
+        //         logger.error(`Error in command ${cmd.groupID}:${cmd.memberName}`, err);
+        //     }
+        // });
         this.on('message', (msg) => {
             if (msg.channel instanceof DMChannel) {
                 logger.debug('DM Message', {
@@ -89,8 +111,9 @@ export class DsBot extends CommandoClient {
             help: false,
             prefix: false,
             ping: true,
-            eval_: false,
+            eval: false,
             commandState: false,
+            unknownCommand: false,
         });
         this.registry.registerCommand(HelpCommand);
         this.registry.registerCommand(InviteCommand);
@@ -149,7 +172,7 @@ export class DsBot extends CommandoClient {
         }
 
         logger.info('shutting down discord connection..');
-        await this.destroy();
+        this.destroy();
 
         logger.info('closing db connections..');
         if (this.slitedb) {

@@ -1,5 +1,5 @@
 import * as pMap from 'p-map';
-import { User, TextChannel, Message, RichEmbed, RichEmbedOptions, Snowflake, DiscordAPIError, PartialTextBasedChannelFields, DMChannel } from 'discord.js';
+import { User, TextChannel, Message, MessageEmbedOptions, DiscordAPIError, DMChannel } from 'discord.js';
 import { BotTask, DiscordErrorCode, GeneralCommand, formatObjectAsMessage, ExtendedCommandInfo } from '../dscommon';
 import { S2GameLobby } from '../../entity/S2GameLobby';
 import { GameLobbyStatus } from '../../gametracker';
@@ -13,13 +13,13 @@ import deepEqual = require('deep-equal');
 import { GameRegion } from '../../common';
 
 export interface DestChannelOpts {
-    userId: string;
-    guildId: string;
-    channelId: string;
+    userId: string | BigInt;
+    guildId: string | BigInt;
+    channelId: string | BigInt;
 }
 
 interface PostedGameLobby {
-    // embed?: RichEmbedOptions;
+    // embed?: MessageEmbedOptions;
     msg: DsGameLobbyMessage;
 }
 
@@ -65,9 +65,9 @@ export class LobbyReporterTask extends BotTask {
     }
 
     async load() {
+        await this.flushMessages();
         await this.reloadSubscriptions();
         await this.restore();
-        await this.flushMessages();
 
         setTimeout(this.update.bind(this), 1000).unref();
         setInterval(this.flushMessages.bind(this), 60000 * 3600).unref();
@@ -77,18 +77,19 @@ export class LobbyReporterTask extends BotTask {
     }
 
     @logIt({
-        resDump: true,
         level: 'verbose',
+        profTime: true,
+        when: 'both',
     })
     protected async flushMessages() {
-        // FIXME:
-        return;
-        if (!await this.waitUntilReady()) return;
-        const res = await this.conn.getRepository(DsGameLobbyMessage).delete([
-            'updated_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)',
-            'completed = true',
-        ]);
-        return res.affected;
+        const res = await this.conn.getRepository(DsGameLobbyMessage)
+            .createQueryBuilder('dmessage')
+            .delete()
+            .andWhere('updated_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)')
+            .andWhere('completed = true')
+            .execute()
+        ;
+        logger.info(`deleted ${res.affected} tracked messages`);
     }
 
     @logIt({
@@ -315,10 +316,15 @@ export class LobbyReporterTask extends BotTask {
         logger.verbose(`Updated tracked lobbies count=${updateCount} (total=${this.trackedLobbies.size})`);
     }
 
-    protected async fetchDestChannel(opts: DestChannelOpts): Promise<TextChannel | DMChannel> {
+    /**
+     * - returns `true` if channel is unknown / was deleted
+     * - returns `false` if there was an unknown error, but channel might exist
+     * - returns `TextChannel | DMChannel` if it's valid
+     */
+    protected async fetchDestChannel(opts: DestChannelOpts): Promise<TextChannel | DMChannel | boolean> {
         if (opts.userId) {
             try {
-                const destUser = await this.client.fetchUser(opts.userId);
+                const destUser = await this.client.users.fetch(String(opts.userId));
                 return destUser.dmChannel ?? (destUser.createDM());
             }
             catch (err) {
@@ -333,29 +339,37 @@ export class LobbyReporterTask extends BotTask {
             }
         }
         else if (opts.guildId) {
-            const destGuild = this.client.guilds.get(opts.guildId);
-            if (!destGuild) {
-                logger.error(`Guild doesn't exist, id=${opts.guildId}`, opts);
-                return;
+            try {
+                const destGuildChan = await this.client.channels.fetch(String(opts.channelId));
+                if (!destGuildChan) {
+                    logger.error(
+                        `Guild chan doesn't exist, id=${opts.channelId}`,
+                        opts,
+                        destGuildChan,
+                    );
+                    return;
+                }
+                if (!(destGuildChan instanceof TextChannel)) {
+                    logger.error(`Guild chan incorrect type=${destGuildChan.type}`, opts);
+                    return;
+                }
+                return destGuildChan;
             }
-
-            const destGuildChan = destGuild.channels.get(opts.channelId);
-            if (!destGuildChan) {
-                logger.error(
-                    `Guild chan doesn't exist, id=${opts.channelId}`,
-                    opts,
-                    destGuildChan,
-                    this.client.channels.get(opts.channelId),
-                    Array.from(destGuild.channels.values()).map(x => [x.id, x.name])
-                );
-                return;
+            catch (err) {
+                if (err instanceof DiscordAPIError) {
+                    if ([DiscordErrorCode.UnknownChannel, DiscordErrorCode.MissingAccess].indexOf(err.code) !== -1) {
+                        return true;
+                    }
+                    else {
+                        logger.error(`Couldn't fetch the channel ${opts.channelId}`, err);
+                        return;
+                    }
+                }
+                else {
+                    throw err;
+                }
             }
-            if (!(destGuildChan instanceof TextChannel)) {
-                logger.error(`Guild chan incorrect type=${destGuildChan.type}`, opts);
-                return;
-            }
-
-            return destGuildChan;
+            return false;
         }
         else {
             throw new Error(`invalid DestChannelOpts`);
@@ -363,20 +377,24 @@ export class LobbyReporterTask extends BotTask {
     }
 
     protected async postSubscribedLobby(trackedLobby: TrackedGameLobby, rule: DsGameLobbySubscription) {
-        let chan: TextChannel | DMChannel;
+        let chan: TextChannel | DMChannel | boolean;
         chan = await this.fetchDestChannel(rule);
-        if (!chan) {
-            logger.warn(`Couldn't fetch the channel, id=${rule.id}`);
-            // FIXME: this currently cannot be trusted, delete sub only if channel truly doesn't exist, and not if it's not cached by discord.js
-            // await this.conn.getRepository(DsGameLobbySubscription).update(rule.id, { enabled: false });
-            // this.trackRules.delete(rule.id);
+        if (typeof chan === 'boolean') {
+            if (chan === true) {
+                logger.warn(`shoud delete subscription id=${rule.id} can't get the channel`);
+                // TODO: re-enable after testing
+                // await this.conn.getRepository(DsGameLobbySubscription).update(rule.id, { enabled: false });
+                // this.trackRules.delete(rule.id);
+            }
             return;
         }
-        return this.postTrackedLobby(chan, trackedLobby, rule);
+        else {
+            return this.postTrackedLobby(chan, trackedLobby, rule);
+        }
     }
 
     @logIt({
-        argsDump: (trackedLobby: TrackedGameLobby) => [
+        argsDump: (chan: TextChannel | DMChannel, trackedLobby: TrackedGameLobby) => [
             trackedLobby.lobby.id,
             trackedLobby.lobby.map.name,
             trackedLobby.lobby.hostName,
@@ -491,11 +509,11 @@ export class LobbyReporterTask extends BotTask {
         const lbEmbed = embedGameLobby(trackedLobby.lobby, lobbyMsg.msg.rule);
         try {
             const chan = await this.fetchDestChannel(lobbyMsg.msg);
-            if (!chan) {
+            if (typeof chan === 'boolean') {
                 await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                 return;
             }
-            const msg = await chan.fetchMessage(lobbyMsg.msg.messageId);
+            const msg = await chan.messages.fetch(String(lobbyMsg.msg.messageId));
             if (!msg) {
                 await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                 return;
@@ -580,7 +598,7 @@ interface LobbyEmbedOptions {
     showThumbnail: boolean;
 }
 
-function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): RichEmbedOptions {
+function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): MessageEmbedOptions {
     if (!cfg) cfg = {};
     cfg = Object.assign<LobbyEmbedOptions, Partial<LobbyEmbedOptions>>({
         showLeavers: false,
@@ -588,7 +606,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Ri
         showThumbnail: true,
     }, cfg);
 
-    const em: RichEmbedOptions = {
+    const em: MessageEmbedOptions = {
         title: s2gm.map?.name ?? `#${s2gm.mapBnetId}`,
         url: `https://sc2arcade.com/lobby/${s2gm.regionId}/${s2gm.bnetBucketId}/${s2gm.bnetRecordId}`,
         fields: [],

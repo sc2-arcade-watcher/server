@@ -1,11 +1,9 @@
-import * as orm from 'typeorm';
-import { User, TextChannel, RichEmbedOptions, DMChannel, GroupDMChannel } from 'discord.js';
+import { User, TextChannel, MessageEmbedOptions, DMChannel, Channel } from 'discord.js';
 import { DsBot } from '../../bin/dsbot';
 import { BotTask, DiscordErrorCode, GeneralCommand, formatObjectAsMessage, ExtendedCommandInfo } from '../dscommon';
 import { logger, logIt } from '../../logger';
 import { DsGameLobbySubscription } from '../../entity/DsGameLobbySubscription';
-import { CommandMessage, FriendlyError } from 'discord.js-commando';
-import { S2Region } from '../../entity/S2Region';
+import { CommandoMessage, FriendlyError } from 'discord.js-commando';
 import { stripIndents } from 'common-tags';
 import { GameRegion } from '../../common';
 
@@ -28,26 +26,24 @@ abstract class AbstractSubscriptionCommand extends GeneralCommand {
         return this.client.tasks.lreporter;
     }
 
-    protected getChannelSubscription(channel: TextChannel | DMChannel | GroupDMChannel, id: number) {
+    protected getChannelSubscription(channel: Channel, id: number) {
         const sub = this.lreporter.trackRules.get(id);
         if (!sub) {
             return;
         }
 
         if (channel instanceof TextChannel) {
-            const chan = channel;
-            if (sub.guildId !== chan.guild.id) {
+            if (sub.guildId !== channel.guild.id) {
                 return;
             }
         }
         else if (channel instanceof DMChannel) {
-            const chan = channel;
-            if (sub.userId !== chan.recipient.id) {
+            if (sub.userId !== channel.recipient.id) {
                 return;
             }
         }
         else {
-            throw new FriendlyError('Unsupported channel type');
+            throw new FriendlyError(`Unsupported channel type: ${channel.type}`);
         }
 
         return sub;
@@ -88,7 +84,7 @@ class SubscriptionNewCommand extends AbstractSubscriptionCommand {
         super(client, info);
     }
 
-    public async exec(msg: CommandMessage, args: SubscriptionArgs) {
+    public async exec(msg: CommandoMessage, args: SubscriptionArgs) {
         const sub = new DsGameLobbySubscription();
         if (msg.channel instanceof TextChannel) {
             const chan = msg.channel;
@@ -219,7 +215,7 @@ class SubscriptionConfigCommand extends AbstractSubscriptionCommand {
         });
     }
 
-    public async exec(msg: CommandMessage, args: { id: number } & SubscriptionArgs) {
+    public async exec(msg: CommandoMessage, args: { id: number } & SubscriptionArgs) {
         const sub = this.getChannelSubscription(msg.channel, args.id);
         if (!sub) {
             return msg.reply('Incorrect ID');
@@ -262,7 +258,7 @@ class SubscriptionDeleteCommand extends AbstractSubscriptionCommand {
         });
     }
 
-    public async exec(msg: CommandMessage, args: { id: number }) {
+    public async exec(msg: CommandoMessage, args: { id: number }) {
         const sub = this.getChannelSubscription(msg.channel, args.id);
         if (!sub) {
             return msg.reply('Incorrect ID');
@@ -284,7 +280,7 @@ class SubscriptionListCommand extends AbstractSubscriptionCommand {
         });
     }
 
-    public async exec(msg: CommandMessage) {
+    public async exec(msg: CommandoMessage) {
         let rules: DsGameLobbySubscription[] = [];
 
         if (msg.channel instanceof TextChannel) {
@@ -307,7 +303,7 @@ class SubscriptionListCommand extends AbstractSubscriptionCommand {
             return msg.reply(`You've no active subscriptions.`);
         }
 
-        const rembed: RichEmbedOptions = {
+        const rembed: MessageEmbedOptions = {
             title: 'Active subscriptions',
             fields: [],
         };
@@ -348,7 +344,7 @@ class SubscriptionReloadCommand extends AbstractSubscriptionCommand {
         });
     }
 
-    public async exec(msg: CommandMessage) {
+    public async exec(msg: CommandoMessage) {
         await this.lreporter.reloadSubscriptions();
         return msg.reply(`Done. Active subscriptions count: ${this.lreporter.trackRules.size}.`);
     }

@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import * as orm from 'typeorm';
 import { PermissionResolvable, Message, Util as DiscordUtil } from 'discord.js';
-import { CommandoClient, Command, CommandInfo, CommandMessage, FriendlyError, ArgumentCollector } from 'discord.js-commando';
+import { CommandoClient, Command, CommandInfo, CommandoMessage, FriendlyError, ArgumentCollector } from 'discord.js-commando';
 import { DsBot } from '../bin/dsbot';
 import { logger } from '../logger';
 import { sleep, sleepUnless } from '../helpers';
@@ -81,7 +81,6 @@ export type ExtendedCommandInfo = Partial<CommandInfo> & {
 export abstract class GeneralCommand extends Command {
     public readonly client: DsBot;
     public readonly info: ExtendedCommandInfo;
-    argsCollector?: ArgumentCollector;
 
     constructor(client: DsBot, info: ExtendedCommandInfo) {
         const tmpInfo = Object.assign(<ExtendedCommandInfo>{
@@ -117,7 +116,7 @@ export abstract class GeneralCommand extends Command {
         return super.isUsable(msg);
     }
 
-    async run(msg: CommandMessage, args: object | string | string[], fromPattern: boolean): Promise<Message | Message[]> {
+    async run(msg: CommandoMessage, args: object | string | string[], fromPattern: boolean): Promise<Message | Message[]> {
         if (this.info.dmOnly && msg.channel.type !== 'dm') {
             throw new FriendlyError(`Given command \`${this.name}\` is meant to be used only in a DM channel.`);
         }
@@ -137,7 +136,7 @@ export abstract class GeneralCommand extends Command {
         }
     }
 
-    public abstract async exec(message: CommandMessage, args: object | string | string[], fromPattern: boolean): Promise<Message | Message[]>;
+    public abstract async exec(message: CommandoMessage, args: object | string | string[], fromPattern: boolean): Promise<Message | Message[]>;
 }
 
 export abstract class BotTask {
@@ -152,10 +151,10 @@ export abstract class BotTask {
         if (this.client.doShutdown) return false;
 
         let prevStatus: DiscordClientStatus | null = null;
-        while (this.client.status !== DiscordClientStatus.Ready) {
-            if (prevStatus !== this.client.status) {
-                logger.warn(`Task "${this.constructor.name}" cannot proceed, status: ${DiscordClientStatus[this.client.status]}`);
-                prevStatus = this.client.status;
+        while (this.client.ws.status !== DiscordClientStatus.Ready) {
+            if (prevStatus !== this.client.ws.status) {
+                logger.warn(`Task "${this.constructor.name}" cannot proceed, status: ${DiscordClientStatus[this.client.ws.status]}`);
+                prevStatus = this.client.ws.status;
             }
             await sleepUnless(500, () => !this.client.doShutdown);
             if (this.client.doShutdown) {

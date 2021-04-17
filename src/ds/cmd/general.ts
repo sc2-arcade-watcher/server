@@ -1,6 +1,6 @@
 import { DsBot } from '../../bin/dsbot';
 import { GeneralCommand } from '../dscommon';
-import { CommandMessage } from 'discord.js-commando';
+import { CommandoMessage } from 'discord.js-commando';
 
 export class InviteCommand extends GeneralCommand {
     constructor(client: DsBot) {
@@ -10,7 +10,7 @@ export class InviteCommand extends GeneralCommand {
         });
     }
 
-    public async exec(msg: CommandMessage) {
+    public async exec(msg: CommandoMessage) {
         return msg.reply(`<https://discord.com/oauth2/authorize?client_id=${this.client.user.id}&scope=bot&permissions=379968>`);
     }
 }
