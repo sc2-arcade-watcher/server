@@ -33,12 +33,12 @@ abstract class AbstractSubscriptionCommand extends GeneralCommand {
         }
 
         if (channel instanceof TextChannel) {
-            if (sub.guildId !== channel.guild.id) {
+            if (String(sub.guildId) !== channel.guild.id) {
                 return;
             }
         }
         else if (channel instanceof DMChannel) {
-            if (sub.userId !== channel.recipient.id) {
+            if (String(sub.userId) !== channel.recipient.id) {
                 return;
             }
         }
@@ -286,13 +286,13 @@ class SubscriptionListCommand extends AbstractSubscriptionCommand {
         if (msg.channel instanceof TextChannel) {
             const chan = msg.channel;
             rules = Array.from(this.lreporter.trackRules.values()).filter(x => {
-                return x.guildId === chan.guild.id;
+                return String(x.guildId) === chan.guild.id;
             });
         }
         else if (msg.channel instanceof DMChannel) {
             const chan = msg.channel;
             rules = Array.from(this.lreporter.trackRules.values()).filter(x => {
-                return x.userId === chan.recipient.id;
+                return String(x.userId) === chan.recipient.id;
             });
         }
         else {

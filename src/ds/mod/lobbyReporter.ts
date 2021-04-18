@@ -13,9 +13,9 @@ import deepEqual = require('deep-equal');
 import { GameRegion } from '../../common';
 
 export interface DestChannelOpts {
-    userId: string | BigInt;
-    guildId: string | BigInt;
-    channelId: string | BigInt;
+    userId: string | number | BigInt;
+    guildId: string | number | BigInt;
+    channelId: string | number | BigInt;
 }
 
 interface PostedGameLobby {
