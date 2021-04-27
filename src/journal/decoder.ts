@@ -294,7 +294,7 @@ export class JournalDecoder {
         ed.multiModHandle = numberPair(popFirst(args));
         ed.mapVariantIndex = Number(popFirst(args));
 
-        ed.lobbyName = myunescape(popFirst(args)).trim();
+        ed.lobbyName = myunescape(popFirst(args)).trim().substr(0, 64);
         if (version <= 2) {
             ed.lobbyName = fixLobbyTitle(ed.lobbyName);
         }
@@ -345,7 +345,7 @@ export class JournalDecoder {
         const ed = {} as DataLobbyUpdate;
         ed.lobbyId = Number(popFirst(args));
 
-        ed.lobbyName = myunescape(popFirst(args)).trim();
+        ed.lobbyName = myunescape(popFirst(args)).trim().substr(0, 64);
         if (version <= 2) {
             ed.lobbyName = fixLobbyTitle(ed.lobbyName);
         }
