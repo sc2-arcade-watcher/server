@@ -1,6 +1,7 @@
 import * as orm from 'typeorm';
 import { GameRegion } from './common';
 import { CmdMrevRequest, createCmdQueueMapReviews } from './server/runnerExchange';
+import { JobsOptions } from 'bullmq';
 
 export class MapDataUpdateRequester {
     protected mrevQueue = createCmdQueueMapReviews(this.region);
@@ -11,8 +12,8 @@ export class MapDataUpdateRequester {
     ) {
     }
 
-    async requestReviews(params: CmdMrevRequest) {
-        return this.mrevQueue.add(`mrev_${params.mapId}_${params.updateStrategy.toLowerCase()}`, params);
+    async requestReviews(params: CmdMrevRequest, jobOptions?: JobsOptions) {
+        return this.mrevQueue.add(`mrev_${params.mapId}_${params.updateStrategy.toLowerCase()}`, params, jobOptions);
     }
 
     async close() {

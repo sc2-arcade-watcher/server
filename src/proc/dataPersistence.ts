@@ -315,12 +315,13 @@ export class DataRecordPersistence extends ServiceProcess {
         for (const [lprofId, profileData] of profileNew) {
             const [ charName, charCode ] = profileData.characterHandle.split('#');
             const s2profile = await ProfileManager.create({
-                ...profileData,
-                ...{
-                    profileGameId: profileData.profileGameId,
-                    name: charName,
-                    discriminator: Number(charCode),
-                }
+                regionId: profileData.regionId,
+                realmId: profileData.realmId,
+                profileId: profileData.profileId,
+                name: charName,
+                discriminator: Number(charCode),
+                profileGameId: profileData.profileGameId,
+                battleTag: profileData.battleHandle,
             }, this.conn);
             logger.verbose(`created profile ${s2profile.fullnameWithHandle}`);
         }

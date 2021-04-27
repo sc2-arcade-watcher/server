@@ -30,6 +30,8 @@ program.command('s2cmd:mrev')
                 mapId: mapId,
                 updateStrategy: CmdMrevUpdateStrategy.All,
                 newerThan: 0,
+            }, {
+                lifo: cmd.lifo,
             });
             console.log(j.name);
         }

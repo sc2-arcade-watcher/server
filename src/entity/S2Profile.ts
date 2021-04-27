@@ -12,6 +12,7 @@ export interface BareS2Profile {
     name: string;
     discriminator: number;
     profileGameId?: number;
+    battleTag?: string;
     avatar?: string;
 }
 
