@@ -7,6 +7,13 @@ export enum GameRegion {
     CN = 5,
 }
 
+export interface GameRegionObjectType<T = any> {
+    [GameRegion.US]: T;
+    [GameRegion.EU]: T;
+    [GameRegion.KR]: T;
+    [GameRegion.CN]: T;
+}
+
 export const AllGameRegions = [
     GameRegion.US,
     GameRegion.EU,

@@ -1,7 +1,9 @@
 import * as orm from 'typeorm';
 import * as program from 'commander';
 import { createCmdQueueMapReviews, CmdMrevUpdateStrategy } from '../server/runnerExchange';
-import { MapDataUpdateRequester } from '../dataUpdateManager';
+import { MapDataUpdateRequester, MapDataUpdatePlanner } from '../dataUpdateManager';
+import { GameRegion } from '../common';
+import { logger } from '../logger';
 
 const reRange = /^(\d+)-(\d+)$/;
 
@@ -27,11 +29,14 @@ program.command('s2cmd:mrev')
 
         for (const mapId of cmd.map) {
             const j = await uRequester.requestReviews({
-                mapId: mapId,
-                updateStrategy: CmdMrevUpdateStrategy.All,
-                newerThan: 0,
-            }, {
-                lifo: cmd.lifo,
+                data: {
+                    mapId: mapId,
+                    updateStrategy: CmdMrevUpdateStrategy.All,
+                    newerThan: 0,
+                },
+                opts: {
+                    lifo: cmd.lifo,
+                },
             });
             console.log(j.name);
         }
@@ -41,3 +46,29 @@ program.command('s2cmd:mrev')
     })
 ;
 
+program.command('s2cmd:periodic')
+    .requiredOption<Number>('-r, --region <region-id>', '', Number)
+    .option('-n, --dry-run')
+    .action(async (cmd: program.Command) => {
+        const conn = await orm.createConnection();
+        const uPlanner = new MapDataUpdatePlanner(conn);
+
+        logger.verbose(`Preparing map list..`);
+        const maps = await uPlanner.fetchActiveMaps(cmd.region, 24 * 14 * 1);
+        const mreqs = await uPlanner.prepareMrevRequests(cmd.region, maps);
+        if (cmd.dryRun) {
+            logger.verbose('dry run', mreqs, mreqs.length);
+        }
+        else {
+            logger.info(`Scheduling ${mreqs.length} mreqs`);
+            await uPlanner.updateRequesters[cmd.region as GameRegion].requestBulkReviews(mreqs.map(data => {
+                return {
+                    data: data,
+                };
+            }));
+        }
+
+        await uPlanner.close();
+        await conn.close();
+    })
+;

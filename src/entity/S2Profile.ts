@@ -14,6 +14,7 @@ export interface BareS2Profile {
     profileGameId?: number;
     battleTag?: string;
     avatar?: string;
+    deleted?: boolean;
 }
 
 @Entity()
@@ -128,14 +129,14 @@ export class S2Profile implements BareS2Profile {
         if (params.regionId > 6 || params.regionId <= 0) throw new Error('regionId > 6');
         if (params.realmId > 2 || params.realmId <= 0) throw new Error('realmId > 2');
 
-        Object.assign(prof, params);
-        prof.localProfileId = localProfileId(params);
-
         prof.name = null;
         prof.discriminator = 0;
         prof.avatar = '';
         prof.deleted = false;
         prof.profileGameId = null;
+
+        Object.assign(prof, params);
+        prof.localProfileId = localProfileId(params);
 
         return prof;
     }

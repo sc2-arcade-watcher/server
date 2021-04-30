@@ -29,7 +29,7 @@ export class DataRecordPersistence extends ServiceProcess {
     protected async doStart(): Promise<void> {
         this.queue = createDataRecordQueue();
         this.worker = createDataRecordWorker(this.process.bind(this), {
-            concurrency: 2,
+            concurrency: 1,
         });
         this.scheduler = createDataRecordScheduler();
 
@@ -80,11 +80,12 @@ export class DataRecordPersistence extends ServiceProcess {
             mapId: dp.mapId,
         });
         if (
-            (mpTrack.reviewsUpdatedPartiallyAt && mpTrack.reviewsUpdatedPartiallyAt > reviewsUpdatedAt) ||
-            (mpTrack.reviewsUpdatedEntirelyAt && mpTrack.reviewsUpdatedEntirelyAt > reviewsUpdatedAt)
+            (dp.newerThan > 0 && mpTrack.reviewsUpdatedPartiallyAt && mpTrack.reviewsUpdatedPartiallyAt > reviewsUpdatedAt) ||
+            (dp.newerThan === 0 && mpTrack.reviewsUpdatedEntirelyAt && mpTrack.reviewsUpdatedEntirelyAt > reviewsUpdatedAt)
         ) {
             logger.verbose(oneLine`
                 map reviews outdated, provided=${reviewsUpdatedAt.toISOString()}
+                newerThan=${dp.newerThan}
                 partially=${mpTrack.reviewsUpdatedPartiallyAt?.toISOString()}
                 entirely=${mpTrack.reviewsUpdatedEntirelyAt?.toISOString()}
             `);
@@ -112,14 +113,20 @@ export class DataRecordPersistence extends ServiceProcess {
         const newReviews = dp.reviews.filter(x => !storedReviewsOfAuthor.has(x.authorLocalProfileId)).reverse();
         const updatedReviews = dp.reviews.filter(x => {
             const ritem = storedReviewsOfAuthor.get(x.authorLocalProfileId);
-            return ritem && ritem.updatedAt.getTime() <= (x.timestamp * 1000) && (
-                ritem.body !== x.body || ritem.rating !== x.rating || ritem.helpfulCount !== x.helpfulCount
+            return ritem && ritem.updatedAt.getTime() <= reviewsUpdatedAt.getTime() && (
+                ritem.body !== x.body || ritem.rating !== x.rating
+            );
+        }).reverse();
+        const updatedHelpfulOnly = dp.reviews.filter(x => {
+            const ritem = storedReviewsOfAuthor.get(x.authorLocalProfileId);
+            return ritem && ritem.updatedAt.getTime() <= reviewsUpdatedAt.getTime() && (
+                ritem.body === x.body && ritem.rating === x.rating && ritem.helpfulCount !== x.helpfulCount
             );
         }).reverse();
 
         logger.verbose(oneLine`
             processing reviews map=${dp.regionId}/${dp.mapId}
-            received=${dp.reviews.length} new=${newReviews.length} updated=${updatedReviews.length}
+            received=${dp.reviews.length} new=${newReviews.length} updated=${updatedReviews.length} updatedHelpful=${updatedHelpfulOnly.length}
         `);
 
         const s2NewReviews = newReviews.map(item => {
@@ -152,28 +159,31 @@ export class DataRecordPersistence extends ServiceProcess {
                 });
                 await tsManager.getRepository(S2MapReviewRevision).insert(s2NewReviews.map(x => x.revisions[0]));
             }
+
             if (updatedReviews.length > 0) {
                 for (const item of updatedReviews) {
                     const s2review = storedReviewsOfAuthor.get(item.authorLocalProfileId);
-                    if (s2review.body !== item.body || s2review.rating !== item.rating) {
-                        await tsManager.getRepository(S2MapReview).update(s2review.id, {
-                            helpfulCount: item.helpfulCount,
-                            updatedAt: reviewsUpdatedAt,
-                            rating: item.rating,
-                            body: item.body,
-                        });
-                        await tsManager.getRepository(S2MapReviewRevision).insert({
-                            reviewId: s2review.id,
-                            date: reviewsUpdatedAt,
-                            rating: item.rating,
-                            body: item.body,
-                        });
-                    }
-                    else {
-                        await tsManager.getRepository(S2MapReview).update(s2review.id, {
-                            helpfulCount: item.helpfulCount,
-                        });
-                    }
+                    await tsManager.getRepository(S2MapReview).update(s2review.id, {
+                        helpfulCount: item.helpfulCount,
+                        updatedAt: reviewsUpdatedAt,
+                        rating: item.rating,
+                        body: item.body,
+                    });
+                    await tsManager.getRepository(S2MapReviewRevision).insert({
+                        reviewId: s2review.id,
+                        date: reviewsUpdatedAt,
+                        rating: item.rating,
+                        body: item.body,
+                    });
+                }
+            }
+
+            if (updatedHelpfulOnly.length > 0) {
+                for (const item of updatedHelpfulOnly) {
+                    const s2review = storedReviewsOfAuthor.get(item.authorLocalProfileId);
+                    await tsManager.getRepository(S2MapReview).update(s2review.id, {
+                        helpfulCount: item.helpfulCount,
+                    });
                 }
             }
 
@@ -265,13 +275,15 @@ export class DataRecordPersistence extends ServiceProcess {
             }
 
             if (s2profile.discriminator === 0) {
-                const [ charName, charCode ] = newProfileData.characterHandle.split('#');
-                if (charName !== s2profile.name) {
-                    logger.verbose(`new name "${newProfileData.characterHandle}" doesn't match old one "${s2profile.name}" for ${s2profile.fullnameWithHandle}`);
-                    updatedProfile.name = charName;
+                if (newProfileData.characterHandle.indexOf('#') !== -1) {
+                    const [ charName, charCode ] = newProfileData.characterHandle.split('#');
+                    if (charName !== s2profile.name) {
+                        logger.verbose(`new name "${newProfileData.characterHandle}" doesn't match old one "${s2profile.name}" for ${s2profile.fullnameWithHandle}`);
+                        updatedProfile.name = charName;
+                    }
+                    updatedProfile.discriminator = Number(charCode);
+                    updatedTracking.nameUpdatedAt = new Date();
                 }
-                updatedProfile.discriminator = Number(charCode);
-                updatedTracking.nameUpdatedAt = new Date();
             }
 
             if (newProfileData.battleHandle !== null) {
@@ -313,7 +325,11 @@ export class DataRecordPersistence extends ServiceProcess {
         }
 
         for (const [lprofId, profileData] of profileNew) {
-            const [ charName, charCode ] = profileData.characterHandle.split('#');
+            let charName: string = '';
+            let charCode: string = '0';
+            if (profileData.characterHandle.indexOf('#') !== -1) {
+                [ charName, charCode ] = profileData.characterHandle.split('#');
+            }
             const s2profile = await ProfileManager.create({
                 regionId: profileData.regionId,
                 realmId: profileData.realmId,
@@ -322,6 +338,7 @@ export class DataRecordPersistence extends ServiceProcess {
                 discriminator: Number(charCode),
                 profileGameId: profileData.profileGameId,
                 battleTag: profileData.battleHandle,
+                deleted: charName === '',
             }, this.conn);
             logger.verbose(`created profile ${s2profile.fullnameWithHandle}`);
         }
