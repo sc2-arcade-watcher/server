@@ -607,7 +607,7 @@ export class ExecutiveServer {
             }, rnIntro.capabilities ?? {} as RunnerCapabilities),
             cmdQueues: rnIntro.cmdQueues ?? [],
         };
-        logger.info(`RunnerIntro: ${cnRunner.runnerName}`, cnRunner.rnInfo.capabilities);
+        logger.info(`RunnerIntro: ${cnRunner.runnerName}`, cnRunner.rnInfo.capabilities, cnRunner.rnInfo.cmdQueues);
 
         const region: GameRegion = GameRegion[rnIntro.region as any] as any;
         if (!region) {

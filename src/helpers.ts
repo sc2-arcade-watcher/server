@@ -151,7 +151,7 @@ export function setupProcessTerminator(handler: () => void) {
         logger.info(`${sig} received`);
         handler();
         process.once('SIGINT', function () {
-            logger.warn(`${sig} received for the second time, forcing shutdown..`);
+            logger.error(`${sig} received for the second time, forcing shutdown..`);
             process.exit(1);
         });
     }
@@ -160,10 +160,31 @@ export function setupProcessTerminator(handler: () => void) {
     process.once('SIGINT', terminationProxy);
 }
 
+// https://www.freedesktop.org/software/systemd/man/sd_notify.html
+export type SystemdNotifyVariable = (
+    'READY' | 'RELOADING' | 'STOPPING' | 'STATUS' | 'ERRNO' | 'BUSERROR' | 'MAINPID' | 'WATCHDOG' | 'WATCHDOG'
+);
+
+export async function systemdNotify(variable: SystemdNotifyVariable, value: string = '1') {
+    logger.debug(`systemd-notify call ${variable}=${value}`);
+    if (!process.env.NOTIFY_SOCKET) return;
+    await execAsync(`systemd-notify ${variable}=${value}`);
+}
+
+let lastWatchdogCall = Date.now();
+export async function systemdNotifyWatchdog(period: number) {
+    const now = Date.now();
+    if (now - lastWatchdogCall >= period) {
+        lastWatchdogCall = now;
+        await systemdNotify('WATCHDOG');
+    }
+}
+
+/**
+ * @deprecated use `systemdNotify`
+ */
 export async function systemdNotifyReady() {
-    logger.verbose(`systemd-notify call`);
-    const r = await execAsync('systemd-notify --ready');
-    logger.debug(`systemd-notify result`, r);
+    await systemdNotify('READY');
 }
 
 export function retry(options?: pRetry.Options) {

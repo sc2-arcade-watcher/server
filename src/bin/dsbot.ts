@@ -1,22 +1,21 @@
 import * as dotenv from 'dotenv';
 import * as orm from 'typeorm';
-import * as sqlite from 'sqlite';
+import { sleep, systemdNotify, setupProcessTerminator, systemdNotifyWatchdog } from '../helpers';
 import { setupFileLogger, logger } from '../logger';
-import { CommandoClient, CommandoClientOptions, FriendlyError, SQLiteProvider } from 'discord.js-commando';
+import { CommandoClient, CommandoClientOptions, FriendlyError } from 'discord.js-commando';
 import { BotTask } from '../ds/dscommon';
 import { LobbyReporterTask } from '../ds/mod/lobbyReporter';
 import { InviteCommand } from '../ds/cmd/general';
 import { StatusTask } from '../ds/mod/status';
-import { DMChannel, Intents } from 'discord.js';
-import { sleep, execAsync } from '../helpers';
+import { DMChannel, Intents, UserResolvable } from 'discord.js';
 import { SubscriptionsTask } from '../ds/mod/subscriptions';
 import { LobbyPublishCommand } from '../ds/cmd/lobbyPublish';
 import { HelpCommand } from '../ds/cmd/help';
+import { GuildsOverviewCommand } from '../ds/cmd/admin';
 
 export class DsBot extends CommandoClient {
     readonly issueTracker: string;
     conn: orm.Connection;
-    slitedb: sqlite.Database;
     tasks: {
         lreporter: LobbyReporterTask;
         subscription: SubscriptionsTask,
@@ -33,11 +32,12 @@ export class DsBot extends CommandoClient {
             nonCommandEditable: false,
 
             // discord.js
-            messageCacheMaxSize: 30,
-            messageCacheLifetime: 60 * 20,
-            messageSweepInterval: 600,
+            messageCacheMaxSize: 50,
+            messageCacheLifetime: 60 * 10,
+            messageSweepInterval: 300,
             messageEditHistoryMaxSize: 0,
             disableMentions: 'everyone',
+            retryLimit: 3,
             ws: {
                 intents: [
                     'GUILDS',
@@ -65,47 +65,45 @@ export class DsBot extends CommandoClient {
         this.on('error', (e) => logger.error(e.message, e));
         this.on('warn', (s) => logger.warn(s));
         this.on('debug', (s) => logger.debug(s));
-        this.on('ready', async () => {
-            logger.info(`Logged in as ${this.user.tag} (${this.user.id})`);
-            logger.info(`Cached guilds: ${this.guilds.cache.size} , channels: ${this.channels.cache.size}`);
-            // for (const guild of this.guilds.sort((a, b) => a.joinedTimestamp - b.joinedTimestamp).values()) {
-            //     logger.info(`Connected with guild "${guild.name}" (${guild.memberCount}) id=${guild.id}`);
-            //     for (const chan of guild.channels.values()) {
-            //         logger.verbose(`Connected with text channel "${chan.name}" id=${chan.id}`);
-            //     }
-            // }
+        this.on('ready', () => {
+            logger.info(`Logged in as ${this.user.tag} (${this.user.id}) guilds: ${this.guilds.cache.size} channels: ${this.channels.cache.size}`);
+            for (const guild of this.guilds.cache.array().sort((a, b) => a.joinedTimestamp - b.joinedTimestamp).values()) {
+                logger.info(`Connected with guild "${guild.name}" (${guild.id}) members: ${guild.memberCount} channels: ${guild.channels.cache.size}`);
+            }
         });
         this.on('disconnect', () => logger.warn('Disconnected!'));
         this.on('shardReconnecting', (id) => logger.warn(`Shard reconnecting ${id} ..`));
-        this.on('commandRun', (cmd, p, msg) => {
-            logger.info(`Command run ${cmd.memberName}, Author '${msg.author.username}', msg: ${msg.content}`);
+        this.on('shardError', (err, id) => logger.warn(`Shard error ${id} ..`, err));
+        this.on('shardReady', (id, unavailableGuilds) => logger.info(`Shard ready ${id} , unavailable guilds: ${unavailableGuilds?.size ?? 0}`, unavailableGuilds));
+        this.on('rateLimit', (d) => logger.warn('ratelimit', d));
+
+        this.on('commandRun', (cmd, p, msg, args) => {
+            logger.info(`Command run ${cmd.memberName} by ${msg.author.tag} (${msg.author.id})`, msg.content, args);
         });
-        // FIXME:
-        // this.on('commandError', (cmd, err) => {
-        //     if (err instanceof FriendlyError) {
-        //         logger.warn(`Error in command ${cmd.groupID}:${cmd.memberName}`, err);
-        //     }
-        //     else {
-        //         logger.error(`Error in command ${cmd.groupID}:${cmd.memberName}`, err);
-        //     }
-        // });
-        this.on('message', (msg) => {
-            if (msg.channel instanceof DMChannel) {
-                logger.debug('DM Message', {
-                    userId: msg.author.id,
-                    userTag: msg.author.tag,
-                    username: msg.author.username,
-                    content: msg.content,
-                });
+        this.on('commandError', (cmd, err, cmsg, args, pattern) => {
+            if (err instanceof FriendlyError) {
+                logger.warn(`Error in command ${cmd.groupID}:${cmd.memberName}`, err);
+            }
+            else {
+                logger.error(`Error in command ${cmd.groupID}:${cmd.memberName}`, err);
             }
         });
 
+        this.on('message', (msg) => {
+            if (msg.channel instanceof DMChannel && msg.channel.recipient.id === this.user.id) {
+                logger.debug(`Received DM from ${msg.author.tag} (${msg.author.id})`, msg.content);
+            }
+        });
+
+        this.on('guildCreate', (guild) => logger.info(`joined guild ${guild.name} (${guild.id})`));
+        this.on('guildDelete', (guild) => logger.info(`left guild ${guild.name} (${guild.id})`));
+        this.on('guildUnavailable', (guild) => logger.info(`guild unavailable ${guild.name} (${guild.id})`));
+
         this.registry.registerDefaultTypes();
-        this.registry.registerDefaultGroups();
         this.registry.registerGroups([
+            ['subscription', 'Subscription'],
+            ['util', 'Utility'],
             ['admin', 'Admin'],
-            ['general', 'General'],
-            ['subscriptions', 'Subscriptions'],
         ]);
         this.registry.registerDefaultCommands({
             help: false,
@@ -118,6 +116,7 @@ export class DsBot extends CommandoClient {
         this.registry.registerCommand(HelpCommand);
         this.registry.registerCommand(InviteCommand);
         this.registry.registerCommand(LobbyPublishCommand);
+        this.registry.registerCommand(GuildsOverviewCommand);
     }
 
     async prepare() {
@@ -147,66 +146,79 @@ export class DsBot extends CommandoClient {
     }
 
     async close() {
-        if (this.doShutdown) {
-            throw new Error(`forced shutdown`);
-        }
+        if (this.doShutdown) return;
         this.doShutdown = true;
+        logger.info('closing discord ..');
 
-        logger.info('stopping pending tasks..');
-        const pendingRequests: Promise<void>[] = [];
-        for (const task of Object.values(this.tasks)) {
-            pendingRequests.push(task.unload());
-        }
-        await Promise.all(pendingRequests);
+        if (this.tasks) {
+            logger.info('stopping pending tasks..');
+            const pendingRequests: Promise<void>[] = [];
+            for (const task of Object.values(this.tasks)) {
+                pendingRequests.push(task.unload());
+            }
+            await Promise.all(pendingRequests);
 
-        logger.info('waiting for tasks to finish..');
-        let prevPendingTasks = [];
-        while (1) {
-            await sleep(50);
-            const activeTasks = Object.values(this.tasks).filter(x => x.running);
-            if (!activeTasks.length) break;
-            if (prevPendingTasks.length !== activeTasks.length) {
-                prevPendingTasks = activeTasks;
-                logger.info(`Pending tasks: ${String(activeTasks.map(x => `${x.constructor.name}`))}`);
+            logger.info('waiting for tasks to finish..');
+            let prevPendingTasks = [];
+            while (1) {
+                await sleep(50);
+                const activeTasks = Object.values(this.tasks).filter(x => x.running);
+                if (!activeTasks.length) break;
+                if (prevPendingTasks.length !== activeTasks.length) {
+                    prevPendingTasks = activeTasks;
+                    logger.info(`Pending tasks: ${String(activeTasks.map(x => `${x.constructor.name}`))}`);
+                }
             }
         }
 
         logger.info('shutting down discord connection..');
         this.destroy();
 
-        logger.info('closing db connections..');
-        if (this.slitedb) {
-            await this.slitedb.close();
-            this.slitedb = void 0;
-        }
         if (this.conn) {
+            logger.info('closing mariadb connections..');
             await this.conn.close();
             this.conn = void 0;
         }
+
+        logger.info('discord closed');
+    }
+
+    get staffMembers() {
+        return (process.env.DS_BOT_STAFF || '').split(' ').map(x => {
+            const tmp = x.split(':');
+            return {
+                id: String(tmp[0]),
+                tag: tmp.length > 1 ? String(tmp[1]) : null,
+            };
+        });
+    }
+
+    isStaff(user: UserResolvable, includeOwner = true) {
+        return this.staffMembers.findIndex(x => x.id === this.users.resolveID(user)) !== -1 || this.isOwner(user);
+    }
+
+    async fetchStaffMembers() {
+        return Promise.all(this.staffMembers.map(x => this.users.fetch(x.id, true)));
     }
 }
 
-process.on('unhandledRejection', e => { throw e; });
+process.on('unhandledRejection', e => {
+    if (logger) logger.error('unhandledRejection', e);
+    throw e;
+});
 (async function() {
     dotenv.config();
+    await systemdNotify('READY');
     setupFileLogger('dsbot');
 
     const bot = new DsBot();
-    await bot.prepare();
-
-    if (process.env.NOTIFY_SOCKET) {
-        const r = await execAsync('systemd-notify --ready');
-        logger.verbose(`systemd-notify`, r);
-    }
-
-    async function terminate(sig: NodeJS.Signals) {
-        logger.info(`Received ${sig}`);
+    await systemdNotifyWatchdog(0);
+    setupProcessTerminator(async () => {
+        await systemdNotify('STOPPING');
         await bot.close();
-    }
+    });
 
-    process.on('SIGTERM', terminate);
-    process.on('SIGINT', terminate);
-
+    await bot.prepare();
     logger.verbose(`Logging in..`);
     await bot.login(process.env.DS_BOT_TOKEN);
     await bot.install();

@@ -126,7 +126,7 @@ export function regionSiteCode(regionCodeOrId: GameRegion | GameRegionSite | str
 }
 
 export function battleMapLink(regionId: number, mapId: number) {
-    return `battlenet:://starcraft/map/${regionId}/${mapId}`;
+    return `battlenet://starcraft/map/${regionId}/${mapId}`;
 }
 
 export function encodeMapVersion(majorVersion: number, minorVersion: number) {

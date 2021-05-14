@@ -8,49 +8,53 @@ import { S2Profile } from '../entity/S2Profile';
 @EntityRepository(S2GameLobby)
 export class S2GameLobbyRepository extends Repository<S2GameLobby> {
     prepareDetailedSelect() {
-        return this
-            .createQueryBuilder('lobby')
-
-            // map & ext mod
-            .leftJoinAndMapOne('lobby.map', S2Map, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId')
-            .leftJoinAndMapOne('lobby.extMod', S2Map, 'extMod', 'extMod.regionId = lobby.regionId AND extMod.bnetId = lobby.extModBnetId')
-
-            // slots
-            .leftJoinAndSelect('lobby.slots', 'slot')
-            .leftJoinAndSelect('slot.profile', 'profile')
-            .leftJoinAndSelect('slot.joinInfo', 'joinInfo')
-
-            // joinInfos for leavers
-            .leftJoinAndSelect('lobby.joinHistory', 'joinHistory')
-            .leftJoinAndSelect('joinHistory.profile', 'joinHistoryProfile')
-
-            .addOrderBy('lobby.createdAt', 'ASC')
+        const qb = this.createQueryBuilder('lobby');
+        this.addMapInfo(qb, { map: true, extMod: true });
+        this.addSlots(qb);
+        this.addSlotsProfile(qb);
+        this.addSlotsJoinInfo(qb);
+        qb
+            .addOrderBy('lobby.id', 'ASC')
             .addOrderBy('slot.slotNumber', 'ASC')
         ;
+        return qb;
     }
 
-    addMapInfo(qb: SelectQueryBuilder<S2GameLobby>) {
-        qb.leftJoinAndMapOne('lobby.map', S2Map, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId');
-        qb.expressionMap.selects.pop();
-        qb.leftJoinAndMapOne('lobby.extMod', S2Map, 'extMod', 'extMod.regionId = lobby.regionId AND extMod.bnetId = lobby.extModBnetId');
-        qb.expressionMap.selects.pop();
-        qb.leftJoinAndMapOne('lobby.multiMod', S2Map, 'multiMod', 'multiMod.regionId = lobby.regionId AND multiMod.bnetId = lobby.multiModBnetId');
-        qb.expressionMap.selects.pop();
-        qb.addSelect([
-            'map.regionId',
-            'map.bnetId',
-            'map.name',
-            'map.iconHash',
-            'map.mainCategoryId',
-            'extMod.regionId',
-            'extMod.bnetId',
-            'extMod.name',
-            'extMod.iconHash',
-            'multiMod.regionId',
-            'multiMod.bnetId',
-            'multiMod.name',
-            'multiMod.iconHash',
-        ]);
+    addMapInfo(qb: SelectQueryBuilder<S2GameLobby>, opts?: { map?: boolean, extMod?: boolean, multiMod?: boolean }) {
+        if (opts?.map ?? true) {
+            qb.leftJoinAndMapOne('lobby.map', S2Map, 'map', 'map.regionId = lobby.regionId AND map.bnetId = lobby.mapBnetId');
+            qb.expressionMap.selects.pop();
+            qb.addSelect([
+                'map.regionId',
+                'map.bnetId',
+                'map.name',
+                'map.iconHash',
+                'map.mainCategoryId',
+            ]);
+        }
+
+        if (opts?.extMod ?? true) {
+            qb.leftJoinAndMapOne('lobby.extMod', S2Map, 'extMod', 'extMod.regionId = lobby.regionId AND extMod.bnetId = lobby.extModBnetId');
+            qb.expressionMap.selects.pop();
+            qb.addSelect([
+                'extMod.regionId',
+                'extMod.bnetId',
+                'extMod.name',
+                'extMod.iconHash',
+            ]);
+        }
+
+        if (opts?.multiMod ?? true) {
+            qb.leftJoinAndMapOne('lobby.multiMod', S2Map, 'multiMod', 'multiMod.regionId = lobby.regionId AND multiMod.bnetId = lobby.multiModBnetId');
+            qb.expressionMap.selects.pop();
+            qb.addSelect([
+                'multiMod.regionId',
+                'multiMod.bnetId',
+                'multiMod.name',
+                'multiMod.iconHash',
+            ]);
+        }
+
         return qb;
     }
 

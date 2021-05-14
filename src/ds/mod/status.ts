@@ -6,7 +6,7 @@ import { GameLobbyStatus } from '../../gametracker';
 import { S2GameLobbySlotKind } from '../../entity/S2GameLobbySlot';
 
 export class StatusTask extends BotTask {
-    readonly customMessage = String(process.env.DS_BOT_STATUS_MESSAGE).trim();
+    readonly customMessage = (process.env.DS_BOT_STATUS_MESSAGE ?? '').trim();
 
     async load() {
         setTimeout(this.update.bind(this), 500).unref();
@@ -52,18 +52,19 @@ export class StatusTask extends BotTask {
             .addSelect('SUM(CASE WHEN lobby.regionId = 2 THEN 1 ELSE 0 END)', 'lobbyCountEU')
             .addSelect('SUM(CASE WHEN lobby.regionId = 3 THEN 1 ELSE 0 END)', 'lobbyCountKR')
             .addSelect('SUM(CASE WHEN lobby.regionId = 5 THEN 1 ELSE 0 END)', 'lobbyCountCN')
-            .addSelect('SUM(CASE WHEN lobby.regionId = 1 THEN lobby.slotsHumansTaken ELSE 0 END)', 'playerCountUS')
-            .addSelect('SUM(CASE WHEN lobby.regionId = 2 THEN lobby.slotsHumansTaken ELSE 0 END)', 'playerCountEU')
-            .addSelect('SUM(CASE WHEN lobby.regionId = 3 THEN lobby.slotsHumansTaken ELSE 0 END)', 'playerCountKR')
-            .addSelect('SUM(CASE WHEN lobby.regionId = 5 THEN lobby.slotsHumansTaken ELSE 0 END)', 'playerCountCN')
+            // .addSelect('SUM(CASE WHEN lobby.regionId = 1 THEN lobby.slotsHumansTaken ELSE 0 END)', 'playerCountUS')
+            // .addSelect('SUM(CASE WHEN lobby.regionId = 2 THEN lobby.slotsHumansTaken ELSE 0 END)', 'playerCountEU')
+            // .addSelect('SUM(CASE WHEN lobby.regionId = 3 THEN lobby.slotsHumansTaken ELSE 0 END)', 'playerCountKR')
+            // .addSelect('SUM(CASE WHEN lobby.regionId = 5 THEN lobby.slotsHumansTaken ELSE 0 END)', 'playerCountCN')
             .where('status = :status', { status: GameLobbyStatus.Open })
             .getRawOne()
         ;
 
         await this.client.user.setActivity([
-            `Open lobbies:\n  US:${result.lobbyCountUS} EU:${result.lobbyCountEU} KR:${result.lobbyCountKR} CN:${result.lobbyCountCN}`,
-            `Awaiting players:\n  US:${result.playerCountUS} EU:${result.playerCountEU} KR:${result.playerCountKR} CN:${result.playerCountCN}`,
-        ].join('\n'), { type: 'WATCHING' });
+            `US:${result.lobbyCountUS} EU:${result.lobbyCountEU} KR:${result.lobbyCountKR} CN:${result.lobbyCountCN} [open lobbies]`,
+            `Send ".help" to learn about the bot`,
+            // `Awaiting players:\n  US:${result.playerCountUS} EU:${result.playerCountEU} KR:${result.playerCountKR} CN:${result.playerCountCN}`,
+        ].join(' — '), { type: 'WATCHING' });
     }
 
     protected async showNumberOfRecentGames() {
@@ -87,7 +88,8 @@ export class StatusTask extends BotTask {
         ;
 
         await this.client.user.setActivity([
-            `${result.totalGames} public games with ${result.totalPlayers}+ unique players, in last hour across all regions.`
-        ].join(' | '), { type: 'WATCHING' });
+            `${result.totalGames} public games, ${result.totalPlayers}+ unique players, in last hour across all regions`,
+            `Visit sc2arcade.com to find more`,
+        ].join(' — '), { type: 'WATCHING' });
     }
 }

@@ -55,7 +55,7 @@ export function setupFileLogger(appName: string) {
         json: false,
         maxFiles: '60d',
         zippedArchive: true,
-        createSymlink: false,
+        createSymlink: true,
         symlinkName: `${appName}.log`,
     }));
 }
@@ -93,7 +93,7 @@ export function logIt(inputOptions: Partial<LogItOptions> = {}) {
     }, inputOptions);
 
     return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
-        if (!(<any>logger).isLevelEnabled(lgOpts.level)) {
+        if (!(<any>logger).isLevelEnabled(lgOpts.level) && lgOpts.level === 'debug') {
             return;
         }
 

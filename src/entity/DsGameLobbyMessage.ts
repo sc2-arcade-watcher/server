@@ -1,29 +1,33 @@
-import { Entity, PrimaryGeneratedColumn, ManyToOne, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryColumn, ManyToOne, Column } from 'typeorm';
 import { S2GameLobby } from './S2GameLobby';
 import { DsGameLobbySubscription } from './DsGameLobbySubscription';
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 export class DsGameLobbyMessage {
-    @PrimaryGeneratedColumn()
-    id: number;
+    @PrimaryColumn({
+        type: 'bigint',
+    })
+    messageId: string | number | BigInt;
 
-    @CreateDateColumn()
+    @Column()
     createdAt: Date;
 
-    @UpdateDateColumn()
+    @Column()
     updatedAt: Date;
 
     @ManyToOne(type => S2GameLobby, {
         nullable: false,
-        onUpdate: 'RESTRICT',
-        onDelete: 'CASCADE',
+        onUpdate: 'NO ACTION',
+        onDelete: 'NO ACTION',
     })
     lobby: S2GameLobby;
 
     @ManyToOne(type => DsGameLobbySubscription, {
         nullable: true,
-        onUpdate: 'RESTRICT',
-        onDelete: 'CASCADE',
+        onUpdate: 'NO ACTION',
+        onDelete: 'NO ACTION',
     })
     rule?: DsGameLobbySubscription;
 
@@ -31,7 +35,7 @@ export class DsGameLobbyMessage {
         type: 'bigint',
         nullable: true,
     })
-    userId: string;
+    userId: string | number | BigInt;
 
     @Column({
         type: 'bigint',
@@ -45,13 +49,30 @@ export class DsGameLobbyMessage {
     })
     channelId: string | number | BigInt;
 
-    @Column({
-        type: 'bigint',
-    })
-    messageId: string | number | BigInt;
+    @Column()
+    closed: boolean;
 
-    @Column({
-        default: false,
-    })
+    @Column()
     completed: boolean;
+
+    get targetId() {
+        return this.userId ? String(this.userId) : String(this.guildId);
+    }
+
+    get targetChannelId() {
+        return this.userId ? String(this.userId) : String(this.channelId);
+    }
+
+    get discordId() {
+        return this.userId ? `${this.userId}` : `${this.guildId}/${this.channelId}`;
+    }
+
+    static create() {
+        const gameLobMessage = new DsGameLobbyMessage();
+        gameLobMessage.createdAt = new Date();
+        gameLobMessage.updatedAt = new Date();
+        gameLobMessage.closed = false;
+        gameLobMessage.completed = false;
+        return gameLobMessage;
+    }
 }

@@ -76,6 +76,7 @@ export type ExtendedCommandInfo = Partial<CommandInfo> & {
     deleteOnUserCommandDelete?: boolean;
     dmOnly?: boolean;
     userPermissions?: PermissionResolvable[];
+    staffOnly?: boolean;
 };
 
 export abstract class GeneralCommand extends Command {
@@ -84,11 +85,12 @@ export abstract class GeneralCommand extends Command {
 
     constructor(client: DsBot, info: ExtendedCommandInfo) {
         const tmpInfo = Object.assign(<ExtendedCommandInfo>{
-            group: 'general',
+            group: 'util',
             memberName: info.name,
             description: '',
             dmOnly: false,
             deleteOnUserCommandDelete: false,
+            staffOnly: false,
         }, info);
         if (tmpInfo.args) {
             for (const arg of tmpInfo.args) {
@@ -114,6 +116,19 @@ export abstract class GeneralCommand extends Command {
             return false;
         }
         return super.isUsable(msg);
+    }
+
+    hasPermission(message: CommandoMessage, ownerOverride?: boolean): boolean | string {
+        if (this.client.isStaff(message.author, false)) {
+            if (this.ownerOnly) {
+                return false;
+            }
+            return true;
+        }
+        else if (this.info.staffOnly) {
+            return this.client.isStaff(message.author, false) || this.client.isOwner(message.author);
+        }
+        return super.hasPermission(message, ownerOverride);
     }
 
     async run(msg: CommandoMessage, args: object | string | string[], fromPattern: boolean): Promise<Message | Message[]> {
@@ -194,4 +209,21 @@ export function formatObjectAsMessage(inp: {[k: string]: any}, escape: boolean =
         }
     }
     return out.join('\n');
+}
+
+export function csvCombineRow(...fields: (string | number | boolean | Date)[]) {
+    return fields.map(x => {
+        if (typeof x === 'number' || typeof x === 'boolean' || typeof x === 'undefined') {
+            x = String(x);
+        }
+        else if (x instanceof Date) {
+            x = x.toISOString();
+        }
+        else {
+            if (x.indexOf(',') !== -1 || x.indexOf('"') !== -1) {
+                x = `"${x.replace(/"/g, '""')}"`;
+            }
+        }
+        return x;
+    }).join(',');
 }

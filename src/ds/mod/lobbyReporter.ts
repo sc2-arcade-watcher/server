@@ -1,16 +1,24 @@
 import * as pMap from 'p-map';
-import { User, TextChannel, Message, MessageEmbedOptions, DiscordAPIError, DMChannel } from 'discord.js';
+import pQueue, { DefaultAddOptions, Queue } from 'p-queue';
+import { RunFunction } from 'p-queue/dist/queue';
+import lowerBound from 'p-queue/dist/lower-bound';
+import type lruFactory from 'tiny-lru';
+const lru: typeof lruFactory = require('tiny-lru');
+import { User, TextChannel, Message, MessageEmbedOptions, DiscordAPIError, DMChannel, Guild, APIMessage } from 'discord.js';
+import * as Redis from 'ioredis';
 import { BotTask, DiscordErrorCode, GeneralCommand, formatObjectAsMessage, ExtendedCommandInfo } from '../dscommon';
 import { S2GameLobby } from '../../entity/S2GameLobby';
 import { GameLobbyStatus } from '../../gametracker';
 import { S2GameLobbySlot, S2GameLobbySlotKind } from '../../entity/S2GameLobbySlot';
-import { sleep, sleepUnless } from '../../helpers';
+import { sleep, sleepUnless, systemdNotifyWatchdog } from '../../helpers';
 import { logger, logIt } from '../../logger';
 import { DsGameLobbySubscription } from '../../entity/DsGameLobbySubscription';
 import { DsGameLobbyMessage } from '../../entity/DsGameLobbyMessage';
 import { S2GameLobbyRepository } from '../../repository/S2GameLobbyRepository';
 import deepEqual = require('deep-equal');
-import { GameRegion } from '../../common';
+import { GameRegion, battleMapLink } from '../../common';
+import { oneLine } from 'common-tags';
+import { differenceInSeconds } from 'date-fns';
 
 export interface DestChannelOpts {
     userId: string | number | BigInt;
@@ -21,6 +29,213 @@ export interface DestChannelOpts {
 interface PostedGameLobby {
     // embed?: MessageEmbedOptions;
     msg: DsGameLobbyMessage;
+    contentUpdatedAt: Date;
+    outdatedSince: Date | null;
+    closedAt?: Date;
+    subscriptionId?: number;
+}
+
+type PostActionType = 'post' | 'patch';
+
+interface PostActionDesc {
+    targetId: string;
+    targetChannelId: string;
+    actionType: PostActionType;
+}
+
+interface PostScheduledAction extends PostActionDesc {
+    timestamp: number;
+}
+
+interface PerfMeasurementOptions {
+    /**
+     * time-window to measure - actions from last X seconds
+     */
+    timeFrame: number;
+    /**
+     * interpolate value if there's not enough recorded data
+     */
+    interpolate: boolean | number;
+    sampleSize: number;
+    cache: boolean;
+}
+
+class PosterPerformanceManager {
+    protected readonly redis = new Redis({
+        host: 'localhost',
+        port: 6381,
+        db: 1,
+        maxRetriesPerRequest: null,
+        enableOfflineQueue: false,
+        lazyConnect: true,
+        retryStrategy: (times) => null,
+    });
+    protected readonly streamMaxLen = 1000;
+    protected readonly scheduleLog = new Map<string, PostScheduledAction[]>();
+    protected readonly postLog = new Map<string, number>();
+    protected readonly cacheAvgPostLog = lru<number>(void 0, 10000);
+
+    constructor() {
+    }
+
+    protected getPostLogKey(targetId: string) {
+        return `lslog:${targetId}`;
+    }
+
+    protected trimSchLog(targetId: string) {
+        const now = Date.now();
+        const schLog = this.scheduleLog.get(targetId);
+        if (!schLog) return;
+        for (let i = 0; i < schLog.length; i++) {
+            const item = schLog[i];
+            if ((now - item.timestamp) > 60000 && (i + 1) < schLog.length) continue;
+            if ((now - item.timestamp) < 60000) i--;
+            if (i >= 1) {
+                schLog.splice(0, i);
+            }
+            break;
+        }
+    }
+
+    protected async sweepSchLog() {
+        for (const [targetId, schLog] of this.scheduleLog) {
+            this.trimSchLog(targetId);
+            if (schLog.length <= 0) {
+                this.scheduleLog.delete(targetId);
+            }
+        }
+    }
+
+    protected async sweepPostLog() {
+        const timeOffset = Date.now() - (10 * 60 * 1000);
+        const toDelete: string[] = [];
+        for (const [targetId, timestamp] of this.postLog) {
+            if (timestamp > timeOffset) continue;
+            toDelete.push(targetId);
+            this.postLog.delete(targetId);
+        }
+        if (toDelete.length <= 0) return;
+        await this.redis.del(toDelete.map(x => this.getPostLogKey(x)));
+    }
+
+    async load() {
+        setInterval(this.sweepSchLog.bind(this), 15000).unref();
+        setInterval(this.sweepPostLog.bind(this), 25000).unref();
+        await this.redis.connect();
+        for (const key of await this.redis.keys(this.getPostLogKey('*'))) {
+            const r = await this.redis.xinfo('STREAM', key) as any[];
+            const i = r.indexOf('last-generated-id');
+            if (i === -1) {
+                throw new Error('last-generated-id missing?');
+            }
+            this.postLog.set(key.substr(this.getPostLogKey('').length), Number((r[i + 1] as string).split('-')[0]));
+        }
+    }
+
+    async close() {
+        this.redis.disconnect();
+    }
+
+    scheduleAction(targetId: string, targetChannelId: string, actionType: PostActionType) {
+        const schLog = this.scheduleLog.get(targetId) ?? [];
+        const now = Date.now();
+        if (schLog.length === 0) {
+            this.scheduleLog.set(targetId, schLog);
+        }
+        else {
+            this.trimSchLog(targetId);
+        }
+
+        schLog.push({
+            targetId: targetId,
+            targetChannelId: targetChannelId,
+            actionType: actionType,
+            timestamp: now,
+        });
+    }
+
+    avgScheduledPerSecond(targetId?: string, targetChannelId?: string, actionType?: PostActionType): number {
+        if (!targetId) {
+            return Array.from(this.scheduleLog.keys()).reduce((prev, item) => prev + this.avgScheduledPerSecond(item), 0);
+        }
+
+        const schLog = this.scheduleLog.get(targetId);
+        if (!schLog) return 0;
+        this.trimSchLog(targetId);
+        let timeWindow = 6200;
+        if (schLog.length > 0) {
+            timeWindow = Math.min(12000, Math.max(timeWindow, Date.now() - schLog[0].timestamp));
+        }
+        const timeOffset = Date.now() - timeWindow;
+        const count = schLog.reduce((prev, item) => {
+            if (item.timestamp < timeOffset) return prev;
+            if (targetChannelId && targetChannelId !== item.targetChannelId) return prev;
+            if (actionType && actionType !== item.actionType) return prev;
+            return prev + 1;
+        }, 0);
+        return (12000 / timeWindow) * count;
+    }
+
+    async doAction(pinfo: PostActionDesc, lobbyId: string, subscriptionId: number) {
+        this.postLog.set(pinfo.targetId, Date.now());
+        await this.redis.xadd(
+            this.getPostLogKey(pinfo.targetId),
+            'MAXLEN', '~', `${this.streamMaxLen}`,
+            '*',
+            'targetChannelId', pinfo.targetChannelId,
+            'actionType', pinfo.actionType,
+            'lobbyId', lobbyId,
+            'subscriptionId', subscriptionId
+        );
+    }
+
+    async avgDone(filters: Partial<PostActionDesc>, inOpts?: Partial<PerfMeasurementOptions>) {
+        if (!this.postLog.has(filters.targetId)) return 0;
+        const currOpts: PerfMeasurementOptions = Object.assign<PerfMeasurementOptions, typeof inOpts>({
+            timeFrame: 1,
+            sampleSize: 0,
+            interpolate: false,
+            cache: false,
+        }, inOpts ?? {});
+        if (currOpts.sampleSize <= currOpts.timeFrame) {
+            currOpts.sampleSize = currOpts.timeFrame + 60;
+        }
+        let timeStart: number;
+        let count = 0;
+        // const streamList = (await this.redis.xrange(this.getPostLogKey(pinfo.targetId), Date.now() - currOpts.sampleSize, '+'));
+        const streamList = (await this.redis.xrevrange(this.getPostLogKey(filters.targetId), '+', Date.now() - (currOpts.sampleSize * 1000))).reverse();
+        if (!streamList.length) return 0;
+        outter: for (const [ktm, contents] of streamList) {
+            if (!timeStart) {
+                timeStart = Number(ktm.split('-')[0]);
+            }
+            for (let i = 0; i < contents.length; i += 2) {
+                const k = contents[i];
+                const v = contents[i + 1];
+                if (typeof (filters as any)[k] !== 'undefined' && (filters as any)[k] !== v) continue outter;
+            }
+            count++;
+        }
+
+        let timeFrame = currOpts.timeFrame * 1000;
+        let sampledTimeWindow = (Date.now() - timeFrame);
+        if (currOpts.interpolate) {
+            sampledTimeWindow = (Date.now() - timeStart);
+            if (typeof currOpts.interpolate === 'number') {
+                sampledTimeWindow += currOpts.interpolate * 1000;
+            }
+        }
+        return count / (sampledTimeWindow / timeFrame);
+    }
+
+    async summaryDone(filters: Partial<PostActionDesc>, inOpts?: Partial<PerfMeasurementOptions>) {
+        const rmap = new Map<string, number>();
+        for (const targetId of this.postLog.keys()) {
+            const n = await this.avgDone({ targetId, ...filters }, inOpts);
+            rmap.set(targetId, n);
+        }
+        return rmap;
+    }
 }
 
 class TrackedGameLobby {
@@ -38,42 +253,172 @@ class TrackedGameLobby {
         if (previousInfo.status !== newLobbyInfo.status) return true;
         if (previousInfo.lobbyTitle !== newLobbyInfo.lobbyTitle) return true;
         if (previousInfo.hostName !== newLobbyInfo.hostName) return true;
-        if (previousInfo.slotsHumansTaken !== newLobbyInfo.slotsHumansTaken) return true;
-        if (previousInfo.slotsHumansTotal !== newLobbyInfo.slotsHumansTotal) return true;
+        if (newLobbyInfo.slots.length === 0) {
+            if (previousInfo.slotsHumansTaken !== newLobbyInfo.slotsHumansTaken) return true;
+            if (previousInfo.slotsHumansTotal !== newLobbyInfo.slotsHumansTotal) return true;
+        }
         if (!deepEqual(previousInfo.slots, newLobbyInfo.slots)) return true;
         return false;
     }
 
-    isClosedStatusConcluded() {
+    isClosedStatusConcluded(min: number = 25000, max?: number) {
         if (this.lobby.status === GameLobbyStatus.Open) return false;
         const tdiff = Date.now() - this.lobby.closedAt.getTime();
-        return tdiff > 20000;
+        return tdiff > min && (typeof max !== 'number' || tdiff <= max);
+    }
+}
+
+interface PostQueueOptions extends DefaultAddOptions {
+    lobbyId: number;
+    subscriptionId: number;
+    targetId: string;
+    targetChannelId: string;
+}
+
+type PostQueueElement = Partial<PostQueueOptions> & { run: RunFunction };
+
+class LobbyQueue {
+    protected _queue: PostQueueElement[] = [];
+
+    enqueue(run: RunFunction, options?: Partial<PostQueueOptions>) {
+        options = Object.assign({ priority: 0 }, options);
+        const element = {
+            ...options,
+            run
+        };
+        if (this.size && this._queue[this.size - 1].priority >= options.priority) {
+            this._queue.push(element);
+            return;
+        }
+        const index = lowerBound(this._queue, element, (a, b) => b.priority - a.priority);
+        this._queue.splice(index, 0, element);
+    }
+
+    dequeue() {
+        const item = this._queue.shift();
+        return item === null || item === void 0 ? void 0 : item.run;
+    }
+
+    filter(options: Readonly<Partial<PostQueueOptions>>) {
+        return this._queue
+            .filter((element) => {
+                for (const key of Object.keys(options)) {
+                    if (options[key] !== element[key]) return false;
+                }
+                return true;
+            })
+            .map(x => x.run)
+        ;
+    }
+
+    get size() {
+        return this._queue.length;
     }
 }
 
 export class LobbyReporterTask extends BotTask {
-    trackedLobbies = new Map<number, TrackedGameLobby>();
-    trackRules = new Map<number, DsGameLobbySubscription>();
+    readonly trackedLobbies = new Map<number, TrackedGameLobby>();
+    readonly trackRules = new Map<number, DsGameLobbySubscription>();
+    readonly postingQueue = new pQueue<LobbyQueue, PostQueueOptions>({
+        concurrency: 15,
+        queueClass: LobbyQueue,
+    });
+    readonly perf = new PosterPerformanceManager();
+    actionCountersLastFiveMin: Map<string, number>;
+    postCountersLastFiveMin: Map<string, number>;
 
     async reloadSubscriptions() {
         this.trackRules.clear();
         for (const rule of await this.conn.getRepository(DsGameLobbySubscription).find({
-            where: { enabled: true },
+            where: {
+                deletedAt: null,
+            },
         })) {
             this.trackRules.set(rule.id, rule);
         }
+    }
+
+    async removeSubscription(subscription: DsGameLobbySubscription) {
+        await this.conn.getRepository(DsGameLobbySubscription).update(subscription.id, {
+            deletedAt: new Date(),
+        });
+        this.trackRules.delete(subscription.id);
     }
 
     async load() {
         await this.flushMessages();
         await this.reloadSubscriptions();
         await this.restore();
+        await this.perf.load();
+        await this.refreshActionMetrics();
+
+        this.postingQueue.on('next', async () => {
+            await systemdNotifyWatchdog(30000);
+        });
+
+        await systemdNotifyWatchdog(0);
 
         setTimeout(this.update.bind(this), 1000).unref();
         setInterval(this.flushMessages.bind(this), 60000 * 3600).unref();
     }
 
     async unload() {
+        this.postingQueue.clear();
+        await this.postingQueue.onIdle();
+        await this.perf.close();
+    }
+
+    getPostingTargetName(targetDesc: DsGameLobbySubscription | DsGameLobbyMessage | { guildId?: string, userId?: string, channelId?: string }) {
+        let targetName = targetDesc.userId ?
+            `"${this.client.users.cache.get(String(targetDesc.userId))?.username}"` :
+            `"${this.client.guilds.cache.get(String(targetDesc.guildId))?.name}"`
+        ;
+        if (targetDesc.channelId) {
+            targetName += ` #${(this.client.channels.cache.get(String(targetDesc.channelId)) as TextChannel)?.name}`;
+        }
+        return `${targetName} (${targetDesc.guildId ?? targetDesc.userId})`;
+    }
+
+    /**
+     * @returns limits per one minute
+     */
+    getPostingLimits(targetDesc: DsGameLobbySubscription | DsGameLobbyMessage | { guildId?: string, userId?: string, channelId?: string }) {
+        let postLimit = 3;
+        let actionLimit = 7;
+        let subLimit = 5;
+        if (targetDesc.guildId) {
+            const guild = this.client.guilds.cache.get(String(targetDesc.guildId));
+            if (guild) {
+                postLimit = parseInt(Math.min(10, postLimit + guild.memberCount / 50).toFixed(0));
+                actionLimit = parseInt(Math.min(20, actionLimit + guild.memberCount / 50).toFixed(0));
+                subLimit = (Math.max(
+                    parseInt(Math.min(30, guild.memberCount * 30).toFixed(0)),
+                    subLimit
+                ));
+
+                if (this.client.owners.filter(x => x.id === guild.ownerID).length || guild.id === '271701880885870594') {
+                    postLimit = 70;
+                    actionLimit = 125;
+                    subLimit = 20;
+                }
+            }
+        }
+        return {
+            postLimit,
+            actionLimit,
+            subLimit,
+        };
+    }
+
+    @logIt({
+        level: 'verbose',
+        profTime: true,
+        when: 'both',
+    })
+    protected async refreshActionMetrics() {
+        this.actionCountersLastFiveMin = await this.perf.summaryDone({}, { timeFrame: 300, interpolate: 30 });
+        this.postCountersLastFiveMin = await this.perf.summaryDone({ actionType: 'post' }, { timeFrame: 300, interpolate: 30 });
+        setTimeout(this.refreshActionMetrics.bind(this), 30000).unref();
     }
 
     @logIt({
@@ -94,6 +439,7 @@ export class LobbyReporterTask extends BotTask {
 
     @logIt({
         level: 'verbose',
+        profTime: true,
     })
     protected async restore() {
         const lobbyMessages = await this.conn.getRepository(DsGameLobbyMessage)
@@ -108,7 +454,7 @@ export class LobbyReporterTask extends BotTask {
         const freshLobbyInfo = await this.conn.getCustomRepository(S2GameLobbyRepository)
             .prepareDetailedSelect()
             .andWhere('lobby.id IN (:trackedLobbies)', {
-                'trackedLobbies': lobbyMessages.map(x => x.lobby.id),
+                'trackedLobbies': Array.from(new Set(lobbyMessages.map(x => x.lobby.id))),
             })
             .getMany()
         ;
@@ -120,26 +466,48 @@ export class LobbyReporterTask extends BotTask {
 
         for (const lobbyMsg of lobbyMessages) {
             const trackedLobby = this.trackedLobbies.get(lobbyMsg.lobby.id);
-            trackedLobby.postedMessages.add({ msg: lobbyMsg });
+            trackedLobby.postedMessages.add({
+                msg: lobbyMsg,
+                contentUpdatedAt: lobbyMsg.updatedAt,
+                outdatedSince: trackedLobby.lobby.closedAt ?? null,
+                subscriptionId: lobbyMsg.rule?.id,
+            });
             lobbyMsg.lobby = trackedLobby.lobby;
         }
     }
 
     async update() {
         this.running = true;
-        while (await this.waitUntilReady()) {
-            await this.updateTrackedLobbies();
-            await this.discoverNewLobbies();
-            await this.evaluateCandidates();
 
-            await sleepUnless(1000, () => !this.client.doShutdown);
-        }
+        await Promise.all([
+            this.examineLobbiesTask(),
+            this.updateLobbiesTask(),
+        ]);
+
         this.running = false;
     }
 
-    @logIt({
-        level: 'verbose',
-    })
+    async examineLobbiesTask() {
+        while (await this.waitUntilReady()) {
+            await this.discoverNewLobbies();
+            await this.evaluateCandidates();
+            await sleepUnless(1000, () => !this.client.doShutdown);
+            await this.refreshTrackedLobbies();
+            await sleepUnless(500, () => !this.client.doShutdown);
+        }
+    }
+
+    async updateLobbiesTask() {
+        await sleepUnless(1000, () => !this.client.doShutdown);
+        while (await this.waitUntilReady()) {
+            await this.updateTrackedLobbies();
+            if (this.postingQueue.size === 0) {
+                await systemdNotifyWatchdog(30000);
+            }
+            await sleepUnless(1500, () => !this.client.doShutdown);
+        }
+    }
+
     protected async discoverNewLobbies() {
         const newLobbiesInfo = await this.conn.getCustomRepository(S2GameLobbyRepository)
             .prepareDetailedSelect()
@@ -191,47 +559,71 @@ export class LobbyReporterTask extends BotTask {
                 )
             ) &&
             (!sub.variant || sub.variant === s2gm.mapVariantMode) &&
-            (!sub.regionId || sub.regionId === s2gm.regionId)
+            ((!sub.regionId && s2gm.regionId !== GameRegion.CN) || sub.regionId === s2gm.regionId)
         ) {
             trackedLobby.candidates.add(sub);
-            logger.info(`New lobby ${GameRegion[s2gm.regionId]}#${s2gm.bnetRecordId} for "${s2gm.map?.name}". subId=${sub.id}`);
+            logger.info(`New lobby ${s2gm.globalId} "${s2gm.map?.name}" sub: ${sub.id}`);
         }
     }
 
     protected async evaluateCandidates() {
-        const pendingCandidates = Array.from(this.trackedLobbies.entries()).filter(([lobId, trackedLobby]) => {
-            return this.trackedLobbies.get(lobId).candidates.size > 0;
-        });
-        if (!pendingCandidates.length) return;
-
-        logger.verbose(`Pending candidates, count=${pendingCandidates.length}`);
-        await pMap(pendingCandidates, async ([lobId, trackedLobby]) => {
-            const trackLob = this.trackedLobbies.get(lobId);
-            for (const currCand of trackedLobby.candidates) {
-                const timeDiff = (Date.now() - trackLob.lobby.createdAt.getTime()) / 1000;
-                const humanOccupiedSlots = trackLob.lobby.getSlots({ kinds: [S2GameLobbySlotKind.Human] });
-                if (
-                    (currCand.timeDelay && currCand.timeDelay > timeDiff) &&
-                    (currCand.humanSlotsMin && currCand.humanSlotsMin > humanOccupiedSlots.length)
-                ) {
-                    continue;
-                }
-                const result = await this.postSubscribedLobby(trackedLobby, currCand);
-                if (result !== false) {
-                    trackedLobby.candidates.delete(currCand);
-                }
+        const currSubs = Array.from(this.trackedLobbies.values())
+            .filter((trackedLobby) => trackedLobby.candidates.size > 0)
+            .map((trackedLobby) => {
+                return Array.from(trackedLobby.candidates).map<[TrackedGameLobby, DsGameLobbySubscription]>(x => [trackedLobby, x]);
+            })
+            .flat(1)
+        ;
+        const validatedSubs = currSubs.filter(([trackedLobby, candidate]) => {
+            const timeDiff = (Date.now() - trackedLobby.lobby.createdAt.getTime()) / 1000;
+            // hold on a little if the lobby was just made and there's no preview yet
+            if (!trackedLobby.lobby.slotsUpdatedAt && timeDiff <= 2000) {
+                return false;
             }
-        }, {
-            concurrency: 6,
+            const humanOccupiedSlots = trackedLobby.lobby.getSlots({ kinds: [S2GameLobbySlotKind.Human] });
+            if (
+                (candidate.timeDelay && candidate.timeDelay > timeDiff) &&
+                (candidate.humanSlotsMin && candidate.humanSlotsMin > humanOccupiedSlots.length)
+            ) {
+                return false;
+            }
+            return true;
         });
+
+        logger.debug(`evaluated current subscriptions: existing: ${currSubs.length} validated: ${validatedSubs.length}`);
+        if (!validatedSubs.length) return;
+
+        let scheduledPostCount = 0;
+        for (const [trackedLobby, cSub] of validatedSubs) {
+            if (this.perf.avgScheduledPerSecond(cSub.targetId, cSub.targetChannelId, 'post') >= 5) continue;
+            const limits = this.getPostingLimits(cSub);
+            const targetPostsRecentTotal = (this.postCountersLastFiveMin.get(cSub.targetId) ?? 0);
+            if (targetPostsRecentTotal > (limits.postLimit * 5)) {
+                logger.warn(`target ${this.getPostingTargetName(cSub)} reached posting score: ${targetPostsRecentTotal} current limit: ${(limits.postLimit * 5)}`);
+                continue;
+            }
+
+            trackedLobby.candidates.delete(cSub);
+            this.perf.scheduleAction(cSub.targetId, cSub.targetChannelId, 'post');
+            this.postingQueue.add(async () => {
+                if (!this.trackedLobbies.has(trackedLobby.lobby.id)) {
+                    logger.warn(`Pending lobby ${trackedLobby.lobby.globalId} with candidates removed from tracking list prematurely?`);
+                    return;
+                }
+                await this.updateSubcribedLobby(trackedLobby, cSub);
+            }, {
+                lobbyId: trackedLobby.lobby.id,
+                subscriptionId: cSub.id,
+                targetId: cSub.targetId,
+                targetChannelId: cSub.targetChannelId,
+            });
+            scheduledPostCount += 1;
+        }
+
+        logger.verbose(`scheduled ${scheduledPostCount} lobbies to post from ${validatedSubs.length} available`);
     }
 
-    @logIt({
-        level: 'verbose',
-    })
-    protected async updateTrackedLobbies() {
-        if (!this.trackedLobbies.size) return;
-
+    protected async refreshTrackedLobbies() {
         // filter to those which meet at least one condition:
         // - have been already posted
         // - have a matching subscription which did not yet meet its critera
@@ -257,11 +649,15 @@ export class LobbyReporterTask extends BotTask {
         ;
         for (const lsnapshot of lobbyDataSnapshot) {
             const trackedLobby = this.trackedLobbies.get(lsnapshot.id);
+            if (!trackedLobby) continue;
 
-            // remove closed lobbies if they haven't been posted - there's no message to update
+            // remove closed lobbies if they haven't been posted, or they aren't going to be
             if (
-                lsnapshot.status !== GameLobbyStatus.Open &&
-                trackedLobby.postedMessages.size === 0
+                trackedLobby.postedMessages.size === 0 &&
+                (
+                    (trackedLobby.candidates.size === 0 && lsnapshot.status !== GameLobbyStatus.Open) ||
+                    (trackedLobby.candidates.size > 0 && trackedLobby.isClosedStatusConcluded())
+                )
             ) {
                 this.trackedLobbies.delete(lsnapshot.id);
                 continue;
@@ -280,7 +676,7 @@ export class LobbyReporterTask extends BotTask {
         // also include closed lobbies which have't actually changed but require update of a post for other reasons
         // such as deleting messages after X seconds from when they've been orginally closed
         const outdatedLobIds = affectedLobIds.concat(
-            trackedLobbiesRelevant.filter(x => x.isClosedStatusConcluded()).map(x => x.lobby.id)
+            trackedLobbiesRelevant.filter(x => x.isClosedStatusConcluded(20000, 30000)).map(x => x.lobby.id)
         );
 
         logger.verbose(`Lobbies: affected count=${affectedLobIds.length}, outdated count=${outdatedLobIds.length}`);
@@ -293,27 +689,95 @@ export class LobbyReporterTask extends BotTask {
             })
             .getMany()
         ;
-        let updateCount = 0;
-        await pMap(freshLobbyInfo, async lobbyInfo => {
-            const trackedLobby = this.trackedLobbies.get(lobbyInfo.id);
-            if (!trackedLobby) return;
-            const needsUpdate = trackedLobby.updateInfo(lobbyInfo);
-            if (trackedLobby.postedMessages.size) {
-                if (needsUpdate || trackedLobby.isClosedStatusConcluded()) {
-                    ++updateCount;
-                    await this.updateLobbyMessage(trackedLobby);
-                }
-                if (!trackedLobby.postedMessages.size) {
-                    logger.debug(`Stopped tracking ${GameRegion[lobbyInfo.regionId]}#${lobbyInfo.bnetRecordId} candidates=${trackedLobby.candidates.size}`);
+
+        for (const freshLobbyData of freshLobbyInfo) {
+            const trackedLobby = this.trackedLobbies.get(freshLobbyData.id);
+            if (!trackedLobby) continue;
+            const hasNewData = trackedLobby.updateInfo(freshLobbyData);
+            if (hasNewData) {
+                const tnow = new Date();
+                for (const lobMsg of trackedLobby.postedMessages.values()) {
+                    if (!lobMsg.outdatedSince) {
+                        lobMsg.outdatedSince = tnow;
+                    }
                 }
             }
-            if (trackedLobby.isClosedStatusConcluded() && !trackedLobby.postedMessages.size) {
-                this.trackedLobbies.delete(lobbyInfo.id);
-            }
-        }, {
-            concurrency: 5,
-        });
-        logger.verbose(`Updated tracked lobbies count=${updateCount} (total=${this.trackedLobbies.size})`);
+        }
+    }
+
+    protected async updateTrackedLobbies() {
+        const outdatedList = Array.from(this.trackedLobbies.values())
+            .map(trackedLobby => {
+                if (!trackedLobby.postedMessages.size) return;
+                let outdatedMessages = Array.from(trackedLobby.postedMessages);
+                if (!trackedLobby.isClosedStatusConcluded()) {
+                    outdatedMessages = outdatedMessages.filter(x => x.outdatedSince);
+                }
+                if (!outdatedMessages.length) return;
+                return outdatedMessages.map<[TrackedGameLobby, PostedGameLobby]>(postedMsg => {
+                    return [trackedLobby, postedMsg];
+                });
+            })
+            .filter(x => typeof x !== 'undefined').flat(1)
+            .filter(([trackedLobby, postedMsg]) => {
+                if (
+                    !trackedLobby.isClosedStatusConcluded() &&
+                    trackedLobby.lobby.closedAt &&
+                    postedMsg.closedAt?.getTime() === trackedLobby.lobby.closedAt.getTime()
+                ) {
+                    logger.verbose(`skipping closedAt msg: ${postedMsg.msg.messageId}`);
+                    return false;
+                }
+                return true;
+            })
+            .sort((a, b) => {
+                if (a[0].lobby.closedAt && b[0].lobby.closedAt) {
+                    return a[0].lobby.closedAt.getTime() - b[0].lobby.closedAt.getTime();
+                }
+                else if (a[0].lobby.closedAt) {
+                    return -1;
+                }
+                else if (b[0].lobby.closedAt) {
+                    return 1;
+                }
+                return (b[1].contentUpdatedAt.getTime() - a[1].contentUpdatedAt.getTime());
+            })
+        ;
+
+        const targetIds = Array.from(new Set(outdatedList.map(x => x[1].msg.targetId)));
+        const targetPerfList = await Promise.all(targetIds.map<Promise<[string, number]>>(async x => {
+            const n = await this.perf.avgDone({ targetId: x, actionType: 'patch' }, {
+                timeFrame: 120,
+                interpolate: 30,
+            });
+            return [x, n];
+        }));
+        const targetPerfMap = new Map(targetPerfList);
+        // logger.verbose(`target performance`, targetPerfList.sort((a, b) => b[1] - a[1]));
+
+        let scheduledPostCount = 0;
+        for (const [trackedLobby, postedMsg] of outdatedList) {
+            if (this.perf.avgScheduledPerSecond(postedMsg.msg.targetId, postedMsg.msg.targetChannelId, 'patch') >= 5) continue;
+            if (this.postingQueue.sizeBy({ lobbyId: trackedLobby.lobby.id, targetChannelId: postedMsg.msg.targetChannelId }) >= 1) continue;
+            const limits = this.getPostingLimits(postedMsg.msg);
+            if (targetPerfMap.get(postedMsg.msg.targetId) >= (limits.actionLimit * 2.0)) continue;
+
+            this.perf.scheduleAction(postedMsg.msg.targetId, postedMsg.msg.targetChannelId, 'patch');
+            this.postingQueue.add(async () => {
+                await this.updateSubcribedLobby(trackedLobby, postedMsg);
+                if (trackedLobby.postedMessages.size <= 0 && trackedLobby.isClosedStatusConcluded()) {
+                    this.trackedLobbies.delete(trackedLobby.lobby.id);
+                }
+            }, {
+                lobbyId: trackedLobby.lobby.id,
+                subscriptionId: postedMsg.subscriptionId ?? 0,
+                targetId: postedMsg.msg.targetId,
+                targetChannelId: postedMsg.msg.targetChannelId,
+            });
+            scheduledPostCount += 1;
+        }
+
+        logger.verbose(`tlobs: ${this.trackedLobbies.size} outdated: ${outdatedList.length} scheduled: ${scheduledPostCount} queued total: ${this.postingQueue.size}`);
     }
 
     /**
@@ -376,59 +840,106 @@ export class LobbyReporterTask extends BotTask {
         }
     }
 
-    protected async postSubscribedLobby(trackedLobby: TrackedGameLobby, rule: DsGameLobbySubscription) {
-        let chan: TextChannel | DMChannel | boolean;
-        chan = await this.fetchDestChannel(rule);
-        if (typeof chan === 'boolean') {
-            if (chan === true) {
-                logger.warn(`shoud delete subscription id=${rule.id} can't get the channel`);
-                // TODO: re-enable after testing
-                // await this.conn.getRepository(DsGameLobbySubscription).update(rule.id, { enabled: false });
-                // this.trackRules.delete(rule.id);
-            }
-            return;
+    protected async updateSubcribedLobby(trackedLobby: TrackedGameLobby, inp: DsGameLobbySubscription | PostedGameLobby) {
+        let plob: PostedGameLobby;
+        let adesc: PostActionDesc;
+        if (inp instanceof DsGameLobbySubscription) {
+            adesc = {
+                targetId: inp.targetId,
+                targetChannelId: inp.targetChannelId,
+                actionType: 'post',
+            };
+            // logger.debug(`posting ${trackedLobby.lobby.globalId} (${trackedLobby.lobby.status}) in ${inp.discordId}`);
+            plob = await this.postSubscribedLobby(trackedLobby, inp);
         }
         else {
-            return this.postTrackedLobby(chan, trackedLobby, rule);
+            adesc = {
+                targetId: inp.msg.guildId ? String(inp.msg.guildId) : String(inp.msg.userId),
+                targetChannelId: String(inp.msg.channelId),
+                actionType: 'patch',
+            };
+            plob = inp;
+            const secDiff = differenceInSeconds(Date.now(), inp.outdatedSince);
+            logger.debug(`updating ${trackedLobby.lobby.globalId} (${trackedLobby.lobby.status}) in ${this.getPostingTargetName(inp.msg)} (${secDiff}s)`);
+            await this.editLobbyMessage(trackedLobby, inp);
+        }
+        if (plob) {
+            await this.perf.doAction(adesc, trackedLobby.lobby.globalId, plob.subscriptionId ?? 0);
+            return plob;
         }
     }
 
-    @logIt({
-        argsDump: (chan: TextChannel | DMChannel, trackedLobby: TrackedGameLobby) => [
-            trackedLobby.lobby.id,
-            trackedLobby.lobby.map.name,
-            trackedLobby.lobby.hostName,
-            trackedLobby.lobby.slotsHumansTaken,
-            trackedLobby.lobby.slots.length
-        ],
-        level: 'debug',
-    })
-    async postTrackedLobby(chan: TextChannel | DMChannel, trackedLobby: TrackedGameLobby, subscription?: DsGameLobbySubscription) {
-        const gameLobMessage = new DsGameLobbyMessage();
+    protected async postSubscribedLobby(trackedLobby: TrackedGameLobby, subscription: DsGameLobbySubscription) {
+        const chan = await this.fetchDestChannel(subscription);
+        if (chan === true) {
+            logger.info(`Can't fetch the channel=${subscription.discordId} ; deleted subscription id=${subscription.id}`);
+            await this.removeSubscription(subscription);
+        }
+        else if (chan === false) {
+            logger.info(`Can't fetch the channel=${subscription.discordId} ; lobby not posted id=${subscription.id}`);
+        }
+        else {
+            return this.postTrackedLobby(chan, trackedLobby, subscription);
+        }
+    }
+
+    async postTrackedLobby(chan: TextChannel | DMChannel, trackedLobby: TrackedGameLobby, subscription: DsGameLobbySubscription) {
+        const gameLobMessage = DsGameLobbyMessage.create();
         gameLobMessage.lobby = trackedLobby.lobby;
         gameLobMessage.rule = subscription ?? null;
+        const lobbyClosedAt = trackedLobby.lobby.closedAt;
         const lbEmbed = embedGameLobby(trackedLobby.lobby, subscription);
 
         try {
-            const msg = await chan.send('', { embed: lbEmbed }) as Message;
+            const msg = await chan.send({ embed: lbEmbed });
             gameLobMessage.messageId = msg.id;
+
+            if (chan instanceof TextChannel) {
+                gameLobMessage.guildId = chan.guild.id;
+            }
+            else if (chan instanceof DMChannel) {
+                gameLobMessage.userId = chan.recipient.id;
+            }
+            else {
+                throw new Error(`unsupported channel type=${(<any>chan).type}`);
+            }
+            gameLobMessage.channelId = chan.id;
+            const lobbyMsg: PostedGameLobby = {
+                msg: gameLobMessage,
+                contentUpdatedAt: msg.createdAt,
+                outdatedSince: null,
+                closedAt: lobbyClosedAt,
+                subscriptionId: subscription?.id,
+            };
+            if (
+                lobbyMsg.closedAt &&
+                trackedLobby.isClosedStatusConcluded() &&
+                (
+                    !subscription || (
+                        (trackedLobby.lobby.status === GameLobbyStatus.Started && !subscription.deleteMessageStarted) ||
+                        (trackedLobby.lobby.status === GameLobbyStatus.Abandoned && !subscription.deleteMessageAbandoned) ||
+                        (trackedLobby.lobby.status === GameLobbyStatus.Unknown && !subscription.deleteMessageAbandoned)
+                    )
+                )
+            ) {
+                logger.debug(`COULD RELEASE EARLY ${trackedLobby.lobby.globalId} ${trackedLobby.lobby.status} ${this.getPostingTargetName(gameLobMessage)}`);
+                // gameLobMessage.completed = true;
+            }
+            await this.conn.getRepository(DsGameLobbyMessage).insert(gameLobMessage);
+            if (!gameLobMessage.completed) {
+                trackedLobby.postedMessages.add(lobbyMsg);
+            }
+
+            return lobbyMsg;
         }
         catch (err) {
             if (err instanceof DiscordAPIError) {
                 if (subscription && (err.code === DiscordErrorCode.MissingPermissions || err.code === DiscordErrorCode.MissingAccess)) {
-                    logger.error(`Failed to send message for lobby #${trackedLobby.lobby.id}, sub #${subscription.id}`, err.message);
-                    const tdiff = Date.now() - subscription.createdAt.getTime();
-                    if (tdiff >= 1000 * 60 * 10) {
-                        logger.warn(`Deleting subscription #${subscription.id}`);
-                        await this.conn.getRepository(DsGameLobbySubscription).update(subscription.id, { enabled: false });
-                        this.trackRules.delete(subscription.id);
-                    }
-                    else {
-                        return false;
-                    }
+                    logger.warn(`Failed to send message, removing subscription - lobby: ${trackedLobby.lobby.globalId} sub: ${subscription.id} err: ${err.message}`);
+                    await this.removeSubscription(subscription);
                 }
                 else {
-                    logger.error(`Failed to send message for lobby #${trackedLobby.lobby.id}`, err, lbEmbed, subscription, trackedLobby.lobby);
+                    logger.error(`Failed to send message, lobby: ${trackedLobby.lobby.globalId} sub: ${subscription.id}`, err, lbEmbed, subscription, trackedLobby.lobby);
                 }
                 return;
             }
@@ -436,21 +947,6 @@ export class LobbyReporterTask extends BotTask {
                 throw err;
             }
         }
-
-        if (chan instanceof TextChannel) {
-            gameLobMessage.guildId = chan.guild.id;
-        }
-        else if (chan instanceof DMChannel) {
-            gameLobMessage.userId = chan.recipient.id;
-        }
-        else {
-            throw new Error(`unsupported channel type=${(<any>chan).type}`);
-        }
-        gameLobMessage.channelId = chan.id;
-        await this.conn.getRepository(DsGameLobbyMessage).insert(gameLobMessage);
-        trackedLobby.postedMessages.add({ msg: gameLobMessage, });
-
-        return true;
     }
 
     async bindMessageWithLobby(msg: Message, lobbyId: number) {
@@ -475,9 +971,9 @@ export class LobbyReporterTask extends BotTask {
         }
 
         const chan = msg.channel;
-        const gameLobMessage = new DsGameLobbyMessage();
-        gameLobMessage.messageId = msg.id;
+        const gameLobMessage = DsGameLobbyMessage.create();
         gameLobMessage.lobby = trackedLobby.lobby;
+        gameLobMessage.messageId = msg.id;
         if (chan instanceof TextChannel) {
             gameLobMessage.guildId = chan.guild.id;
         }
@@ -490,35 +986,36 @@ export class LobbyReporterTask extends BotTask {
         gameLobMessage.channelId = chan.id;
         await this.conn.getRepository(DsGameLobbyMessage).insert(gameLobMessage);
 
-        const lobbyMsg: PostedGameLobby = { msg: gameLobMessage };
+        const lobbyMsg: PostedGameLobby = {
+            msg: gameLobMessage,
+            contentUpdatedAt: new Date(),
+            outdatedSince: null,
+        };
         trackedLobby.postedMessages.add(lobbyMsg);
         await this.editLobbyMessage(trackedLobby, lobbyMsg);
 
         return trackedLobby;
     }
 
-    @logIt()
     protected async releaseLobbyMessage(trackedLobby: TrackedGameLobby, lobbyMsg: PostedGameLobby) {
-        logger.debug(`released lobby msg id=${lobbyMsg.msg.messageId}`);
-        await this.conn.getRepository(DsGameLobbyMessage).update(lobbyMsg.msg.id, { updatedAt: new Date(), completed: true });
         trackedLobby.postedMessages.delete(lobbyMsg);
+        await this.conn.getRepository(DsGameLobbyMessage).update(
+            this.conn.getRepository(DsGameLobbyMessage).getId(lobbyMsg.msg),
+            { updatedAt: new Date(), completed: true }
+        );
     }
 
-    @logIt()
     protected async editLobbyMessage(trackedLobby: TrackedGameLobby, lobbyMsg: PostedGameLobby) {
-        const lbEmbed = embedGameLobby(trackedLobby.lobby, lobbyMsg.msg.rule);
         try {
             const chan = await this.fetchDestChannel(lobbyMsg.msg);
             if (typeof chan === 'boolean') {
                 await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                 return;
             }
-            const msg = await chan.messages.fetch(String(lobbyMsg.msg.messageId));
-            if (!msg) {
-                await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
-                return;
-            }
 
+            const lbEmbed = embedGameLobby(trackedLobby.lobby, lobbyMsg.msg.rule);
+            lobbyMsg.closedAt = trackedLobby.lobby.closedAt;
+            lobbyMsg.outdatedSince = null;
             if (
                 lobbyMsg.msg.rule && (
                     (trackedLobby.lobby.status === GameLobbyStatus.Started && lobbyMsg.msg.rule.deleteMessageStarted) ||
@@ -528,7 +1025,7 @@ export class LobbyReporterTask extends BotTask {
             ) {
                 if (trackedLobby.isClosedStatusConcluded()) {
                     try {
-                        await msg.delete();
+                        await chan.messages.delete(String(lobbyMsg.msg.messageId));
                         await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                     }
                     catch (err) {
@@ -544,46 +1041,34 @@ export class LobbyReporterTask extends BotTask {
                     }
                 }
                 else {
-                    await msg.edit('', { embed: lbEmbed });
+                    const msg = (new Message(this.client, {
+                        id: String(lobbyMsg.msg.messageId),
+                    }, chan));
+                    await msg.edit({ embed: lbEmbed });
                 }
-                return;
             }
-
-            await msg.edit('', { embed: lbEmbed });
-            if (trackedLobby.lobby.status !== GameLobbyStatus.Open) {
-                await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
+            else {
+                const msg = (new Message(this.client, {
+                    id: String(lobbyMsg.msg.messageId),
+                }, chan));
+                await msg.edit({ embed: lbEmbed });
+                if (trackedLobby.lobby.status !== GameLobbyStatus.Open) {
+                    await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
+                }
             }
         }
         catch (err) {
             if (err instanceof DiscordAPIError) {
-                if (err.code === DiscordErrorCode.UnknownMessage || err.code === DiscordErrorCode.MissingAccess) {
+                if (err.code === DiscordErrorCode.UnknownMessage || err.code === DiscordErrorCode.MissingAccess || err.code === DiscordErrorCode.UnknownChannel) {
                     await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                     return;
                 }
-                logger.error(`Failed to update message for lobby #${trackedLobby.lobby.id}, msgid=${lobbyMsg.msg.messageId}`, err, lbEmbed, lobbyMsg.msg);
+                logger.error(`Failed to update message for lobby ${trackedLobby.lobby.globalId}, msgid=${lobbyMsg.msg.messageId}`, err, lobbyMsg.msg);
             }
             else {
                 throw err;
             }
         }
-    }
-
-    @logIt({
-        argsDump: (trackedLobby: TrackedGameLobby) => [
-            trackedLobby.lobby.id,
-            trackedLobby.lobby.map.name,
-            trackedLobby.lobby.hostName,
-            trackedLobby.lobby.slotsHumansTaken,
-            trackedLobby.lobby.slots.length
-        ],
-        level: 'debug',
-    })
-    protected async updateLobbyMessage(trackedLobby: TrackedGameLobby) {
-        const pendingPosts: Promise<void>[] = [];
-        for (const lobbyMsg of trackedLobby.postedMessages) {
-            pendingPosts.push(this.editLobbyMessage(trackedLobby, lobbyMsg));
-        }
-        await Promise.all(pendingPosts);
     }
 }
 
@@ -607,7 +1092,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Me
     }, cfg);
 
     const em: MessageEmbedOptions = {
-        title: s2gm.map?.name ?? `#${s2gm.mapBnetId}`,
+        title: s2gm.map?.name ?? battleMapLink(s2gm.regionId, s2gm.mapBnetId),
         url: `https://sc2arcade.com/lobby/${s2gm.regionId}/${s2gm.bnetBucketId}/${s2gm.bnetRecordId}`,
         fields: [],
         timestamp: s2gm.createdAt,
@@ -617,7 +1102,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Me
 
     if (cfg.showThumbnail && s2gm.map) {
         em.thumbnail = {
-            url: `http://static.sc2arcade.com/dimg/${s2gm.map.iconHash}.jpg?region=${GameRegion[s2gm.regionId].toLowerCase()}`,
+            url: `https://static.sc2arcade.com/dimg/${s2gm.map.iconHash}.jpg?region=${GameRegion[s2gm.regionId].toLowerCase()}`,
         };
     }
 
@@ -677,7 +1162,7 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Me
     if (s2gm.extModBnetId) {
         em.fields.push({
             name: `Extension mod`,
-            value: s2gm.extMod?.name ?? `#${s2gm.extModBnetId}`,
+            value: s2gm.extMod?.name ?? battleMapLink(s2gm.regionId, s2gm.extModBnetId),
             inline: false,
         });
     }
@@ -821,8 +1306,8 @@ function embedGameLobby(s2gm: S2GameLobby, cfg?: Partial<LobbyEmbedOptions>): Me
         });
     }
 
-    let leftPlayers = s2gm.getLeavers();
-    if (cfg.showLeavers || s2gm.status !== GameLobbyStatus.Started) {
+    if (s2gm.joinHistory?.length && (cfg.showLeavers || s2gm.status !== GameLobbyStatus.Started)) {
+        let leftPlayers = s2gm.getLeavers();
         if (!cfg.showLeavers) {
             leftPlayers = leftPlayers.filter(x => (Date.now() - x.leftAt.getTime()) <= 40000);
         }

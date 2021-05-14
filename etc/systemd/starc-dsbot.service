@@ -4,8 +4,8 @@ Wants=network-online.target mariadb.service
 Requires=mariadb.service
 After=network-online.target mariadb.service
 PartOf=mariadb.service
-StartLimitIntervalSec=300
-StartLimitBurst=10
+StartLimitIntervalSec=900
+StartLimitBurst=25
 
 [Service]
 Type=notify
@@ -17,8 +17,10 @@ KillMode=process
 Restart=on-failure
 RestartPreventExitStatus=255
 User=sc2arcade
-TimeoutSec=10
-RestartSec=5s
+TimeoutStartSec=20s
+TimeoutStopSec=10s
+RestartSec=10s
+WatchdogSec=60s
 FinalKillSignal=SIGQUIT
 
 [Install]

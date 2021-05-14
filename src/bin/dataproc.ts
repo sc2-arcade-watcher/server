@@ -81,6 +81,7 @@ class DataProc {
                     // offset: item.position.resumingOffset,
                     offset: 0,
                 },
+                skipMissing: true,
             });
             this.feedCheckpointMeta.set(name, {
                 resumeOffsetUpdatedAt: new Date(),

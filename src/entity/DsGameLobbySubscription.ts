@@ -1,7 +1,9 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, ManyToOne, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { S2Region } from './S2Region';
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 export class DsGameLobbySubscription {
     @PrimaryGeneratedColumn()
     id: number;
@@ -11,6 +13,12 @@ export class DsGameLobbySubscription {
 
     @UpdateDateColumn()
     updatedAt: Date;
+
+    @Column({
+        nullable: true,
+    })
+    @Index('deleted_at_idx')
+    deletedAt: Date;
 
     @Column({
         default: true,
@@ -88,4 +96,16 @@ export class DsGameLobbySubscription {
         default: false,
     })
     deleteMessageAbandoned: boolean;
+
+    get targetId() {
+        return this.userId ? String(this.userId) : String(this.guildId);
+    }
+
+    get targetChannelId() {
+        return this.userId ? String(this.userId) : String(this.channelId);
+    }
+
+    get discordId() {
+        return this.userId ? `${this.userId}` : `${this.guildId}/${this.channelId}`;
+    }
 }

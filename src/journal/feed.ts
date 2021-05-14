@@ -16,6 +16,7 @@ export interface JournalFeedOptios {
     // endCursor?: JournalFeedCursor;
     timeout?: number;
     follow?: boolean;
+    skipMissing?: boolean;
 }
 
 export class JournalFeed {
@@ -28,8 +29,10 @@ export class JournalFeed {
     protected rbuff: Buffer;
     protected dataTimeout: NodeJS.Timer;
     protected tailProc: ChildProcessByStdio<Writable, Readable, Readable>;
+    protected feedWaitProc: ChildProcessByStdio<Writable, Readable, Readable>;;
     protected sessionFileList: number[];
     private waitingForData = false;
+    private waitingForFeed = false;
     private closed = false;
     private firstRead = true;
     public readonly options: JournalFeedOptios;
@@ -42,6 +45,7 @@ export class JournalFeed {
         this.options = Object.assign({
             timeout: -1,
             follow: true,
+            skipMissing: false,
         } as JournalFeedOptios, options);
     }
 
@@ -63,6 +67,9 @@ export class JournalFeed {
         this.closed = true;
 
         this.closeCurrentStream();
+        if (this.feedWaitProc && !this.feedWaitProc.killed) {
+            this.feedWaitProc.kill('SIGTERM');
+        }
     }
 
     protected closeCurrentStream(destroyReadStream: boolean = true) {
@@ -97,6 +104,9 @@ export class JournalFeed {
     }
 
     protected async waitForFeed(timeout = 3600) {
+        if (this.feedWaitProc) {
+            throw new Error(`feedWaitProc already in use`);
+        }
         logger.verbose(`waiting for feed, src: ${this.name} timeout: ${timeout}`);
         const args = [
             '--event', 'create,modify',
@@ -106,14 +116,15 @@ export class JournalFeed {
         if (timeout > 0) {
             args.push('--timeout', String(timeout));
         }
-        const inotifyWaitProc = spawn(
+        this.feedWaitProc = spawn(
             'inotifywait',
             args.concat(this.baseDir),
             {
                 stdio: ['pipe', 'pipe', 'pipe'],
             }
         );
-        const pRes = await spawnWaitExit(inotifyWaitProc, { captureStdout: true, captureStderr: true });
+        const pRes = await spawnWaitExit(this.feedWaitProc, { captureStdout: true, captureStderr: true });
+        this.feedWaitProc = void 0;
         logger.verbose(`waiting for feed completed, src: ${this.name} timeout: ${timeout}`);
         if (pRes.rcode === 0) {
             return true;
@@ -124,7 +135,7 @@ export class JournalFeed {
         }
         else {
             // killed
-            if (pRes.signal === 'SIGINT') {
+            if (pRes.signal === 'SIGINT' || pRes.signal === 'SIGTERM') {
                 return false;
             }
 
@@ -314,6 +325,7 @@ export class JournalFeed {
      * @param timeout
      */
     async read(timeout: number = 500): Promise<string | false | undefined> {
+        if (this.waitingForFeed) return;
         if (this.closed) {
             logger.warn(`attempting to read from closed feed, src=${this.name}`);
             return;
@@ -328,12 +340,29 @@ export class JournalFeed {
             const exists = await fs.pathExists(this.currFilename);
             if (!exists) {
                 await this.refreshFileList();
-                logger.error(`feed file doesn't exist ${this.currFilename}`, this.sessionFileList);
-                throw new Error(`feed file doesn't exist ${this.currFilename}`);
+                if (this.options.skipMissing) {
+                    logger.warn(`feed file doesn't exist ${this.currFilename}, attempting to advance..`);
+                    const newCursorSession = this.sessionFileList.find(x => x >= this.cursor.session);
+                    if (newCursorSession === void 0) {
+                        this.waitingForFeed = true;
+                        setImmediate(async () => {
+                            await this.waitForFeed(0);
+                            this.waitingForFeed = false;
+                        });
+                        return;
+                    }
+                    logger.info(`feed advancing from ${this.currFilename} to ${newCursorSession}`);
+                    this.cursor.session = newCursorSession;
+                    this.cursor.offset = 0;
+                }
+                else {
+                    logger.error(`feed file doesn't exist ${this.currFilename}`, this.sessionFileList);
+                    throw new Error(`feed file doesn't exist ${this.currFilename}`);
+                }
             }
 
             this.firstRead = false;
-            if (this.options.initCursor.offset !== 0) {
+            if (this.cursor.session === this.options.initCursor.session && this.options.initCursor.offset !== 0) {
                 const headProc = spawn('head', [
                     '--lines',
                     '1',
@@ -344,14 +373,6 @@ export class JournalFeed {
                     throw new Error(`read head n1 rcode=${headResult.rcode}`);
                 }
                 return headResult.stdout.trimRight();
-            }
-            else if (this.options.initCursor.session === 0) {
-                await this.refreshFileList();
-                if (!this.sessionFileList.length) {
-                    logger.warn(`feed source is empty, src=${this.name}`);
-                    return;
-                }
-                this.cursor.session = this.sessionFileList[0];
             }
         }
 
