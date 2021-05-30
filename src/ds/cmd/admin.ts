@@ -27,7 +27,7 @@ export class GuildsOverviewCommand extends GeneralCommand {
         ));
 
         for (const guild of this.client.guilds.cache.array().sort((a, b) => a.joinedTimestamp - b.joinedTimestamp).values()) {
-            const subs = Array.from(this.client.tasks.lreporter.trackRules.values())
+            const subs = Array.from(this.client.tasks.lreporter.subscriptions.values())
                 .filter(x => String(x.guildId) === guild.id)
             ;
             guildsData.push(csvCombineRow(

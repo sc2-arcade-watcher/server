@@ -1,4 +1,4 @@
-import { Entity, PrimaryColumn, ManyToOne, Column } from 'typeorm';
+import { Entity, PrimaryColumn, ManyToOne, Column, Index } from 'typeorm';
 import { S2GameLobby } from './S2GameLobby';
 import { DsGameLobbySubscription } from './DsGameLobbySubscription';
 
@@ -22,6 +22,7 @@ export class DsGameLobbyMessage {
         onUpdate: 'NO ACTION',
         onDelete: 'NO ACTION',
     })
+    @Index('lobby_idx')
     lobby: S2GameLobby;
 
     @ManyToOne(type => DsGameLobbySubscription, {
@@ -29,7 +30,7 @@ export class DsGameLobbyMessage {
         onUpdate: 'NO ACTION',
         onDelete: 'NO ACTION',
     })
-    rule?: DsGameLobbySubscription;
+    subscription?: DsGameLobbySubscription;
 
     @Column({
         type: 'bigint',

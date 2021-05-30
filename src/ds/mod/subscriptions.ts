@@ -27,7 +27,7 @@ class SubscriptionArgument extends ArgumentType {
     }
 
     protected getChannelSubscription(channel: TextChannel | DMChannel | NewsChannel, id: number) {
-        const sub = (this.client as DsBot).tasks.lreporter.trackRules.get(id);
+        const sub = (this.client as DsBot).tasks.lreporter.subscriptions.get(id);
         if (!sub) {
             return;
         }
@@ -64,7 +64,7 @@ abstract class AbstractSubscriptionCommand extends GeneralCommand {
     }
 
     getChannelSubscription(channel: Channel, id: number) {
-        const sub = this.lreporter.trackRules.get(id);
+        const sub = this.lreporter.subscriptions.get(id);
         if (!sub) {
             return;
         }
@@ -168,7 +168,7 @@ class SubscriptionNewCommand extends AbstractSubscriptionCommand {
         }
 
         const limits = this.lreporter.getPostingLimits(sub);
-        const allTargetSubs = Array.from(this.lreporter.trackRules.values()).filter(x => x.targetId === sub.targetId);
+        const allTargetSubs = Array.from(this.lreporter.subscriptions.values()).filter(x => x.targetId === sub.targetId);
         if (allTargetSubs.length >= limits.subLimit) {
             return msg.reply(`You've reached maximum number of subscriptions of ${limits.subLimit} for this channel/server.`);
         }
@@ -193,7 +193,7 @@ class SubscriptionNewCommand extends AbstractSubscriptionCommand {
             sub.regionId = null;
         }
         await this.client.conn.getRepository(DsGameLobbySubscription).save(sub);
-        this.lreporter.trackRules.set(sub.id, sub);
+        this.lreporter.subscriptions.set(sub.id, sub);
         this.lreporter.testSubscription(sub);
 
         return msg.reply(stripIndents`
@@ -316,7 +316,7 @@ class SubscriptionConfigCommand extends AbstractSubscriptionCommand {
         sub.deleteMessageStarted = args.deleteMessageStarted;
         sub.deleteMessageAbandoned = args.deleteMessageAbandoned;
         await this.client.conn.getRepository(DsGameLobbySubscription).save(sub);
-        this.lreporter.trackRules.set(sub.id, sub);
+        this.lreporter.subscriptions.set(sub.id, sub);
 
         return msg.reply('Subscription reconfigured. You can use `.sub.list` to verify its parameters.');
     }
@@ -433,13 +433,13 @@ class SubscriptionListCommand extends AbstractSubscriptionCommand {
 
         if (msg.channel instanceof DMChannel) {
             const chan = msg.channel;
-            subs = Array.from(this.lreporter.trackRules.values()).filter(x => {
+            subs = Array.from(this.lreporter.subscriptions.values()).filter(x => {
                 return String(x.userId) === chan.recipient.id;
             });
         }
         else {
             const chan = msg.channel;
-            subs = Array.from(this.lreporter.trackRules.values()).filter(x => {
+            subs = Array.from(this.lreporter.subscriptions.values()).filter(x => {
                 return String(x.guildId) === chan.guild.id;
             });
         }
@@ -472,7 +472,7 @@ class SubscriptionStatusCommand extends AbstractSubscriptionCommand {
     public async exec(msg: CommandoMessage, args: string) {
         let targetId: string = msg.channel instanceof DMChannel ? msg.channel.recipient.id : msg.channel.guild.id;
         let targetDesc: { guildId?: string, userId?: string };
-        if (this.client.isStaff(msg.author)) {
+        if (this.client.isStaff(msg.author) && args.length > 0) {
             if (args === 'all') {
                 const out: string[] = [];
 
@@ -486,7 +486,7 @@ class SubscriptionStatusCommand extends AbstractSubscriptionCommand {
                 ));
 
                 for (const targetId of Array.from(this.lreporter.actionCountersLastFiveMin).sort((a, b) => b[1] - a[1]).map(x => x[0])) {
-                    const subs = Array.from(this.lreporter.trackRules.values()).filter(x => x.targetId === targetId);
+                    const subs = Array.from(this.lreporter.subscriptions.values()).filter(x => x.targetId === targetId);
                     const isGuild = this.client.guilds.cache.has(targetId);
                     out.push(csvCombineRow(
                         targetId,
@@ -546,7 +546,7 @@ class SubscriptionStatusCommand extends AbstractSubscriptionCommand {
             targetDesc = msg.channel instanceof DMChannel ? { userId: msg.channel.recipient.id } : { guildId: msg.channel.guild.id };
         }
 
-        const subs = Array.from(this.lreporter.trackRules.values()).filter(x => x.targetId === targetId);
+        const subs = Array.from(this.lreporter.subscriptions.values()).filter(x => x.targetId === targetId);
         const limits = this.lreporter.getPostingLimits(targetDesc);
 
         const postedMsgsTotal = Array.from(this.lreporter.trackedLobbies.values())
@@ -576,11 +576,12 @@ class SubscriptionStatusCommand extends AbstractSubscriptionCommand {
             // GLOBAL
              - Active lobby messages       : ${postedMsgsTotal.length}
              - Scheduled lobby posts       : ${scheduledLobbiesTotal.length}
-             - Active subscriptions        : ${this.lreporter.trackRules.size}
+             - Active subscriptions        : ${this.lreporter.subscriptions.size}
              - Lobby publish requests (5m) : ${Array.from(this.lreporter.postCountersLastFiveMin.values()).reduce((prev, curr) => prev + curr, 0).toFixed(3)}
              - Lobby content requests (5m) : ${Array.from(this.lreporter.actionCountersLastFiveMin.values()).reduce((prev, curr) => prev + curr, 0).toFixed(3)}
              - Tracked lobbies total       : ${this.lreporter.trackedLobbies.size}
-             - DAPI queue size             : ${this.lreporter.postingQueue.size}
+             - Discord requests qsize      : ${this.lreporter.postingQueue.size}
+             - Battle match qsize          : ${(await this.lreporter.matchReceiver.queue.getWaitingCount())}
             `,
             code: 'ts',
         });
@@ -599,7 +600,7 @@ class SubscriptionReloadCommand extends AbstractSubscriptionCommand {
 
     public async exec(msg: CommandoMessage) {
         await this.lreporter.reloadSubscriptions();
-        return msg.reply(`Done. Active subscriptions count: ${this.lreporter.trackRules.size}.`);
+        return msg.reply(`Done. Active subscriptions count: ${this.lreporter.subscriptions.size}.`);
     }
 }
 
@@ -621,7 +622,7 @@ class SubscriptionRestoreCommand extends AbstractSubscriptionCommand {
     }
 
     public async exec(msg: CommandoMessage, args: { id: number }) {
-        if (this.lreporter.trackRules.has(args.id)) {
+        if (this.lreporter.subscriptions.has(args.id)) {
             return msg.reply('That subscription is already active.');
         }
         const sub = await this.client.conn.getRepository(DsGameLobbySubscription).findOne(args.id);
@@ -629,7 +630,7 @@ class SubscriptionRestoreCommand extends AbstractSubscriptionCommand {
             return msg.reply('Invalid ID.');
         }
         sub.deletedAt = null;
-        this.lreporter.trackRules.set(sub.id, sub);
+        this.lreporter.subscriptions.set(sub.id, sub);
         await this.client.conn.getRepository(DsGameLobbySubscription).save(sub);
         return msg.reply(`Subscription \`${sub.id}\` restored.`);
     }

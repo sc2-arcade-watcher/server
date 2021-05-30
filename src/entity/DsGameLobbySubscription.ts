@@ -97,6 +97,11 @@ export class DsGameLobbySubscription {
     })
     deleteMessageAbandoned: boolean;
 
+    @Column({
+        default: false,
+    })
+    postMatchResult: boolean;
+
     get targetId() {
         return this.userId ? String(this.userId) : String(this.guildId);
     }

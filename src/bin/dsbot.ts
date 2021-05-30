@@ -90,7 +90,7 @@ export class DsBot extends CommandoClient {
         });
 
         this.on('message', (msg) => {
-            if (msg.channel instanceof DMChannel && msg.channel.recipient.id === this.user.id) {
+            if (msg.channel instanceof DMChannel && msg.author.id !== this.user.id) {
                 logger.debug(`Received DM from ${msg.author.tag} (${msg.author.id})`, msg.content);
             }
         });

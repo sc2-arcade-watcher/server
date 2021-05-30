@@ -5,6 +5,7 @@ import { systemdNotifyReady, setupProcessTerminator } from '../helpers';
 import { BattleProfileUpdater, BattleProfileRefreshDirector } from '../bnet/updater';
 import { BattleMatchTracker, BattleLobbyProvider } from '../bnet/battleTracker';
 import { GameRegion } from '../common';
+import { createBattleMatchQueue } from '../bnet/battleMatchRelay';
 
 process.on('unhandledRejection', e => {
     if (logger) logger.error('unhandledRejection', e);
@@ -40,6 +41,7 @@ process.on('unhandledRejection', e => {
     });
     const bmProvider = new BattleLobbyProvider(conn, bmTracker);
     const bWorkers: BattleWorker[] = [];
+    const bmrQeueu = createBattleMatchQueue();
 
     for (const [idx, region] of activeRegions.entries()) {
         if (!GameRegion[region]) throw new Error(`invalid region=${region}`);
@@ -55,6 +57,9 @@ process.on('unhandledRejection', e => {
     }
 
     async function doTracking() {
+        bmTracker.onLobbyComplete(async (x) => {
+            await bmrQeueu.add(x.lobby.globalId, x.match);
+        });
         await Promise.all([
             bmTracker.work(),
             bmProvider.start(),
@@ -95,6 +100,8 @@ process.on('unhandledRejection', e => {
     await bmTracker.onDone();
     logger.verbose(`Flushing remaining data..`);
     await bProfUpdater.flush();
+    logger.verbose(`Closing queue..`);
+    await bmrQeueu.close();
     logger.verbose(`Closing database connection..`);
     await conn.close();
 })();
