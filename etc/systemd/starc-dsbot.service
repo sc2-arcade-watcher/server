@@ -1,9 +1,9 @@
 [Unit]
 Description=starc Discord Bot
-Wants=network-online.target mariadb.service
-Requires=mariadb.service
-After=network-online.target mariadb.service
-PartOf=mariadb.service
+Wants=network-online.target mariadb.service starc-redis-main.service
+Requires=mariadb.service starc-redis-main.service
+After=network-online.target mariadb.service starc-redis-main.service
+PartOf=mariadb.service starc-redis-main.service
 StartLimitIntervalSec=900
 StartLimitBurst=25
 

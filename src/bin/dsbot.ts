@@ -7,11 +7,12 @@ import { BotTask } from '../ds/dscommon';
 import { LobbyReporterTask } from '../ds/mod/lobbyReporter';
 import { InviteCommand } from '../ds/cmd/general';
 import { StatusTask } from '../ds/mod/status';
-import { DMChannel, Intents, UserResolvable } from 'discord.js';
+import { DMChannel, Intents, UserResolvable, HTTPError } from 'discord.js';
 import { SubscriptionsTask } from '../ds/mod/subscriptions';
 import { LobbyPublishCommand } from '../ds/cmd/lobbyPublish';
 import { HelpCommand } from '../ds/cmd/help';
 import { GuildsOverviewCommand } from '../ds/cmd/admin';
+import { oneLine } from 'common-tags';
 
 export class DsBot extends CommandoClient {
     readonly issueTracker: string;
@@ -37,7 +38,8 @@ export class DsBot extends CommandoClient {
             messageSweepInterval: 300,
             messageEditHistoryMaxSize: 0,
             disableMentions: 'everyone',
-            retryLimit: 3,
+            retryLimit: 10, // keep hammering Dicord's API, at least 10 times before giving up on specific request
+
             ws: {
                 intents: [
                     'GUILDS',
@@ -202,16 +204,64 @@ export class DsBot extends CommandoClient {
     }
 }
 
-process.on('unhandledRejection', e => {
-    if (logger) logger.error('unhandledRejection', e);
-    throw e;
-});
+interface IDiscordShitState {
+    errCounter: number;
+    firstErrorAt: number | null;
+    stateResetTimeout: NodeJS.Timer | null;
+}
+
 (async function() {
     dotenv.config();
     await systemdNotify('READY');
     setupFileLogger('dsbot');
 
     const bot = new DsBot();
+    const dsShittingState: IDiscordShitState = {
+        errCounter: 0,
+        firstErrorAt: null,
+        stateResetTimeout: null,
+    };
+    const dsShittingTimeLimit = 1000 * 60 * 10;
+    const dsShittingTimeReset = 1000 * 60 * 3;
+
+    process.on('unhandledRejection', e => {
+        // TODO: perhaps should limit it to only 5xx responses?
+        if (e instanceof HTTPError) {
+            if (!dsShittingState.stateResetTimeout) {
+                logger.error(`Discord started shitting itself..`);
+                dsShittingState.firstErrorAt = Date.now();
+                dsShittingState.stateResetTimeout = setTimeout(() => {
+                    logger.info(oneLine`
+                        Discord appears to be stable again..
+                        shit counter stopped at ${dsShittingState.errCounter}
+                        after ${(Date.now() - dsShittingState.firstErrorAt) / 1000}s
+                    `);
+                    dsShittingState.errCounter = 0;
+                    dsShittingState.firstErrorAt = null;
+                    dsShittingState.stateResetTimeout = null;
+                }, dsShittingTimeReset).unref();
+                // TODO: should probably force restart
+            }
+            else {
+                dsShittingState.stateResetTimeout.refresh();
+            }
+
+            dsShittingState.errCounter++;
+            logger.warn(`Discord shit counter: ${dsShittingState.errCounter}`, e);
+
+            if (dsShittingState.firstErrorAt <= (Date.now() - dsShittingTimeLimit)) {
+                logger.error(`Discord continues to shit itself, giving up for this session..`);
+                // systemd will trigger full restart (if we haven't hit the limit for the day)
+                throw e;
+            }
+
+            return;
+        }
+
+        logger.error('unhandledRejection', e);
+        throw e;
+    });
+
     await systemdNotifyWatchdog(0);
     setupProcessTerminator(async () => {
         await systemdNotify('STOPPING');
