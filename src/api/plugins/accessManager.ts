@@ -1,3 +1,4 @@
+import * as fs from 'fs-extra';
 import * as orm from 'typeorm';
 import fp from 'fastify-plugin';
 import { AppAccount, AccountPrivileges } from '../../entity/AppAccount';
@@ -7,8 +8,9 @@ import { logger, logIt } from '../../logger';
 import { defaultAccountSettings, UserPrivacyPreferences } from '../../entity/BnAccountSettings';
 import { S2MapHeader } from '../../entity/S2MapHeader';
 import { BnAccount } from '../../entity/BnAccount';
-import { PlayerProfileParams } from '../../bnet/common';
+import { PlayerProfileParams, profileHandle } from '../../bnet/common';
 import { realmIdFromLocalProfileId } from '../../common';
+import { S2ProfileAccountLink } from '../../entity/S2ProfileAccountLink';
 
 export enum MapAccessAttributes {
     Details,
@@ -27,15 +29,28 @@ interface IAccessManager {
     isProfileAccessGranted(kind: ProfileAccessAttributes, profile: S2Profile | PlayerProfileParams, userAccount?: AppAccount): Promise<boolean>;
 }
 
-function getEffectiveAccountPreferences(account: BnAccount | null): Required<UserPrivacyPreferences> {
+type RestrictionOverrides = {
+    profiles: { [handle: string]: 'allow' | 'deny' };
+};
+
+function getEffectiveAccountPreferences(account: BnAccount | null, profile?: S2Profile): Required<UserPrivacyPreferences> {
     const preferences: Required<UserPrivacyPreferences> = {} as any;
+    const dayDiff = (Date.now() - (profile?.lastOnlineAt?.getTime() ?? 0)) / 1000 / 3600 / 24;
 
     for (const key of Object.keys(defaultAccountSettings)) {
         if (account?.settings && (account.settings as any)[key] !== null) {
             (preferences as any)[key] = (account.settings as any)[key];
         }
         else {
-            (preferences as any)[key] = (defaultAccountSettings as any)[key];
+            if (
+                ['mapPubDownload', 'mapPrivDownload'].indexOf(key) !== -1 &&
+                dayDiff <= 365 * 2
+            ) {
+                (preferences as any)[key] = false;
+            }
+            else {
+                (preferences as any)[key] = (defaultAccountSettings as any)[key];
+            }
         }
     }
 
@@ -43,12 +58,15 @@ function getEffectiveAccountPreferences(account: BnAccount | null): Required<Use
 }
 
 class AccessManager implements IAccessManager {
+    protected customRestrictions = <RestrictionOverrides>fs.readJSONSync('data/restrictions.json', { encoding: 'utf8' });
+
     constructor (protected conn: orm.Connection) {
     }
 
     // @ts-ignore
     async isMapAccessGranted(kind: MapAccessAttributes | MapAccessAttributes[], mapOrHeader: S2Map | S2MapHeader, userAccount?: AppAccount) {
         let mhead: S2MapHeader;
+
         if (mapOrHeader instanceof S2Map) {
             mhead = mapOrHeader.currentVersion;
         }
@@ -62,10 +80,16 @@ class AccessManager implements IAccessManager {
             return true;
         }
 
-        const qb = this.conn.getRepository(BnAccount)
-            .createQueryBuilder('bnAccount')
+        const qbAuthorProfile = this.conn.getRepository(S2Profile)
+            .createQueryBuilder('profile')
+            .leftJoinAndMapOne(
+                'profile.accountLink',
+                S2ProfileAccountLink,
+                'plink',
+                'plink.regionId = profile.regionId AND plink.realmId = profile.realmId AND plink.profileId = profile.profileId AND plink.accountVerified = 1'
+            )
+            .leftJoinAndSelect('plink.account', 'bnAccount')
             .leftJoinAndSelect('bnAccount.settings', 'bnSettings')
-            .innerJoin('bnAccount.profileLinks', 'plink', 'plink.accountVerified = 1')
         ;
 
         if (
@@ -73,25 +97,30 @@ class AccessManager implements IAccessManager {
             typeof mapOrHeader?.regionId === 'number' &&
             typeof mapOrHeader?.authorLocalProfileId === 'number'
         ) {
-            qb.andWhere('plink.regionId = :regionId AND plink.realmId = :realmId AND plink.profileId = :profileId', {
+            qbAuthorProfile.andWhere('profile.regionId = :regionId AND profile.realmId = :realmId AND profile.profileId = :profileId', {
                 regionId: mapOrHeader.regionId,
                 ...realmIdFromLocalProfileId(mapOrHeader.authorLocalProfileId)
             });
         }
         else if (mhead.regionId && mhead.bnetId) {
-            qb.innerJoin(S2Map, 'map', 'map.regionId = :regionId AND map.bnetId = :bnetId', {
-                regionId: mhead.regionId,
-                bnetId: mhead.bnetId,
-            });
-            qb.innerJoin(S2Profile, 'profile', 'map.regionId = profile.regionId AND map.authorLocalProfileId = profile.localProfileId');
-            qb.andWhere('plink.regionId = profile.regionId AND plink.realmId = profile.realmId AND plink.profileId = profile.profileId');
+            qbAuthorProfile
+                .innerJoin(S2Map, 'map', 'map.regionId = :regionId AND map.bnetId = :bnetId', {
+                    regionId: mhead.regionId,
+                    bnetId: mhead.bnetId,
+                })
+                .andWhere('map.regionId = profile.regionId AND map.authorLocalProfileId = profile.localProfileId')
+            ;
         }
         else {
             throw new Error(`isMapAccessGranted, missing map params`);
         }
 
         // TODO: cache the result
-        let authorBattleAccount = await qb.limit(1).getOne();
+        const authorProfile = await qbAuthorProfile.limit(1).getOne();
+        if (!authorProfile) {
+            throw new Error(`map author unknown`);
+        }
+        const authorBattleAccount = authorProfile?.accountLink?.account;
 
         const results: boolean[] = [];
         const kinds = Array.isArray(kind) ? kind : [kind];
@@ -107,7 +136,14 @@ class AccessManager implements IAccessManager {
                 continue;
             }
 
-            const preferences = getEffectiveAccountPreferences(authorBattleAccount ?? null);
+            const crestrict = this.customRestrictions.profiles[profileHandle(authorProfile)];
+            if (typeof crestrict === 'string') {
+                if (crestrict === 'allow') results.push(true);
+                if (crestrict === 'deny') results.push(false);
+                continue;
+            }
+
+            const preferences = getEffectiveAccountPreferences(authorBattleAccount ?? null, authorProfile);
 
             switch (currKind) {
                 case MapAccessAttributes.Details: {
@@ -131,7 +167,11 @@ class AccessManager implements IAccessManager {
     }
 
     async isProfileAccessGranted(kind: ProfileAccessAttributes, profile: PlayerProfileParams, userAccount?: AppAccount): Promise<boolean> {
-        const profileBatteAccount = await this.conn.getRepository(BnAccount)
+        if (userAccount && userAccount.privileges & AccountPrivileges.SuperAdmin) {
+            return true;
+        }
+
+        const profileBattleAccount = await this.conn.getRepository(BnAccount)
             .createQueryBuilder('bnAccount')
             .leftJoinAndSelect('bnAccount.settings', 'bnSettings')
             .innerJoin('bnAccount.profileLinks', 'plink', 'plink.accountVerified = 1')
@@ -144,16 +184,18 @@ class AccessManager implements IAccessManager {
             .getOne()
         ;
 
-        if (userAccount && userAccount.privileges & AccountPrivileges.SuperAdmin) {
-            return true;
-        }
-
         // allow access to author's own content
-        if (userAccount && userAccount.bnAccountId === profileBatteAccount?.id) {
+        if (userAccount && userAccount.bnAccountId === profileBattleAccount?.id) {
             return true;
         }
 
-        const preferences = getEffectiveAccountPreferences(profileBatteAccount);
+        const crestrict = this.customRestrictions.profiles[profileHandle(profile)];
+        if (typeof crestrict === 'string') {
+            if (crestrict === 'allow') return true;
+            if (crestrict === 'deny') return false;
+        }
+
+        const preferences = getEffectiveAccountPreferences(profileBattleAccount);
 
         switch (kind) {
             case ProfileAccessAttributes.Details: {
