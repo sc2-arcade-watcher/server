@@ -1053,7 +1053,14 @@ export class LobbyReporterTask extends BotTask {
                 ${trackedLobby.lobby.statSlots}
                 in ${this.getPostingTargetName(inp.msg)} (${secDiff}s)
             `);
+            const pf = Date.now();
             await this.editLobbyMessage(trackedLobby, inp);
+            logger.debug(oneLine`
+                UPDATED ${trackedLobby.lobby.globalId}
+                (${trackedLobby.lobby.match ? 'completed' : trackedLobby.lobby.status})
+                ${trackedLobby.lobby.statSlots}
+                in ${this.getPostingTargetName(inp.msg)} (${secDiff}s) - ${((Date.now() - pf) / 1000).toFixed(1)}s
+            `);
         }
         if (plob) {
             await this.perf.doAction(adesc, trackedLobby.lobby.globalId, plob.subscriptionId ?? 0);

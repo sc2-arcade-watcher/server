@@ -580,7 +580,7 @@ class SubscriptionStatusCommand extends AbstractSubscriptionCommand {
              - Lobby publish requests (5m) : ${Array.from(this.lreporter.postCountersLastFiveMin.values()).reduce((prev, curr) => prev + curr, 0).toFixed(3)}
              - Lobby content requests (5m) : ${Array.from(this.lreporter.actionCountersLastFiveMin.values()).reduce((prev, curr) => prev + curr, 0).toFixed(3)}
              - Tracked lobbies total       : ${this.lreporter.trackedLobbies.size}
-             - Discord requests qsize      : ${this.lreporter.postingQueue.size}
+             - Discord requests            : ${this.lreporter.postingQueue.size} | ${this.lreporter.postingQueue.pending}
              - Battle match qsize          : ${(await this.lreporter.matchReceiver.queue.getWaitingCount())}
             `,
             code: 'ts',
