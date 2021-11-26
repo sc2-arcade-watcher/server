@@ -157,7 +157,7 @@ export class BattleProfileUpdater {
         }
 
         if (
-            ((Date.now() - this.cacheLastFlush.getTime()) > 1000 * 60 || this.cachedProfiles.size >= 100) &&
+            ((Date.now() - this.cacheLastFlush.getTime()) > 1000 * 60 || this.cachedProfiles.size >= 1000) &&
             !this._cacheFlushDoneEvent
         ) {
             await this.flush();
@@ -315,7 +315,7 @@ interface ProfileRefreshPlan {
 
 export class BattleProfileRefreshDirector extends ServiceProcess {
     protected queue = new pQueue({
-        concurrency: 35,
+        concurrency: 15,
     });
     protected plans: ProfileRefreshPlan[] = [];
 
@@ -392,8 +392,7 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
             })
             .andWhere(stripIndents`
                 (
-                    bTrack.battleAPIErrorCounter IS NULL OR
-                    bTrack.battleAPIErrorCounter < 6 OR
+                    bTrack.battleAPIErrorCounter < 2 OR
                     bTrack.battleAPIErrorCounter < TIMESTAMPDIFF(
                         DAY,
                         IFNULL(bTrack.matchHistoryUpdatedAt, bTrack.battleAPIErrorLast),
@@ -404,7 +403,7 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
             .andWhere(stripIndents`
                 (
                     bTrack.matchHistoryUpdatedAt IS NULL OR
-                    TIMESTAMPDIFF(MINUTE, bTrack.matchHistoryUpdatedAt, UTC_TIMESTAMP()) >= 150
+                    bTrack.matchHistoryUpdatedAt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 150 MINUTE)
                 )
             `)
         ;
@@ -427,21 +426,19 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
                 (
                     bTrack.profileInfoUpdatedAt IS NULL OR
                     bTrack.matchHistoryUpdatedAt IS NULL OR
-                    DATEDIFF(UTC_TIMESTAMP(), bTrack.matchHistoryUpdatedAt) > LEAST(
-                        (DATEDIFF(UTC_TIMESTAMP(), IFNULL(bTrack.lastMatchAt, \'2020-01-01\')) / 3),
-                        30
-                    )
+                    bTrack.matchHistoryUpdatedAt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY) OR
+                    DATEDIFF(UTC_TIMESTAMP(), bTrack.matchHistoryUpdatedAt) > (DATEDIFF(UTC_TIMESTAMP(), IFNULL(bTrack.lastMatchAt, \'2020-01-01\')) / 3)
                 )
             `)
             .andWhere(stripIndents`(
                 bTrack.battleAPIErrorCounter = 0 OR
-                bTrack.battleAPIErrorCounter < LEAST (
+                bTrack.battleAPIErrorCounter < 7 OR
+                bTrack.battleAPIErrorCounter < (
                     TIMESTAMPDIFF(
                         WEEK,
                         IFNULL(bTrack.matchHistoryUpdatedAt, bTrack.battleAPIErrorLast),
                         UTC_TIMESTAMP()
-                    ),
-                    7
+                    )
                 )
             )`)
         ;
@@ -474,7 +471,7 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
             logger.verbose(`Cycle started region=${this.region} plan=${sPlan.name}`);
         }
 
-        const qLimit = 1000;
+        const qLimit = 5000;
         sPlan.qb.limit(qLimit);
 
         const results = await this.fetchData(sPlan);

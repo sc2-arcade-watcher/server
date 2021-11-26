@@ -334,7 +334,7 @@ class LobbyBattleMatchReceiver {
     async load(processor: Processor<BattleMatchRelayItem>) {
         this.queue = createBattleMatchQueue();
         this.worker = createBattleMatchWorker(processor, {
-            concurrency: 5,
+            concurrency: 10,
         });
         this.scheduler = createBattleMatchScheduler();
         await this.periodicClean();
@@ -351,11 +351,6 @@ class LobbyBattleMatchReceiver {
     protected async periodicClean() {
         const jobCounts = await this.queue.getJobCounts('active', 'completed', 'failed', 'delayed', 'wait', 'paused');
         logger.info(`[${this.queue.name}] job counts - ${Object.entries(jobCounts).map(x => `${x[0]}: ${x[1]}`).join(' ')}`);
-        await this.queue.clean(1000 * 60 * 15, 1000, 'completed');
-        if ((await this.queue.getWaitingCount()) > 10000) {
-            logger.warn(`exceeded safe limit of bmacth queue, pruning older than 24h, targeting limit of 2k`);
-            await this.queue.clean(1000 * 3600 * 24, 2000, 'wait');
-        }
         setTimeout(this.periodicClean.bind(this), 60000 * 5).unref();
     }
 }
@@ -1133,7 +1128,13 @@ export class LobbyReporterTask extends BotTask {
         }
         catch (err) {
             if (err instanceof DiscordAPIError) {
-                if (subscription && (err.code === DiscordErrorCode.MissingPermissions || err.code === DiscordErrorCode.MissingAccess)) {
+                if (
+                    subscription && (
+                        err.code === DiscordErrorCode.MissingPermissions ||
+                        err.code === DiscordErrorCode.MissingAccess ||
+                        err.code === DiscordErrorCode.CannotSendMessagesToThisUser
+                    )
+                ) {
                     logger.warn(`Failed to send message, removing subscription - lobby: ${trackedLobby.lobby.globalId} sub: ${subscription.id} err: ${err.message}`);
                     await this.removeSubscription(subscription);
                 }
@@ -1232,7 +1233,10 @@ export class LobbyReporterTask extends BotTask {
                     }
                     catch (err) {
                         if (err instanceof DiscordAPIError) {
-                            if (err.code === DiscordErrorCode.UnknownMessage) {
+                            if (
+                                err.code === DiscordErrorCode.UnknownMessage ||
+                                err.code === DiscordErrorCode.MissingAccess
+                            ) {
                                 await this.releaseLobbyMessage(trackedLobby, lobbyMsg);
                             }
                             logger.error(`Failed to delete`, err);

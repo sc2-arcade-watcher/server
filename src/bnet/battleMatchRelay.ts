@@ -23,6 +23,7 @@ export function createBattleMatchQueue() {
         ...getBattleMatchQueueOpts(),
         defaultJobOptions: {
             attempts: 4,
+            removeOnComplete: 5000,
             backoff: {
                 type: 'exponential',
                 delay: 12000,

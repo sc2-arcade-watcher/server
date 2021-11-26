@@ -40,6 +40,7 @@ export default fp(async (server, opts) => {
                 'mapHead.isExtensionMod',
                 'mapHead.archiveHash',
                 'mapHead.archiveSize',
+                'mapHead.archiveFilename',
                 'mapHead.uploadedAt',
             ])
             .andWhere('mapHead.regionId = :regionId AND mapHead.bnetId = :bnetId', {

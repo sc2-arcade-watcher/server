@@ -575,11 +575,17 @@ export class BattleMatchTracker {
 
         this.isRunning = true;
         let firstCycle = true;
+        const minCheckPeriod = {
+            [GameRegion.US]: 30,
+            [GameRegion.EU]: 30,
+            [GameRegion.KR]: 300,
+            [GameRegion.CN]: 3000,
+        };
         const maxCheckPeriod = {
-            [GameRegion.US]: 300,
-            [GameRegion.EU]: 300,
-            [GameRegion.KR]: 600,
-            [GameRegion.CN]: 1200,
+            [GameRegion.US]: 1800,
+            [GameRegion.EU]: 1600,
+            [GameRegion.KR]: 3600,
+            [GameRegion.CN]: 6000,
         };
         while (true) {
             if (!this.isRunning) {
@@ -595,7 +601,10 @@ export class BattleMatchTracker {
                     const tLobbyDiffMins = differenceInMinutes(tnow, lobbyInfo.closedAt);
                     const checkPeriodSecs = Math.min(
                         maxCheckPeriod[lobbyInfo.regionId as GameRegion],
-                        (lobbyInfo.isStartConfirmed ? 30 : 150) + Math.pow(1.05, tLobbyDiffMins)
+                        (
+                            Math.pow(minCheckPeriod[lobbyInfo.regionId as GameRegion], (lobbyInfo.isStartConfirmed ? 1 : 1.5)) *
+                            Math.max((1.0 + (tLobbyDiffMins / 500)), 2.0)
+                        )
                     );
                     if (differenceInSeconds(tnow, lobbyInfo.lastCheckedAt) < checkPeriodSecs) continue;
                 }
@@ -724,7 +733,9 @@ export class BattleLobbyProvider extends ServiceProcess {
                 'lobby.id',
                 'lobby.closedAt',
                 'lobby.status',
+                'lobby.regionId',
             ])
+            .andWhere('lobby.regionId NOT IN (5)')
             .orderBy('lobby.id', 'ASC')
             .limit(qLimit)
         ;

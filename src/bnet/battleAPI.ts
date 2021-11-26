@@ -343,7 +343,7 @@ export class BattleAPI {
             return response;
         }, async (error) => {
             if (isAxiosError(error)) {
-                if ((error.config as any).retryAttempt && (error.config as any).retryAttempt > 3) {
+                if ((error.config as any).retryAttempt && (error.config as any).retryAttempt > 4) {
                     logger.warn(`exceeded retry limit reqUrl=${error.config.url}`);
                     throw error;
                 }
@@ -358,10 +358,10 @@ export class BattleAPI {
                     error.config.headers['Authorization'] = `Bearer ${accessToken}`;
                 }
                 else if (error?.response?.status === 429) {
-                    await sleep(700 * Math.pow((error.config as any).retryAttempt, 1.5));
+                    await sleep(1000 * Math.pow((error.config as any).retryAttempt, 1.6));
                 }
                 else if (error?.response?.status === 503) {
-                    await sleep(350 * Math.pow((error.config as any).retryAttempt, 1.3));
+                    await sleep(400 * Math.pow((error.config as any).retryAttempt, 1.3));
                 }
                 else if (error?.response?.status === 504) {
                     await sleep(300 * Math.pow((error.config as any).retryAttempt, 1.1));

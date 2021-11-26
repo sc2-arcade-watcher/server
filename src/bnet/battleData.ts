@@ -611,8 +611,17 @@ export class BattleDataUpdater {
             switch (err.response.status) {
                 case 404:
                 case 500:
-                case 503:
+                // case 503:
                 case 504: {
+                    updatedTrackingData.battleAPIErrorCounter = Math.min(
+                        profile.battleTracking.battleAPIErrorCounter + 1,
+                        200
+                    );
+                    break;
+                }
+
+                case 503: {
+                    updatedTrackingData.battleAPIErrorCounter = profile.battleTracking.battleAPIErrorCounter;
                     break;
                 }
 
@@ -626,10 +635,6 @@ export class BattleDataUpdater {
         }
 
         updatedTrackingData.battleAPIErrorLast = new Date();
-        updatedTrackingData.battleAPIErrorCounter = Math.min(
-            profile.battleTracking.battleAPIErrorCounter + 1,
-            200
-        );
         if (profile.battleTracking.battleAPIErrorCounter > 3 && profile.regionId !== GameRegion.CN) {
             updatedTrackingData.publicGatewaySince = new Date();
         }
@@ -701,7 +706,7 @@ export class BattleDataUpdater {
 
     @retry({
         onFailedAttempt: async err => {
-            if (isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 429 || err.response?.status === 500)) {
+            if (isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 500)) {
                 if (
                     err.response?.status === 404 &&
                     (
@@ -723,7 +728,7 @@ export class BattleDataUpdater {
                 throw err;
             }
         },
-        retries: 3,
+        retries: 2,
     })
     protected async retrieveMatchHistorySingle(bAPI: BattleAPI, profile: S2Profile, locale: GameLocale) {
         const bLocale = `${locale.substr(0, 2)}_${locale.substr(2, 2)}`;

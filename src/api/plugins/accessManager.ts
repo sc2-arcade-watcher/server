@@ -58,7 +58,7 @@ function getEffectiveAccountPreferences(account: BnAccount | null, profile?: S2P
 }
 
 class AccessManager implements IAccessManager {
-    protected customRestrictions = <RestrictionOverrides>fs.readJSONSync('data/restrictions.json', { encoding: 'utf8' });
+    protected customRestrictions = <RestrictionOverrides>fs.readJSONSync('data/config/api-restrictions.json', { encoding: 'utf8' });
 
     constructor (protected conn: orm.Connection) {
     }
