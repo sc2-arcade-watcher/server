@@ -473,8 +473,8 @@ export class LobbyReporterTask extends BotTask {
             .createQueryBuilder('lmsg')
             .innerJoinAndSelect('lmsg.subscription', 'subscription')
             .andWhere('lmsg.lobby = :lobbyId', { lobbyId: job.data.lobbyId })
-            .andWhere('subscription.postMatchResult = 1')
-            // .andWhere('lmsg.completed = false')
+            // .andWhere('subscription.postMatchResult = 1')
+            .andWhere('lmsg.completed = false')
             .getMany()
         ;
         if (!matchingLobMessages.length) {
@@ -1199,9 +1199,19 @@ export class LobbyReporterTask extends BotTask {
 
     protected async releaseLobbyMessage(trackedLobby: TrackedGameLobby, lobbyMsg: PostedGameLobby, msg?: Message) {
         trackedLobby.postedMessages.delete(lobbyMsg);
+        const isCompleted = (
+            typeof msg === 'undefined' ||
+            typeof lobbyMsg.msg.subscription === 'undefined' ||
+            (trackedLobby.lobby.status === GameLobbyStatus.Started && lobbyMsg.msg.subscription.deleteMessageStarted) ||
+            trackedLobby.lobby.status !== GameLobbyStatus.Started
+        );
         await this.conn.getRepository(DsGameLobbyMessage).update(
             this.conn.getRepository(DsGameLobbyMessage).getId(lobbyMsg.msg),
-            { updatedAt: new Date(), closed: true, completed: typeof msg === 'undefined' || !lobbyMsg.msg.subscription?.postMatchResult }
+            {
+                updatedAt: new Date(),
+                closed: true,
+                completed: isCompleted,
+            }
         );
         if (lobbyMsg.onComplete) {
             lobbyMsg.onComplete.emit(msg);
