@@ -33,6 +33,9 @@ export default fp(async (server, opts) => {
                     type: 'string',
                     format: 'date',
                 },
+                minStarted: {
+                    type: 'number',
+                },
                 orderBy: {
                     type: 'string',
                     enum: [
@@ -162,6 +165,12 @@ export default fp(async (server, opts) => {
         if (request.query.lastPlayedMin) {
             qb.andWhere('statPlayer.lastPlayedAt >= :lastPlayedMin', {
                 lastPlayedMin: request.query.lastPlayedMin,
+            });
+        }
+
+        if (request.query.minStarted) {
+            qb.andWhere('statPlayer.lobbiesStarted >= :minStarted', {
+                minStarted: Number(request.query.minStarted),
             });
         }
 

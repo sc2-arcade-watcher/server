@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs-extra';
 import * as orm from 'typeorm';
-import { fastify } from 'fastify';
+import { fastify, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import fastifyStatic from 'fastify-static';
 import fastifyRateLimit from 'fastify-rate-limit';
@@ -12,6 +12,7 @@ import { setupFileLogger, logger } from '../logger';
 import { execAsync, systemdNotifyReady, setupProcessTerminator } from '../helpers';
 import { stripIndents } from 'common-tags';
 import { MapResolver } from '../map/mapResolver';
+import { AccountPrivileges } from '../entity/AppAccount';
 
 dotenv.config();
 
@@ -48,6 +49,9 @@ server.register(fastifyRateLimit, {
     global: true,
     max: Number(process.env.STARC_WEBAPI_RATE_LIMIT_MAX ?? 100),
     timeWindow: Number(process.env.STARC_WEBAPI_RATE_LIMIT_TIME_WINDOW_SEC ?? (40 * 1)) * 1000,
+    keyGenerator: (req: FastifyRequest) => {
+        return (req.userAccount?.privileges & AccountPrivileges.SuperAdmin) !== 0 ? 660000 : 0;
+    },
 });
 
 server.register(fastifyCors, {

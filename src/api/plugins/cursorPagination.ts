@@ -3,6 +3,7 @@ import fp from 'fastify-plugin';
 import fstatic from 'fastify-static';
 import * as orm from 'typeorm';
 import { atob, btoa } from '../../helpers';
+import { AccountPrivileges } from '../../entity/AppAccount';
 
 export interface CursorPaginationQuery {
     before: {[k: string]: string} | undefined;
@@ -62,7 +63,12 @@ export default fp(async (server, opts) => {
             limit = defaultLimit;
         }
         else {
-            limit = Math.min(maximumLimit, Math.max(limit, 1));
+            if (this.userAccount?.privileges & AccountPrivileges.SuperAdmin) {
+                limit = Math.min(100000, Math.max(limit, 1));
+            }
+            else {
+                limit = Math.min(maximumLimit, Math.max(limit, 1));
+            }
         }
 
         const pq: CursorPaginationQuery = {
