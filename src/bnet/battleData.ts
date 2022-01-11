@@ -490,7 +490,9 @@ export class BattleDataUpdater {
         }
         switch (regionId) {
             case GameRegion.US: {
-                return this.bAPIEntry.eu;
+                // all non public gateways are currently returning 503 for US
+                return this.bAPIEntry.pub;
+                // return this.bAPIEntry.eu;
             }
             case GameRegion.EU: {
                 return this.bAPIEntry.eu;

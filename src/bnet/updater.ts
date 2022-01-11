@@ -330,13 +330,13 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
             {
                 name: 'new',
                 qb: this.createQueryNew(),
-                cycleInterval: 60 * 4,
+                cycleInterval: 60 * 4.5,
                 priority: 10,
             },
             {
                 name: 'recent',
                 qb: this.createQueryRecent(),
-                cycleInterval: 60 * 40,
+                cycleInterval: 60 * 130,
                 priority: 10,
             },
             {
@@ -388,7 +388,7 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
             .andWhere('profile.localProfileId > :pkOffset', { pkOffset: 0 })
             .orderBy('profile.localProfileId', 'ASC')
             .andWhere('profile.lastOnlineAt > DATE_SUB(UTC_TIMESTAMP(), INTERVAL :offlineMax HOUR)', {
-                offlineMax: 24 * 4,
+                offlineMax: 24 * 5,
             })
             .andWhere(stripIndents`
                 (
@@ -403,7 +403,7 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
             .andWhere(stripIndents`
                 (
                     bTrack.matchHistoryUpdatedAt IS NULL OR
-                    bTrack.matchHistoryUpdatedAt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 150 MINUTE)
+                    bTrack.matchHistoryUpdatedAt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 180 MINUTE)
                 )
             `)
         ;
@@ -438,7 +438,7 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
                         WEEK,
                         IFNULL(bTrack.matchHistoryUpdatedAt, bTrack.battleAPIErrorLast),
                         UTC_TIMESTAMP()
-                    )
+                    ) * 2
                 )
             )`)
         ;
