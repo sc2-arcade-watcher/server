@@ -20,6 +20,7 @@ export enum MapAccessAttributes {
 
 export enum ProfileAccessAttributes {
     Details,
+    PublicMapList,
     PrivateMapList,
 }
 
@@ -76,9 +77,9 @@ class AccessManager implements IAccessManager {
         const isMapPublic = mhead.isPrivate === false;
 
         // exit early for public maps when only Details are wanted
-        if (isMapPublic && kind === MapAccessAttributes.Details) {
-            return true;
-        }
+        // if (isMapPublic && kind === MapAccessAttributes.Details) {
+        //     return true;
+        // }
 
         const qbAuthorProfile = this.conn.getRepository(S2Profile)
             .createQueryBuilder('profile')

@@ -62,13 +62,16 @@ export default fp(async (server, opts) => {
             bnetId: request.params.mapId,
         }, mapHeaders[0]);
 
-        const [canDownload, canDownloadPrivateRevision] = await server.accessManager.isMapAccessGranted(
-            [MapAccessAttributes.Download, MapAccessAttributes.DownloadPrivateRevision],
+        const [canDetails, canDownload, canDownloadPrivateRevision] = await server.accessManager.isMapAccessGranted(
+            [MapAccessAttributes.Details, MapAccessAttributes.Download, MapAccessAttributes.DownloadPrivateRevision],
             currentVersion,
             request.userAccount
         );
 
-        if (!canDownload) {
+        if (!canDetails) {
+            return reply.code(403).send();
+        }
+        else if (!canDownload) {
             mapHeaders.forEach(rev => {
                 rev.headerHash = null;
                 rev.archiveHash = null;

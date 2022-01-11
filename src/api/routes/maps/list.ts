@@ -148,17 +148,15 @@ export default fp(async (server, opts) => {
         if (request.query.authorHandle !== void 0) {
             const requestedAuthor = parseProfileHandle(request.query.authorHandle) ?? { regionId: 0, realmId: 0, profileId: 0 };
 
-            if (request.query.showPrivate) {
-                const canListPrivate = await server.accessManager.isProfileAccessGranted(
-                    ProfileAccessAttributes.PrivateMapList,
-                    requestedAuthor,
-                    request.userAccount
-                );
-                if (!canListPrivate) {
-                    return reply.code(403).send({
-                        message: `Privately published maps cannot be shown for this profile.`
-                    });
-                }
+            const canListMaps = await server.accessManager.isProfileAccessGranted(
+                request.query.showPrivate ? ProfileAccessAttributes.PrivateMapList : ProfileAccessAttributes.PublicMapList,
+                requestedAuthor,
+                request.userAccount
+            );
+            if (!canListMaps) {
+                return reply.code(403).send({
+                    message: `Published maps cannot be shown for this profile.`
+                });
             }
 
             qb.andWhere('map.regionId = :regionId AND map.authorLocalProfileId = :localProfileId', {
