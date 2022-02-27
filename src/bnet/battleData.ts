@@ -453,6 +453,9 @@ export interface BattleUpdatedProfileCommon {
     mapNames: S2ProfileMatchMapName[];
 }
 
+export interface BattleDataUpdateOptions {
+}
+
 export class BattleDataUpdater {
     protected bAPIEntry = {
         pub: new BattleAPI({
@@ -480,8 +483,13 @@ export class BattleDataUpdater {
         }),
     };
     protected bMapper = new BattleMatchEntryMapper(this.conn);
+    protected opts: BattleDataUpdateOptions = {
+    };
 
-    constructor (protected conn: orm.Connection) {
+    constructor (protected conn: orm.Connection, opts?: Partial<BattleDataUpdateOptions>) {
+        if (opts) {
+            Object.assign(this.opts, opts);
+        }
     }
 
     protected getAPIForRegion(regionId: number, preferPublic = false) {
@@ -490,9 +498,7 @@ export class BattleDataUpdater {
         }
         switch (regionId) {
             case GameRegion.US: {
-                // all non public gateways are currently returning 503 for US
-                return this.bAPIEntry.pub;
-                // return this.bAPIEntry.eu;
+                return this.bAPIEntry.us;
             }
             case GameRegion.EU: {
                 return this.bAPIEntry.eu;

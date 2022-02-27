@@ -7,6 +7,7 @@ const redisQueueConnOpts = <ConnectionOptions>{
     host: 'localhost',
     port: 6381,
     db: 2,
+    enableOfflineQueue: false,
 };
 const battleMatchRelayQueue = 'bmatch';
 

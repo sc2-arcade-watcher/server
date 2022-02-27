@@ -30,6 +30,7 @@ const redisQueueConnOpts = <ConnectionOptions>{
     host: 'localhost',
     port: 6381,
     db: 0,
+    enableOfflineQueue: false,
 };
 
 // ===========================
