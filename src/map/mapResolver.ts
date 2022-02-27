@@ -407,22 +407,29 @@ export class MapResolver {
         else {
             content = await this.depot.readFile(region, remoteName);
         }
-        const data = fxml.parse(content, {
-            ignoreAttributes: false,
-            attributeNamePrefix: '',
-            parseNodeValue: true,
-            textNodeName: 'text',
-            parseTrueNumberOnly: true,
-            trimValues: false,
-            attrValueProcessor: (val, attrName) => he.decode(val, { isAttributeValue: true }),
-            tagValueProcessor : (val, tagName) => he.decode(val),
-        });
-        const stringsRaw = data.Locale.e ?? [];
-        const stringMap = new Map<number, string>(stringsRaw.map((x: { id: string, text: string }) => [Number(x.id), x.text ? String(x.text) : '']));
-        return {
-            locale: data.Locale.region,
-            strings: stringMap,
-        };
+
+        try {
+            const data = fxml.parse(content, {
+                ignoreAttributes: false,
+                attributeNamePrefix: '',
+                parseNodeValue: true,
+                textNodeName: 'text',
+                parseTrueNumberOnly: true,
+                trimValues: false,
+                attrValueProcessor: (val, attrName) => he.decode(val, { isAttributeValue: true }),
+                tagValueProcessor : (val, tagName) => he.decode(val),
+            });
+            const stringsRaw = data.Locale.e ?? [];
+            const stringMap = new Map<number, string>(stringsRaw.map((x: { id: string, text: string }) => [Number(x.id), x.text ? String(x.text) : '']));
+            return {
+                locale: data.Locale.region,
+                strings: stringMap,
+            };
+        }
+        catch (e) {
+            logger.warn(`failed to parse content of ${remoteName} from ${region} length ${content.length}`, e);
+            throw e;
+        }
     }
 
     async getMapHeader(region: string, hash: string) {

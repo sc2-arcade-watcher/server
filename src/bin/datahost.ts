@@ -17,14 +17,21 @@ process.on('unhandledRejection', e => {
 
     const conn = await orm.createConnection();
     const eSrv = new ExecutiveServer(conn);
-    await eSrv.load();
 
-    setupProcessTerminator(async () => {
+    async function terminate() {
         await Promise.all([
             eSrv.close()
         ]);
-
         logger.verbose(`Closing database connection..`);
         await conn.close();
-    });
+    }
+    setupProcessTerminator(terminate);
+
+    try {
+        await eSrv.load();
+    }
+    catch (e) {
+        logger.error('runtime error', e);
+        await terminate();
+    }
 })();

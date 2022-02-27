@@ -1,3 +1,4 @@
+import * as dotenv from 'dotenv';
 import * as orm from 'typeorm';
 import type lruFactory from 'tiny-lru';
 const lru: typeof lruFactory = require('tiny-lru');
@@ -91,10 +92,6 @@ class DataProc {
             });
             this.journalProc.addFeedSource(feed);
         }
-    }
-
-    protected async shutdown() {
-        await this.storeFeedCheckpoints();
     }
 
     async close() {
@@ -962,8 +959,15 @@ class DataProc {
     }
 }
 
-process.on('unhandledRejection', e => { throw e; });
+process.on('unhandledRejection', e => {
+    if (logger) logger.error('unhandledRejection', e);
+    throw e;
+});
 async function run() {
+    dotenv.config();
+    if (process.env.NOTIFY_SOCKET) {
+        await systemdNotifyReady();
+    }
     setupFileLogger('dataproc');
 
     let activeRegions = [
@@ -988,22 +992,27 @@ async function run() {
         return worker;
     }));
 
-    if (process.env.NOTIFY_SOCKET) {
-        await systemdNotifyReady();
-    }
-
-    setupProcessTerminator(async () => {
+    async function terminate() {
         await Promise.all(workers.map(async x => {
             logger.info(`Closing worker ${GameRegion[x.region]}`);
             await x.close();
             logger.info(`Worker done ${GameRegion[x.region]}`);
         }));
-    });
+        logger.info(`All workers exited`);
+    }
+    setupProcessTerminator(terminate);
 
-    await Promise.all(workers.map(x => x.work()));
-    logger.info(`All workers exited`);
-    await conn.close();
-    logger.info(`Database connection closed`);
+    try {
+        await Promise.all(workers.map(x => x.work()));
+    }
+    catch (e) {
+        logger.error('runtime error', e);
+        await terminate();
+    }
+    finally {
+        logger.verbose(`Closing database connection..`);
+        await conn.close();
+    }
 }
 
 run();
