@@ -38,12 +38,18 @@ type BattlePartialS2Lobby = Pick<S2GameLobby,
     'match'
 >;
 
+type BattlePartalS2LobbyMatch = Pick<S2LobbyMatch,
+    'result'
+>;
+
 type BattleTrackedLobby = BattlePartialS2Lobby & {
     globalId: string;
     lastCheckedAt: Date | null;
     checkCounter: number;
     isStartConfirmed: boolean;
     players: number[];
+    match: BattlePartalS2LobbyMatch | null;
+    matchExists: boolean,
 };
 
 interface BattleTrackedPlayerMHStatus {
@@ -68,6 +74,7 @@ export interface BattleCompletedLobbyPayload {
 
 export interface BattleMatchTrackerOptions {
     concurrency: number;
+    reevaluate: boolean | 'failed-only' | 'successful-only';
 }
 
 export class BattleMatchTracker {
@@ -80,13 +87,19 @@ export class BattleMatchTracker {
 
     /** composite key of `mapId/profileCacheKey` */
     protected currentlyEvaluated = new Set<string>();
+    protected options: BattleMatchTrackerOptions;
 
     public readonly taskQueue: PQueue;
     protected isRunning = false;
 
     constructor(protected conn: orm.Connection, options?: Partial<BattleMatchTrackerOptions>) {
-        this.taskQueue = new PQueue({
+        this.options = {
             concurrency: options?.concurrency ?? 10,
+            reevaluate: options?.reevaluate ?? false,
+        };
+
+        this.taskQueue = new PQueue({
+            concurrency: this.options.concurrency,
         });
     }
 
@@ -316,19 +329,25 @@ export class BattleMatchTracker {
     }
 
     protected async completeLobbyAsFailed(lobbyInfo: BattleTrackedLobby, result: S2LobbyMatchResult) {
-        const lobMatch: S2LobbyMatch = Object.assign(new S2LobbyMatch(), {
-            lobbyId: lobbyInfo.id,
-            result: result,
-        } as S2LobbyMatch);
-        await this.conn.getRepository(S2LobbyMatch).insert(lobMatch);
+        if (!lobbyInfo.match) {
+            lobbyInfo.match = new S2LobbyMatch();
+            lobbyInfo.match.lobbyId = lobbyInfo.id;
+        }
+        lobbyInfo.match.result = result;
+        if (!lobbyInfo.matchExists) {
+            await this.conn.getRepository(S2LobbyMatch).insert(lobbyInfo.match);
+        }
+        else {
+            await this.conn.getRepository(S2LobbyMatch).update({ lobbyId: lobbyInfo.id }, lobbyInfo.match);
+        }
         logger.verbose(oneLine`
             Failed to match lobby ${lobbyInfo.globalId} result=${S2LobbyMatchResult[result]}
             map=${lobbyInfo.regionId}/${lobbyInfo.mapBnetId} [${lobbyInfo.slotsHumansTaken}/${lobbyInfo.slotsHumansTotal}]
             closed=${lobbyInfo.closedAt.toISOString()}
             tl=${this.trackedLobbiesCount}
         `);
-        this.completeLobby(lobbyInfo, lobMatch);
-        return lobMatch;
+        this.completeLobby(lobbyInfo, lobbyInfo.match);
+        return lobbyInfo.match;
     }
 
     async processLobby(lobbyId: number) {
@@ -408,29 +427,36 @@ export class BattleMatchTracker {
         }
 
         if (pMatches) {
-            const lobMatch = new S2LobbyMatch();
-            lobMatch.lobbyId = lobbyId;
-            lobMatch.completedAt = pMatches[0].date;
-            lobMatch.result = S2LobbyMatchResult.Success;
+            if (!lobbyInfo.match) {
+                lobbyInfo.match = new S2LobbyMatch();
+                lobbyInfo.match.lobbyId = lobbyId;
+            }
+            lobbyInfo.match.completedAt = pMatches[0].date;
+            lobbyInfo.match.result = S2LobbyMatchResult.Success;
 
-            pMatches.forEach(x => {
-                if (x.lobbyMatchProfile) {
-                    logger.error(`lobbyMatchProfile`, lobbyInfo, pMatches, x.lobbyMatchProfile);
+            pMatches.forEach(individualProfileMatch => {
+                if (individualProfileMatch.lobbyMatchProfile) {
+                    logger.error(`lobbyMatchProfile`, lobbyInfo, pMatches, individualProfileMatch.lobbyMatchProfile);
                     throw new Error(`x.lobbyMatchProfile already exists?!`);
                 }
-                x.lobbyMatchProfile = {
+                individualProfileMatch.lobbyMatchProfile = {
                     lobbyId: lobbyId,
-                    profileMatchId: x.id,
+                    profileMatchId: individualProfileMatch.id,
                 } as S2LobbyMatchProfile;
             });
 
             await this.conn.transaction(async (tsManager) => {
-                await tsManager.getRepository(S2LobbyMatch).insert(lobMatch);
+                if (!lobbyInfo.matchExists) {
+                    await tsManager.getRepository(S2LobbyMatch).insert(lobbyInfo.match);
+                }
+                else {
+                    await tsManager.getRepository(S2LobbyMatch).update({ lobbyId: lobbyInfo.id }, lobbyInfo.match);
+                }
                 await tsManager.getRepository(S2LobbyMatchProfile).insert(
-                    pMatches.map(x => {
+                    pMatches.map(individualProfileMatch => {
                         return {
                             lobbyId: lobbyId,
-                            profileMatchId: x.id,
+                            profileMatchId: individualProfileMatch.id,
                         };
                     })
                 );
@@ -438,15 +464,15 @@ export class BattleMatchTracker {
             logger.info(oneLine`
                 Found a match for lobby=${lobbyInfo.globalId} map=${lobbyInfo.regionId}/${lobbyInfo.mapBnetId} (${lobbyInfo.players.length}p)
                 closed=${lobbyInfo.closedAt.toISOString()}
-                started=${lobMatch.completedAt.toISOString()}
-                duration=${lobMatch.completedAt ? `${(differenceInSeconds(lobMatch.completedAt, lobbyInfo.closedAt) / 60.0).toFixed(1)}m` : 'none'}
+                completed=${lobbyInfo.match.completedAt.toISOString()}
+                duration=${lobbyInfo.match.completedAt ? `${(differenceInSeconds(lobbyInfo.match.completedAt, lobbyInfo.closedAt) / 60.0).toFixed(1)}m` : 'none'}
                 tl=${this.trackedLobbiesCount}
             `, pMatches.map(x => oneLine`
                 (${x.decision.substr(0, 1).toUpperCase()})
                 ${lobbyInfo.slots.find(y => y?.profile?.localProfileId === x.localProfileId)?.profile.name.padEnd(12, ' ')}
             `).join(' '));
-            this.completeLobby(lobbyInfo, lobMatch);
-            return lobMatch;
+            this.completeLobby(lobbyInfo, lobbyInfo.match);
+            return lobbyInfo.match;
         }
         else if (new Date() > dateThreshold) {
             return this.completeLobbyAsFailed(lobbyInfo, S2LobbyMatchResult.Unknown);
@@ -475,6 +501,7 @@ export class BattleMatchTracker {
             ])
             .leftJoin('lobby.match', 'lobMatch')
             .addSelect([
+                'lobMatch.lobbyId',
                 'lobMatch.result',
                 // 'lobMatch.date',
             ])
@@ -526,19 +553,25 @@ export class BattleMatchTracker {
             if (lobItem.closedAt === null) {
                 throw new Error(`lobby ${lobItem.globalId} not yet closed`);
             }
-            if (lobItem.match) {
+            if (
+                (this.options.reevaluate === false && lobItem.match) ||
+                (this.options.reevaluate === 'failed-only' && lobItem.match.result === S2LobbyMatchResult.Success) ||
+                (this.options.reevaluate === 'successful-only' && lobItem.match.result !== S2LobbyMatchResult.Success)
+            ) {
                 logger.warn(`lobby ${lobItem.globalId} already matched with result=${S2LobbyMatchResult[lobItem.match.result]}, skipping..`);
                 continue;
             }
 
             const humanSlots = lobItem.slots.filter(x => x.kind === S2GameLobbySlotKind.Human);
             const lobbyInfo: BattleTrackedLobby = {
-                ...lobItem,
+                ...lobItem as BattlePartialS2Lobby,
                 globalId: lobItem.globalId,
                 lastCheckedAt: null,
                 checkCounter: 0,
                 isStartConfirmed: lobItem.slotsHumansTaken === lobItem.slotsHumansTotal,
                 players: humanSlots.filter(x => x.profile).map(x => x.profile.localProfileId),
+                match: lobItem.match,
+                matchExists: lobItem.match !== null,
             };
 
             if (lobItem.status !== GameLobbyStatus.Started) {

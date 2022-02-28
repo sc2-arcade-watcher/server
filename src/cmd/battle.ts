@@ -308,6 +308,7 @@ program.command('battle:sync-lobby')
     .option<String>('--before <date>', '', String, null)
     .option('--desc', '', false)
     .option('--debug', '', false)
+    .option('--reevaluate', '', false)
     .option('--continue', '', false)
     .action(async (cmd: program.Command) => {
         const conn = await orm.createConnection();
@@ -320,18 +321,28 @@ program.command('battle:sync-lobby')
             .limit(cmd.limit)
         ;
 
+        const bmTracker = new BattleMatchTracker(conn, {
+            reevaluate: cmd.reevaluate ? 'failed-only' : false,
+        });
         const orderDirection = cmd.desc ? 'DESC' : 'ASC';
 
         if (cmd.lobby && cmd.lobby.indexOf('/') !== -1) {
-            const [ bnetBucketId, bnetRecordId ] = (cmd.lobby as string).split('/').map(Number);
+            const tmp = (cmd.lobby as string).split('/');
+            if (tmp.length === 3) {
+                tmp.splice(0, 1);
+            }
+            else if (tmp.length !== 2) {
+                throw new Error('invalid');
+            }
+
             qb.andWhere('lobby.bnetBucketId = :bnetBucketId AND lobby.bnetRecordId = :bnetRecordId', {
-                bnetBucketId: bnetBucketId,
-                bnetRecordId: bnetRecordId,
+                bnetBucketId: Number(tmp[0]),
+                bnetRecordId: Number(tmp[1]),
             });
             qb.orderBy('lobby.id', orderDirection);
         }
         else {
-            if (!cmd.debug) {
+            if (!cmd.reevaluate) {
                 qb
                     .leftJoin('lobby.match', 'lobMatch')
                     .andWhere('lobMatch.lobbyId IS NULL')
@@ -381,7 +392,6 @@ program.command('battle:sync-lobby')
         }
 
         let terminated = false;
-        const bmTracker = new BattleMatchTracker(conn);
         setupProcessTerminator(() => {
             terminated = true;
             bmTracker.close();

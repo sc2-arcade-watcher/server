@@ -7,7 +7,7 @@ const lru: typeof lruFactory = require('tiny-lru');
 import { User, TextChannel, Message, MessageEmbedOptions, DiscordAPIError, DMChannel, Guild, APIMessage } from 'discord.js';
 import * as Redis from 'ioredis';
 import deepEqual = require('deep-equal');
-import { differenceInSeconds } from 'date-fns';
+import { differenceInSeconds, differenceInDays } from 'date-fns';
 import { Worker, Job, QueueScheduler, Queue, Processor } from 'bullmq';
 import { BotTask, DiscordErrorCode } from '../dscommon';
 import { S2GameLobby } from '../../entity/S2GameLobby';
@@ -334,7 +334,7 @@ class LobbyBattleMatchReceiver {
     async load(processor: Processor<BattleMatchRelayItem>) {
         this.queue = createBattleMatchQueue();
         this.worker = createBattleMatchWorker(processor, {
-            concurrency: 10,
+            concurrency: 80,
         });
         this.scheduler = createBattleMatchScheduler();
         await this.periodicClean();
@@ -359,7 +359,7 @@ export class LobbyReporterTask extends BotTask {
     readonly trackedLobbies = new Map<number, TrackedGameLobby>();
     readonly subscriptions = new Map<number, DsGameLobbySubscription>();
     readonly postingQueue = new pQueue<LobbyQueue, PostQueueOptions>({
-        concurrency: 15,
+        concurrency: 30,
         queueClass: LobbyQueue,
     });
 
@@ -402,7 +402,7 @@ export class LobbyReporterTask extends BotTask {
 
         await systemdNotifyWatchdog(0);
 
-        setTimeout(this.update.bind(this), 1000).unref();
+        setTimeout(this.update.bind(this), 900).unref();
         setInterval(this.flushMessages.bind(this), 60000 * 3600).unref();
     }
 
@@ -434,15 +434,18 @@ export class LobbyReporterTask extends BotTask {
         let subLimit = 5;
         if (targetDesc.guildId) {
             const guild = this.client.guilds.cache.get(String(targetDesc.guildId));
-            if (guild) {
-                postLimit = parseInt(Math.min(10, postLimit + guild.memberCount / 50).toFixed(0));
-                actionLimit = parseInt(Math.min(20, actionLimit + guild.memberCount / 50).toFixed(0));
-                subLimit = (Math.max(
-                    parseInt(Math.min(30, guild.memberCount * 30).toFixed(0)),
-                    subLimit
-                ));
+            const daysDiff = differenceInDays(Date.now(), guild.createdAt);
+            const credits = Math.pow(Math.log2(daysDiff), Math.log10(guild.memberCount));
 
-                if (this.client.owners.filter(x => x.id === guild.ownerID).length || guild.id === '271701880885870594') {
+            if (guild) {
+                postLimit = Math.min(8, postLimit + credits);
+                actionLimit = Math.min(15, actionLimit + credits);
+                subLimit = Math.max(
+                    Math.min(credits, 30),
+                    subLimit
+                );
+
+                if (this.client.owners.find(x => x.id === guild.ownerID)) {
                     postLimit = 70;
                     actionLimit = 125;
                     subLimit = 20;
@@ -459,7 +462,7 @@ export class LobbyReporterTask extends BotTask {
     protected async processBattleMatchResult(job: Job<BattleMatchRelayItem>): Promise<void> {
         if (job.data.result !== S2LobbyMatchResult.Success) return;
 
-        if (this.postingQueue.size > 500) {
+        if (Math.max(1, this.postingQueue.size) / this.postingQueue.concurrency > 0.75) {
             logger.warn(`posting queue overloaded, pausing processing of battle match results..`);
             await this.postingQueue.onEmpty();
         }
@@ -729,16 +732,22 @@ export class LobbyReporterTask extends BotTask {
                     cSub.targetId,
                     cSub.targetChannelId,
                     'post',
-                    6500
-                ) >= Math.max(1.0, 4.0 - this.postingQueue.size * 0.1)
+                    6000
+                ) >= Math.max(1.0, Math.min(10, Math.max(1, this.postingQueue.size) / this.postingQueue.concurrency * 0.1))
             ) {
                 continue;
             }
             const limits = this.getPostingLimits(cSub);
             const targetPostsRecentTotal = (this.postCountersLastFiveMin.get(cSub.targetId) ?? 0);
             if (targetPostsRecentTotal > (limits.postLimit * 5)) {
-                logger.warn(`target ${this.getPostingTargetName(cSub)} reached posting score: ${targetPostsRecentTotal} current limit: ${(limits.postLimit * 5)}`);
-                continue;
+                if (trackedLobby.isClosedStatusConcluded()) {
+                    logger.verbose([
+                        `target ${this.getPostingTargetName(cSub)} surpassed limit: ${targetPostsRecentTotal} max: ${(limits.postLimit * 5)}. `,
+                        `lobby already closed, stopping tracking of ${trackedLobby.lobby.globalId}`
+                    ].join(' '));
+                    trackedLobby.candidates.delete(cSub);
+                    continue;
+                }
             }
 
             trackedLobby.candidates.delete(cSub);

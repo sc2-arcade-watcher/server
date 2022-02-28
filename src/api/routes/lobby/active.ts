@@ -20,7 +20,7 @@ export default fp(async (server, opts) => {
         config: {
             rateLimit: {
                 max: 20,
-                timeWindow: 1000 * 30,
+                timeWindow: 1000 * 25,
             },
         },
         schema: {

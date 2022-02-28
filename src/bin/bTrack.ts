@@ -20,7 +20,7 @@ process.on('unhandledRejection', e => {
     logger.verbose(`initializing bTrack..`);
 
     let activeRegions: GameRegion[] = [
-        GameRegion.US,
+        // GameRegion.US,
         GameRegion.EU,
         GameRegion.KR,
         // GameRegion.CN,

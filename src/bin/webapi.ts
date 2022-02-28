@@ -47,11 +47,14 @@ server.register(fastifyStatic, {
 
 server.register(fastifyRateLimit, {
     global: true,
-    max: Number(process.env.STARC_WEBAPI_RATE_LIMIT_MAX ?? 100),
-    timeWindow: Number(process.env.STARC_WEBAPI_RATE_LIMIT_TIME_WINDOW_SEC ?? (40 * 1)) * 1000,
-    keyGenerator: (req: FastifyRequest) => {
-        return (req.userAccount?.privileges & AccountPrivileges.SuperAdmin) !== 0 ? 660000 : 0;
+    max: (req, key) => {
+        let m = Number(process.env.STARC_WEBAPI_RATE_LIMIT_MAX ?? 100);
+        if (req.userAccount && (req.userAccount.privileges & AccountPrivileges.SuperAdmin) !== 0) {
+            m *= 10;
+        }
+        return m;
     },
+    timeWindow: Number(process.env.STARC_WEBAPI_RATE_LIMIT_TIME_WINDOW_SEC ?? (40 * 1)) * 1000,
 });
 
 server.register(fastifyCors, {

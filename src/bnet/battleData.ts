@@ -498,7 +498,8 @@ export class BattleDataUpdater {
         }
         switch (regionId) {
             case GameRegion.US: {
-                return this.bAPIEntry.us;
+                // return this.bAPIEntry.us;
+                return this.bAPIEntry.pub;
             }
             case GameRegion.EU: {
                 return this.bAPIEntry.eu;
