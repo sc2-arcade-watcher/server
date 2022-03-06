@@ -70,7 +70,7 @@ export class DsBot extends CommandoClient {
         this.on('ready', () => {
             logger.info(`Logged in as ${this.user.tag} (${this.user.id}) guilds: ${this.guilds.cache.size} channels: ${this.channels.cache.size}`);
             for (const guild of this.guilds.cache.array().sort((a, b) => a.joinedTimestamp - b.joinedTimestamp).values()) {
-                logger.info(`Connected with guild "${guild.name}" (${guild.id}) members: ${guild.memberCount} channels: ${guild.channels.cache.size}`);
+                logger.info(`Connected with guild "${guild.name}" (${guild.id}) members: ${guild.memberCount} createdAt: ${guild.createdAt} channels: ${guild.channels.cache.size}`);
             }
         });
         this.on('disconnect', () => logger.warn('Disconnected!'));

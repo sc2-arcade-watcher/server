@@ -11,7 +11,6 @@ export default fp(async (server, opts) => {
         Params: any,
     }>('/maps/:regionId/:mapId/player-base', {
         schema: {
-            hide: true,
             tags: ['Maps'],
             params: {
                 type: 'object',

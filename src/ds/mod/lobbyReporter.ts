@@ -334,7 +334,7 @@ class LobbyBattleMatchReceiver {
     async load(processor: Processor<BattleMatchRelayItem>) {
         this.queue = createBattleMatchQueue();
         this.worker = createBattleMatchWorker(processor, {
-            concurrency: 80,
+            concurrency: 15,
         });
         this.scheduler = createBattleMatchScheduler();
         await this.periodicClean();
@@ -359,7 +359,7 @@ export class LobbyReporterTask extends BotTask {
     readonly trackedLobbies = new Map<number, TrackedGameLobby>();
     readonly subscriptions = new Map<number, DsGameLobbySubscription>();
     readonly postingQueue = new pQueue<LobbyQueue, PostQueueOptions>({
-        concurrency: 30,
+        concurrency: 25,
         queueClass: LobbyQueue,
     });
 
@@ -737,6 +737,13 @@ export class LobbyReporterTask extends BotTask {
             ) {
                 continue;
             }
+
+            if (cSub.guildId && !this.client.guilds.cache.has(String(cSub.guildId))) {
+                logger.warn(`Guild ${cSub.guildId} is unreachable, holding off from posting lobby: ${trackedLobby.lobby.globalId} sub: ${cSub.id}`);
+                trackedLobby.candidates.delete(cSub);
+                continue;
+            }
+
             const limits = this.getPostingLimits(cSub);
             const targetPostsRecentTotal = (this.postCountersLastFiveMin.get(cSub.targetId) ?? 0);
             if (targetPostsRecentTotal > (limits.postLimit * 5)) {

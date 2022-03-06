@@ -1,6 +1,13 @@
 This API is provided free of charge for non profit use.
 
-Anyone with intentions to utilize it to build something for a wider audience should first seek approval.
+However, it should be noted that:
+
+- No support is provided beyond this documentation.
+- Server resources are somewhat limited - anyone with intentions to build something for a wider audience should have that in mind. (Try not to hammer server with unnecessary API calls).
+
+### API Stability
+
+This API isn't final. Any changes that *may* impact 3rd party applications depending on it will be announced on Github: [github.com/sc2-arcade-watcher/issue-tracker/issues/8](https://github.com/sc2-arcade-watcher/issue-tracker/issues/8) (if you'd like to be notified ahead of time, then please subscribe to that issue).
 
 ### Rate limiting
 
@@ -18,7 +25,7 @@ Some of the endpoints are paginated. Depending on the endpoint it might be eithe
 
 Example:
 
-`http://sc2arcade.talv.space/api/maps?limit=100&orderBy=versionId&orderDirection=asc`
+`https://sc2arcade.com/api/maps?limit=100&orderBy=versionId&orderDirection=asc`
 ```js
 {
     "page": {
@@ -63,7 +70,7 @@ If `prev` is `null`, it means we are at the begining of data set, and there's no
 
 The pointer passed in `next`/`prev` will remain valid. What allows us to resume retrieval process from the same exact point we've stopped - skiping everything we've received previously. When requested sorting method uses incremental primary key of a table (such as `id`), in `ASC` order, it is guaranteed that any new records will only appear after. While this cannot be guaranteed for `updated` and `published` timestamps of maps uploaded to Arcade, since the service retrieves them out of order.
 
-To navigate to the next page in example shown above, the correct URL would be `http://sc2arcade.talv.space/api/maps?limit=100&orderBy=versionId&orderDirection=asc&after=WzUzXQ==` etc.
+To navigate to the next page in example shown above, the correct URL would be `https://sc2arcade.com/api/maps?limit=100&orderBy=versionId&orderDirection=asc&after=WzUzXQ==` etc.
 
 Which now also returns pointer to the previous page:
 ```js
@@ -75,7 +82,7 @@ Which now also returns pointer to the previous page:
 }
 ```
 
-If we wanted to go back, the correct URL would be `http://sc2arcade.talv.space/api/maps?limit=100&orderBy=versionId&orderDirection=asc&before=WzU0XQ==`
+If we wanted to go back, the correct URL would be `https://sc2arcade.com/api/maps?limit=100&orderBy=versionId&orderDirection=asc&before=WzU0XQ==`
 
 etc.
 
