@@ -96,9 +96,10 @@ class DataProc {
 
     async close() {
         if (this.closed) return;
-        logger.info(`closing..`);
         this.closed = true;
+        logger.verbose(`Closing ${GameRegion[this.region]} ..`);
         await this.journalProc.close();
+        logger.info(`Closed ${GameRegion[this.region]} ..`);
     }
 
     async work() {
@@ -993,12 +994,7 @@ async function run() {
     }));
 
     async function terminate() {
-        await Promise.all(workers.map(async x => {
-            logger.info(`Closing worker ${GameRegion[x.region]}`);
-            await x.close();
-            logger.info(`Worker done ${GameRegion[x.region]}`);
-        }));
-        logger.info(`All workers exited`);
+        await Promise.all(workers.map(x => x.close()));
     }
     setupProcessTerminator(terminate);
 
@@ -1008,8 +1004,10 @@ async function run() {
     catch (e) {
         logger.error('runtime error', e);
         await terminate();
+        throw e;
     }
     finally {
+        logger.info(`All workers exited`);
         logger.verbose(`Closing database connection..`);
         await conn.close();
     }

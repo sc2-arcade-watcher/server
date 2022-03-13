@@ -33,5 +33,6 @@ process.on('unhandledRejection', e => {
     catch (e) {
         logger.error('runtime error', e);
         await terminate();
+        throw e;
     }
 })();
