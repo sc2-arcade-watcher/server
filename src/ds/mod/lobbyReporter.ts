@@ -434,10 +434,11 @@ export class LobbyReporterTask extends BotTask {
         let subLimit = 5;
         if (targetDesc.guildId) {
             const guild = this.client.guilds.cache.get(String(targetDesc.guildId));
-            const daysDiff = differenceInDays(Date.now(), guild.createdAt);
-            const credits = Math.pow(Math.log2(daysDiff), Math.log10(guild.memberCount));
 
             if (guild) {
+                const daysDiff = differenceInDays(Date.now(), guild.createdAt);
+                const credits = Math.pow(Math.log2(daysDiff), Math.log10(guild.memberCount));
+
                 postLimit = Math.min(8, postLimit + credits);
                 actionLimit = Math.min(15, actionLimit + credits);
                 subLimit = Math.max(
