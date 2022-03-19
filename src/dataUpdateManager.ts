@@ -112,7 +112,7 @@ export class MapDataUpdatePlanner {
                 });
             }
             else {
-                let fromDate = subDays(Date.now(), 365);
+                let fromDate = subDays(Date.now(), 365 * 3);
                 if (item.reviewsUpdatedPartiallyAt !== null && item.reviewsUpdatedPartiallyAt < fromDate) {
                     fromDate = subDays(item.reviewsUpdatedPartiallyAt, 1);
                 }
