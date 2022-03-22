@@ -2,8 +2,8 @@
     "compilerOptions": {
         "module": "commonjs",
         "target": "es2020",
-        // "rootDir": ".",
-        // "outDir": "out",
+        "rootDir": ".",
+        "outDir": "out",
         "lib": [
             "es2017",
             "es2018",
@@ -22,6 +22,7 @@
         "removeComments": false,
         "emitDecoratorMetadata": true,
         "resolveJsonModule": true,
+        "downlevelIteration": true,
     },
     "include": [
         "src",

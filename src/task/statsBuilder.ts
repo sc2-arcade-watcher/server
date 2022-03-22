@@ -7,7 +7,7 @@ import { S2GameLobbySlotKind, S2GameLobbySlot } from '../entity/S2GameLobbySlot'
 import { S2StatsPeriod, S2StatsPeriodKind } from '../entity/S2StatsPeriod';
 import { S2StatsPeriodMap } from '../entity/S2StatsPeriodMap';
 import { S2GameLobby } from '../entity/S2GameLobby';
-import { GameLobbyStatus } from '../gametracker';
+import { GameLobbyStatus } from '../common';
 import { S2StatsPeriodRegion } from '../entity/S2StatsPeriodRegion';
 import { S2GameLobbyMap } from '../entity/S2GameLobbyMap';
 import { GameRegion } from '../common';

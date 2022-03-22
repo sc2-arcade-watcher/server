@@ -1,5 +1,5 @@
-import { GameRegion } from '../src/common';
-import { JournalEventKind, GameLobbyStatus, GameLobbySlotProfile } from '../src/gametracker';
+import { GameRegion, GameLobbyStatus } from '../src/common';
+import { JournalEventKind, GameLobbySlotProfile } from '../src/gametracker';
 import { prepareJournal } from './thelpers';
 
 describe('fallback to BasicPreview only if it\'s newer', () => {

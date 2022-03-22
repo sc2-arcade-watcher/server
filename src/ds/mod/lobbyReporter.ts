@@ -11,7 +11,7 @@ import { differenceInSeconds, differenceInDays } from 'date-fns';
 import { Worker, Job, QueueScheduler, Queue, Processor } from 'bullmq';
 import { BotTask, DiscordErrorCode } from '../dscommon';
 import { S2GameLobby } from '../../entity/S2GameLobby';
-import { GameLobbyStatus } from '../../gametracker';
+import { GameLobbyStatus } from '../../common';
 import { S2GameLobbySlot, S2GameLobbySlotKind } from '../../entity/S2GameLobbySlot';
 import { sleep, sleepUnless, systemdNotifyWatchdog, TypedEvent } from '../../helpers';
 import { logger, logIt } from '../../logger';

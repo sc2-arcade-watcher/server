@@ -2,7 +2,7 @@ import { BotTask } from '../dscommon';
 import { S2GameLobby } from '../../entity/S2GameLobby';
 import { logger, logIt } from '../../logger';
 import { sleep, sleepUnless } from '../../helpers';
-import { GameLobbyStatus } from '../../gametracker';
+import { GameLobbyStatus } from '../../common';
 import { S2GameLobbySlotKind } from '../../entity/S2GameLobbySlot';
 
 export class StatusTask extends BotTask {

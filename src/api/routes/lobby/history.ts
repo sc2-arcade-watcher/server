@@ -1,8 +1,6 @@
 import * as orm from 'typeorm';
 import fp from 'fastify-plugin';
 import { stripIndents } from 'common-tags';
-import { GameLobbyStatus } from '../../../gametracker';
-import { S2GameLobby } from '../../../entity/S2GameLobby';
 import { S2GameLobbyRepository } from '../../../repository/S2GameLobbyRepository';
 import { S2GameLobbyMap } from '../../../entity/S2GameLobbyMap';
 import { S2GameLobbySlot } from '../../../entity/S2GameLobbySlot';

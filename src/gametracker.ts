@@ -7,9 +7,6 @@ import { parseProfileHandle } from './bnet/common';
 import { stripIndents } from 'common-tags';
 import { GameRegion } from './common';
 
-// TODO: remove once all references are cleaned up
-export { GameLobbyStatus } from './common';
-
 interface GameLobbyPreview {
     lastUpdateAt: Date;
     slots: LobbyPreviewSlot[];

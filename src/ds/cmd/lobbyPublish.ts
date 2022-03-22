@@ -3,7 +3,7 @@ import { GeneralCommand } from '../dscommon';
 import { CommandoMessage } from 'discord.js-commando';
 import { S2GameLobbyRepository } from '../../repository/S2GameLobbyRepository';
 import { TextChannel, Message } from 'discord.js';
-import { GameLobbyStatus } from '../../gametracker';
+import { GameLobbyStatus } from '../../common';
 import { stripIndents } from 'common-tags';
 import { sleep } from '../../helpers';
 import { S2GameLobby } from '../../entity/S2GameLobby';

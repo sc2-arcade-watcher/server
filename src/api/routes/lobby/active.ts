@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin';
 import { stripIndents } from 'common-tags';
-import { GameLobbyStatus } from '../../../gametracker';
+import { GameLobbyStatus } from '../../../common';
 import { S2GameLobbyRepository } from '../../../repository/S2GameLobbyRepository';
 import { TypedEvent } from '../../../helpers';
 
