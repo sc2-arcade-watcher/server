@@ -1,0 +1,26 @@
+[mariadb]
+
+#
+# * Fine Tuning
+#
+key_buffer_size        = 32M
+#max_allowed_packet     = 16M
+thread_stack           = 256K
+thread_cache_size      = 10
+# This replaces the startup script and checks MyISAM tables if needed
+# the first time they are touched
+#myisam_recover_options = BACKUP
+#max_connections        = 100
+#table_cache            = 64
+#thread_concurrency     = 10
+
+# disable query cache completely - makes no sense in such a write-heavy workload
+query_cache_type = 0
+query_cache_limit = 0
+query_cache_size = 0
+
+max_heap_table_size = 32M
+tmp_table_size = 32M
+
+# [mysqld_safe]
+# malloc-lib = jemalloc

@@ -1,0 +1,8 @@
+[mysqld]
+
+plugin_load_add = provider_lz4
+
+innodb_compression_algorithm = lz4
+innodb_compression_default = ON
+innodb_compression_pad_pct_max = 70
+innodb_compression_level = 6

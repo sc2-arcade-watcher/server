@@ -67,8 +67,8 @@ interface PerfMeasurementOptions {
 
 class PosterPerformanceManager {
     protected readonly redis = new Redis({
-        host: 'localhost',
-        port: 6381,
+        host: process.env.STARC_QUEUE_REDIS_HOST,
+        port: parseInt(process.env.STARC_QUEUE_REDIS_PORT),
         db: 1,
         maxRetriesPerRequest: null,
         enableOfflineQueue: false,
@@ -929,7 +929,7 @@ export class LobbyReporterTask extends BotTask {
                     postedMsg.msg.targetChannelId,
                     'patch',
                     1000
-                ) >= 0.8
+                ) >= 1.0
             ) {
                 continue;
             }

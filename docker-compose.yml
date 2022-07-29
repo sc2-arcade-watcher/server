@@ -1,0 +1,213 @@
+# x-common-args: &common-args
+
+x-common-env: &common-env
+  ENV: ${ENV:??}
+  TZ: ${TZ:??}
+  LOG_LEVEL: ${LOG_LEVEL}
+  STARC_SQL_TYPE: ${STARC_SQL_TYPE:??}
+  STARC_SQL_HOST: ${STARC_SQL_HOST:??}
+  STARC_SQL_PORT: ${STARC_SQL_PORT:??}
+  STARC_SQL_USER: ${STARC_SQL_USER:??}
+  STARC_SQL_PASS: ${STARC_SQL_PASS:??}
+  STARC_SQL_DATABASE: ${STARC_SQL_DATABASE:??}
+  STARC_QUEUE_REDIS_HOST: ${STARC_QUEUE_REDIS_HOST:??}
+  STARC_QUEUE_REDIS_PORT: ${STARC_QUEUE_REDIS_PORT:??}
+  DPROC_AUTH_TOKEN: ${DPROC_AUTH_TOKEN:??}
+  DS_BOT_TOKEN: ${DS_BOT_TOKEN:??}
+  DS_BOT_OWNER: ${DS_BOT_OWNER:??}
+  DS_BOT_STAFF: ${DS_BOT_STAFF:??}
+  # DS_BOT_STATUS_MESSAGE: ${DS_BOT_STATUS_MESSAGE}
+  # STARC_LBFEED_DIR: ${STARC_LBFEED_DIR}
+  # STARC_WEBAPI_PORT: ${STARC_WEBAPI_PORT}
+  STARC_WEBAPI_HOSTNAME_WHITELIST: ${STARC_WEBAPI_HOSTNAME_WHITELIST:??}
+  STARC_WEBAPI_RATE_LIMIT_MAX: ${STARC_WEBAPI_RATE_LIMIT_MAX-}
+  STARC_WEBAPI_RATE_LIMIT_TIME_WINDOW_SEC: ${STARC_WEBAPI_RATE_LIMIT_TIME_WINDOW_SEC-}
+  STARC_APP_SECRET: ${STARC_APP_SECRET:??}
+  STARC_S2MDEC_PATH: ${STARC_S2MDEC_PATH:??}
+  STARC_DHOST_MR_QUEUE_LIMIT: ${STARC_DHOST_MR_QUEUE_LIMIT:??}
+  STARC_BNET_API_CLIENT_ID: ${STARC_BNET_API_CLIENT_ID:??}
+  STARC_BNET_API_CLIENT_SECRET: ${STARC_BNET_API_CLIENT_SECRET:??}
+
+services:
+  redis:
+    build:
+      context: ./redis
+      # args:
+      #   <<: *common-args
+    container_name: ${COMPOSE_PROJECT_NAME:??}-redis
+    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-redis:${IMAGE_VERSION}
+    hostname: redis
+    restart: unless-stopped
+
+  db:
+    build:
+      context: ./mariadb
+      # args:
+      #   <<: *common-args
+    container_name: ${COMPOSE_PROJECT_NAME:??}-mariadb
+    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-mariadb:${IMAGE_VERSION}
+    command:
+      - mariadbd
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--innodb-buffer-pool-size=6G"
+    hostname: db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_HOST: db
+      # MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD-}
+      # MARIADB_RANDOM_ROOT_PASSWORD: 1
+      MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 1
+      MARIADB_USER: db
+      MARIADB_PASSWORD: db
+      MARIADB_DATABASE: db
+      # MARIADB_AUTO_UPGRADE: ${MARIADB_AUTO_UPGRADE-}
+    volumes:
+      - type: volume
+        source: db_data
+        target: /var/lib/mysql
+        volume:
+          nocopy: true
+      - type: bind
+        source: /srv/${COMPOSE_PROJECT_NAME:??}/mysqld
+        target: /run/mysqld
+        bind:
+          create_host_path: true
+
+  datahost:
+    build:
+      context: .
+    command:
+      - node
+      - "out/src/bin/datahost.js"
+    container_name: ${COMPOSE_PROJECT_NAME:??}-datahost
+    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-datahost:${IMAGE_VERSION}
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+    volumes:
+      - source: /mnt/data/starc_data
+        target: /app/data
+        type: bind
+        bind:
+          create_host_path: false
+    expose:
+      - 8089
+    # depends_on:
+    #   - redis
+    #   - db
+
+  dataproc:
+    build:
+      context: .
+    command:
+      - node
+      - "out/src/bin/dataproc.js"
+    container_name: ${COMPOSE_PROJECT_NAME:??}-dataproc
+    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-dataproc:${IMAGE_VERSION}
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+    volumes:
+      - source: /mnt/data/starc_data
+        target: /app/data
+        type: bind
+        bind:
+          create_host_path: false
+    # depends_on:
+    #   - redis
+    #   - db
+
+  webapi:
+    build:
+      context: .
+    command:
+      - node
+      - "out/src/bin/webapi.js"
+    container_name: ${COMPOSE_PROJECT_NAME:??}-webapi
+    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-webapi:${IMAGE_VERSION}
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+    volumes:
+      - source: /mnt/data/starc_data
+        target: /app/data
+        type: bind
+        bind:
+          create_host_path: false
+    expose:
+      - 8090
+    # depends_on:
+    #   - redis
+    #   - db
+
+  drec:
+    build:
+      context: .
+    command:
+      - node
+      - "out/src/bin/drec.js"
+    container_name: ${COMPOSE_PROJECT_NAME:??}-drec
+    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-drec:${IMAGE_VERSION}
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+    volumes:
+      - source: /mnt/data/starc_data
+        target: /app/data
+        type: bind
+        bind:
+          create_host_path: false
+    # depends_on:
+    #   - redis
+    #   - db
+
+  dsbot:
+    build:
+      context: .
+    command:
+      - node
+      - "out/src/bin/dsbot.js"
+    container_name: ${COMPOSE_PROJECT_NAME:??}-dsbot
+    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-dsbot:${IMAGE_VERSION}
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+    volumes:
+      - source: /mnt/data/starc_data
+        target: /app/data
+        type: bind
+        bind:
+          create_host_path: false
+    # depends_on:
+    #   - redis
+    #   - db
+
+  btrack:
+    build:
+      context: .
+    command:
+      - node
+      - "out/src/bin/btrack.js"
+    container_name: ${COMPOSE_PROJECT_NAME:??}-btrack
+    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-btrack:${IMAGE_VERSION}
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+    volumes:
+      - source: /mnt/data/starc_data
+        target: /app/data
+        type: bind
+        bind:
+          create_host_path: false
+    # depends_on:
+    #   - redis
+    #   - db
+
+volumes:
+  db_data:
+
+networks:
+  default:
+    driver: bridge
+    attachable: true

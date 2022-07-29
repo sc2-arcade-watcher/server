@@ -1,0 +1,22 @@
+services:
+  db:
+    volumes:
+      - type: bind
+        source: /srv/starc_mysql
+        target: /var/lib/mysql
+        bind:
+          create_host_path: false
+  
+  prometheus:
+    volumes:
+      - type: bind
+        source: /srv/starc_prometheus
+        target: /prometheus
+        bind:
+          create_host_path: false
+
+  drec:
+    stop_grace_period: 45s
+
+  dsbot:
+    stop_grace_period: 45s

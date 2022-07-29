@@ -7,11 +7,11 @@
     },
     "scripts": {
         "clean": "rm -rf out/*",
-        "build": "rm -rf out/* && tsc -p ./",
-        "build:watch": "rm -rf out/* && tsc -watch -p ./",
+        "build": "rm -rf out/* && yarn run tsc -p ./",
+        "build:watch": "rm -rf out/* && yarn run tsc -watch -p ./",
         "lint": "tslint -p .",
-        "nullchecks": "tsc -p tsconfig.strict.json",
-        "nullchecks:watch": "tsc -w -p tsconfig.strict.json"
+        "nullchecks": "yarn run tsc -p tsconfig.strict.json",
+        "nullchecks:watch": "yarn run tsc -w -p tsconfig.strict.json"
     },
     "dependencies": {
         "axios": "^0.19.2",

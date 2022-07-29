@@ -38,12 +38,12 @@ export const logger = createLogger({
             return out.join('\n');
         }),
     ),
-    transports: [
-        new transports.Console({
-            level: process.env['LOG_LEVEL'] || 'verbose',
-        }),
-    ],
+    level: process.env.LOG_LEVEL ?? 'verbose',
 });
+
+logger.add(new transports.Console({
+    level: process.env.LOG_LEVEL ?? 'verbose',
+}));
 
 export function setupFileLogger(appName: string) {
     if (process.env['STARC_FILE_LOG_DISABLE'] === '1') return;

@@ -1,0 +1,15 @@
+/.git
+/.vscode
+/data
+/etc
+/mariadb
+/migrations
+/node_modules/*
+/redis
+/out/*
+/tmp
+/.env
+/docker-compose.yml
+/docker-compose.*.yml
+/Dockerfile
+/sync-*.sh

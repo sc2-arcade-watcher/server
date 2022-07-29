@@ -16,11 +16,11 @@ process.on('unhandledRejection', e => {
     if (process.env.NOTIFY_SOCKET) {
         await systemdNotifyReady();
     }
-    setupFileLogger('bTrack');
-    logger.verbose(`initializing bTrack..`);
+    setupFileLogger('btrack');
+    logger.verbose(`initializing btrack..`);
 
     let activeRegions: GameRegion[] = [
-        // GameRegion.US,
+        GameRegion.US,
         GameRegion.EU,
         GameRegion.KR,
         // GameRegion.CN,
@@ -37,7 +37,7 @@ process.on('unhandledRejection', e => {
     const conn = await orm.createConnection();
     const bProfUpdater = new BattleProfileUpdater(conn);
     const bmTracker = new BattleMatchTracker(conn, {
-        concurrency: 25,
+        concurrency: 12,
     });
     const bmProvider = new BattleLobbyProvider(conn, bmTracker);
     const bWorkers: BattleWorker[] = [];

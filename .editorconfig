@@ -11,6 +11,9 @@ indent_style = space
 charset = utf-8
 indent_size = 4
 
+[*.yml]
+indent_size = 2
+
 [*.{py,sh,ts,js,json,md,service,sql}]
 insert_final_newline = true
 trim_trailing_whitespace = true

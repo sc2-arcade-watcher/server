@@ -1,0 +1,216 @@
+[mariadb]
+
+plugin-load-add = ha_rocksdb
+
+#
+# ROCKSDB
+# https://raw.githubusercontent.com/jtelleria/my.ini/master/RocksDB%20my.ini
+#
+
+#############################################################################################################################
+# rocksdb_block_size
+#############################################################################################################################
+# NOTES:
+# a) I/O Unit (Not fully Aligned).
+# b) Default is 4KB. 16 KB gives better space savings, but needs extra CPU for decompression.
+# c) Measure trade-offs between 4K, 8K, 16K and 32 K.
+# d) Check the size of data of the block cache in DB_BLOCK_CACHE_USAGE Column of the INFORMATION_SCHEMA.ROCKSDB_DBSTATS table.
+
+#rocksdb_block_size = 8192 # Default Value: 4096 (4K)
+
+#############################################################################################################################
+# rocksdb_block_cache_size
+#############################################################################################################################
+# DESCRIPTION: Block_cache size for RocksDB.
+
+# NOTES: RocksDB�s Internal Cache. Similar to innodb_buffer_pool_size, but less important since RocksDB relies on OS cache too.
+# Set Variable depending on objective "Commit(kB)" to be set in RAM Memory by the "mysqld" process.
+
+rocksdb_block_cache_size = 1536M # Default: 512 MB
+
+# [OPTIMAL VALUE: 50% Read/50% Write Snappy Compression Type]: 2 [GB]
+
+# [NOTE]: If "rocksdb_cache_index_and_filter_blocks=1" (Enabled), some additional "rocksdb_block_cache_size" Memory could
+#         also be added, in order to leave some space within the "rocksdb_block_cache_size" for "Bloom Filters" Whole Keys
+#         (rocksdb_whole_key_filtering=1) or the Prefix Extractor (memtable_prefix_bloom_bits = 41943040 = 41 MB Aprox.).
+#
+#     => Some Extra Memory could be Added: "rocksdb_block_cache_size" e.g.: + 1G
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Index & Filter Blocks
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# IMPORTANT: Both Options MUST always be set to ON (1) in order to limit resources to rocksdb_block_cache_size Memory to the
+#            objective "Commit" Load.
+
+# rocksdb_cache_index_and_filter_blocks:        If you set cache_index_and_filter_blocks to true, index and filter blocks
+#                           will be stored in block cache, together with all other data blocks.
+#
+#                           This allows to effectively limit allocated resources.
+#
+# rocksdb_pin_l0_filter_and_index_blocks_in_cache:  Minimizes performance impact of rocksdb_cache_index_and_filter_blocks = ON,
+#                           in order to effectively limit resources without a decrease in performance.
+
+rocksdb_cache_index_and_filter_blocks = 1
+rocksdb_pin_l0_filter_and_index_blocks_in_cache = 1
+
+#############################################################################################################################
+# ROCKSDB WAL Configuration Settings
+#############################################################################################################################
+# NOTES:
+# Control Maximum WAL Size.
+# Setting as large as total InnoDB Log Size would be fine.
+
+#rocksdb_max_total_wal_size = 4G             # Default: 0
+#rocksdb_wal_dir =
+
+# rocksdb_wal_dir: Recommended to set the WAL path on a different SSD (Whenever its possible).
+
+#############################################################################################################################
+# rocksdb_max_background_jobs
+#############################################################################################################################
+# [DEFINITION]: Maximum number of concurrent background jobs, including flushes and compactions. RocksDB will automatically
+# decide how to allocate the available job slots to flushes and compactions.
+#
+# [NOTE]: Using more than 1 background job helps to overlap CPU and IO.
+#    * With too Few Threads: There will be more stalls from Throttling.
+#    * With too Many Threds: Handling User Queries Might Suffer.
+#
+# [VALUE RANGE]: -1 to 64.
+#
+# [DEFAULT]: rocksdb_max_background_jobs = 2.
+#    * Too Low.
+#    * It must be increased => In order to: Increase "Threads for Compactation".
+#
+# [RECOMMENDED CONFIGURATION OPTIMAL VALUES]: For MyRocks (MariaDB + RocksDB Engine + OS)
+#    * rocksdb_max_background_jobs = ("Number of Physical CPU Cores")/3.5
+#    * rocksdb_max_background_jobs = ("Number of Logical  CPU Cores")/7
+#
+#    NOTE 1: With Recommended Value: Server Needs: Very Little CPU => Just Enough to: Generate Random Numbers -> To make Next Compactation Request.
+#
+#    NOTE 2: With MariaDB => There is a Demand for More CPU above the RocksDB Storage Engine Layer -> To:
+#   a) Read Queries -> From: Network.
+#       b) Process Queries.
+#       c) Send Results: Back to the Client.
+
+#
+# [OPTIMAL ROCKSDB COMPACTATION VALUES STORAGE ENGINE LAYER]: Only RocksDB Engine Compactation Threads, NOT OS NOR MariaDB Server Threads.
+#    * Optimal Baseline:                        rocksdb_max_background_jobs = ("Number of Physical CPU Cores") * 3
+#    * Optimal 80% Read/20% Write Snappy:       rocksdb_max_background_jobs = ("Number of Physical CPU Cores") * 2
+#    * Optimal 50% Read/50% Write Snappy:       rocksdb_max_background_jobs = ("Number of Physical CPU Cores") * 3
+#    * Optimal 80% Read/20% Write Uncompressed: rocksdb_max_background_jobs = ("Number of Physical CPU Cores") * 1
+#    * Optimal 50% Read/50% Write Uncompressed: rocksdb_max_background_jobs = ("Number of Physical CPU Cores") * 3
+#    => WARNING: Previous Configuration Options are only for RocksDB Compression, and do not apply to MyRocks (MariaDB + RocksDB),
+#            as the Server must also handle the OS and MariaDB Server, and previous configurations would produce Hyper-Threading.
+#    => NOT RECOMMENDED.
+#
+#    NOTE 1: Based on Percona Presentation.
+#    NOTE 2: Theoretical Value -> In Reality: There is no benefit from so many Threads.
+#
+# [WARNING 1]: This option must be used with MariaDB 10.3.8 as �rocksdb_max_background_compactions�
+#              and �rocksdb_max_background_flushes� variables have been DEPRECATED.
+#
+# [WARNING 2]: When "max_background_jobs" is Too Large => Then: Compaction Thread -> Might Starve Threads that Run User Queries.
+
+rocksdb_max_background_jobs = 2
+
+#############################################################################################################################
+# rocksdb_lock_wait_timeout
+#############################################################################################################################
+# DESCRIPTION: Number of seconds to wait for lock.
+
+rocksdb_lock_wait_timeout = 2 # Default: 1
+
+#############################################################################################################################
+# rocksdb_max_open_files
+#############################################################################################################################
+# [NOTE 1]:
+#   a) Increase file descriptor limit for mysqld process (Increase nofile in /etc/security/limits.conf)
+#   b) If setting greater than 0, RocksDB still uses table_cache, which will lock a mutex every time you access the file.
+#      I think you'll see much greater benefit with -1 because then you will not need to go through LRUCache to get the table you
+#      need.
+#
+# [NOTE 2]: "rocksdb_max_open_files = -1" Configuration Option Characteristics:
+#   * Can get read performance.
+#   * Side-Effects:
+#   - More Open File Descriptors.
+#   - More Untracked Memory Consumption.
+#
+# [IMPORTANT]: Keep all files Open! (-1)
+#
+
+rocksdb_max_open_files = -1    # Default Value: -1
+
+#############################################################################################################################
+# rocksdb_db_write_buffer_size
+#############################################################################################################################
+# DESCRIPTION: This is the maximum size of all Write Buffers across all Collumn Families in the database.
+# It represents the amount of data to build up in memory (backed by an unsorted log on disk) across all
+# column families before writing to a sorted on-disk file.
+#
+# "Total size of memtables across column families". This can be used to manage the total memory used by memtables.
+#
+# This is distinct from write_buffer_size, which enforces a limit for a single memtable.
+#
+# By default this feature is disabled (by being set to 0). You should not need to change it.
+
+# rocksdb_db_write_buffer_size = 4G # Default Value: 0 (Disabled).
+
+#############################################################################################################################
+# Other Configurations (CF Options)
+#############################################################################################################################
+
+# rocksdb_table_cache_numshardbits = 6            # Default: 6. Optimal 50/50 Snappy: 6.
+
+# -----------------------------------------------------------------------------------
+# Options to Enable or Disable
+# -----------------------------------------------------------------------------------
+
+# NOTE 1 : "allow_mmap_reads" cannot be used with "use_direct_reads" or "use_direct_io_for_flush_and_compaction". Otherwise Server
+#          CRASHES.
+
+# NOTE 2: The use of MMAP on On Linux with fast SSD buffered IO can be faster than mmap for reads.
+#     The difference might not matter with disks. On Windows results might differ.
+
+#rocksdb_allow_mmap_reads = 0                # Default: 0 # Useful for SSD Disks. Do not set with Spinning Disks.
+#rocksdb_allow_mmap_writes = 0               # Default: 0
+#rocksdb_use_fsync = 0                   # Default: 0
+#rocksdb_use_adaptive_mutex = 0              # Default: 0
+
+# -----------------------------------------------------------------------------------
+# Rate Limiter
+# -----------------------------------------------------------------------------------
+
+#rocksdb_bytes_per_sync = 512000             # Default: 0. Optimal: 512 KB.
+#rocksdb_wal_bytes_per_sync = 4194304            # Default: 0. Set to 4MB.
+#rocksdb_rate_limiter_bytes_per_sec = 419430400      # Default: 0. Set to 400 MB/s. Increase if you're running on higher.
+
+# -----------------------------------------------------------------------------------
+# Triggering Compaction if there are many Sequential Deletes
+# -----------------------------------------------------------------------------------
+# NOTE: DESCRIPTION: "RocksDB will trigger compaction for the file if it has more than the specified number
+#                    of sequential deletes per window".
+
+# [WARNING]: This Configuration Options, which are disabled by default, are recommended to be enabled, in order too avoid too many tombstones.
+
+rocksdb_compaction_sequential_deletes_count_sd = 1        # Default: 0
+rocksdb_compaction_sequential_deletes = 199999            # Default: 0
+rocksdb_compaction_sequential_deletes_window = 200000     # Default: 0
+
+# -----------------------------------------------------------------------------------
+# Max Subcompactations
+# -----------------------------------------------------------------------------------
+# DESCRIPTION: This value represents the maximum number of threads that will concurrently perform a compaction job by breaking it into multiple,
+#          smaller ones that are run simultaneously.
+# DEFAULT:     1 (i.e. no subcompactions)
+#
+# NOTES: L0 to L1 compaction cannot be parallelized. In some cases, it may become a bottleneck that limit the total
+# compaction speed. In this case, users can set max_subcompactions to more than 1. In this case, we'll try to partition the
+# range and use multiple threads to execute it.
+#
+# Set up compression more aggressively and allocate more threads for flush and compaction.
+
+rocksdb_max_subcompactions = 2          # Default: 1
+
+# is it needed?
+rocksdb_flush_log_at_trx_commit = 2

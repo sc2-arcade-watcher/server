@@ -4,8 +4,8 @@ import { logger } from '../logger';
 import { S2LobbyMatch } from '../entity/S2LobbyMatch';
 
 const redisQueueConnOpts = <ConnectionOptions>{
-    host: 'localhost',
-    port: 6381,
+    host: process.env.STARC_QUEUE_REDIS_HOST,
+    port: parseInt(process.env.STARC_QUEUE_REDIS_PORT),
     db: 2,
     enableOfflineQueue: false,
 };
