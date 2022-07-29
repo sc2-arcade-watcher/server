@@ -355,6 +355,13 @@ class LobbyBattleMatchReceiver {
     }
 }
 
+export type LobbyOrphanedSubscription = {
+    subscriptionId: number;
+    failCounter: number;
+    firstFailAt: Date;
+    lastFailAt: Date;
+};
+
 export class LobbyReporterTask extends BotTask {
     readonly trackedLobbies = new Map<number, TrackedGameLobby>();
     readonly subscriptions = new Map<number, DsGameLobbySubscription>();
@@ -369,6 +376,7 @@ export class LobbyReporterTask extends BotTask {
 
     protected _onClose = new TypedEvent<void>();
     readonly matchReceiver = new LobbyBattleMatchReceiver(this.conn);
+    protected orphanedSubscriptions = new Map<number, LobbyOrphanedSubscription>();
 
     async reloadSubscriptions() {
         this.subscriptions.clear();
@@ -740,9 +748,42 @@ export class LobbyReporterTask extends BotTask {
             }
 
             if (cSub.guildId && !this.client.guilds.cache.has(String(cSub.guildId))) {
-                logger.warn(`Guild ${cSub.guildId} is unreachable, holding off from posting lobby: ${trackedLobby.lobby.globalId} sub: ${cSub.id}`);
+                let orphan = this.orphanedSubscriptions.get(cSub.id);
+                if (!orphan) {
+                    orphan = {
+                        subscriptionId: cSub.id,
+                        firstFailAt: new Date(),
+                        lastFailAt: new Date(),
+                        failCounter: 0,
+                    };
+                    this.orphanedSubscriptions.set(cSub.id, orphan);
+                }
+                else {
+                    orphan.lastFailAt = new Date();
+                }
+                orphan.failCounter++;
+
+                logger.warn(`Guild ${cSub.guildId} is unreachable, holding off from posting lobby: ${trackedLobby.lobby.globalId} sub: ${cSub.id} cnt=${orphan.failCounter} firstFailAt=${orphan.firstFailAt} lastFailAt=${orphan.lastFailAt}`);
                 trackedLobby.candidates.delete(cSub);
+
+                const secsDiff = differenceInSeconds(orphan.lastFailAt, orphan.firstFailAt);
+                // unsure what's the best way to tell if the guild is unreachable.. so just hold on a little
+                // considering that:
+                // - guilds might not appear in case of a partial outage (Discord.js issue?)
+                // - guilds might not appear if they don't belong to particular shard
+                if (orphan.failCounter > 4 && secsDiff >= 3600 * 3) {
+                    this.orphanedSubscriptions.delete(cSub.id);
+                    logger.info(`Limit reached, sub: ${cSub.id} removed`);
+                    await this.removeSubscription(cSub);
+                }
+
                 continue;
+            }
+
+            const orphan = this.orphanedSubscriptions.get(cSub.id);
+            if (orphan) {
+                logger.verbose(`Guild ${cSub.guildId} has re-appeared cnt=${orphan.failCounter} firstFailAt=${orphan.firstFailAt} lastFailAt=${orphan.lastFailAt}`);
+                this.orphanedSubscriptions.delete(cSub.id);
             }
 
             const limits = this.getPostingLimits(cSub);
