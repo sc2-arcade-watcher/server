@@ -3,6 +3,10 @@
 /out/
 /coverage/
 /data
+/etc/*
+!/etc/.gitkeep
+/logs/*
+!/logs/.gitkeep
 /tmp/
 /tests/dbg/
 sync*.sh

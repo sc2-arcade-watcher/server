@@ -18,7 +18,11 @@ dotenv.config();
 
 const server = fastify({
     logger: false,
-    trustProxy: ['127.0.0.1', '172.16.0.0/12'],
+    trustProxy: typeof process.env.STARC_WEBAPI_TRUST_PROXY === 'string' && process.env.STARC_WEBAPI_TRUST_PROXY.length > 0 ? (
+        (process.env.STARC_WEBAPI_TRUST_PROXY === 'true') ? true :
+        (process.env.STARC_WEBAPI_TRUST_PROXY === 'false') ? false :
+        (typeof process.env.STARC_WEBAPI_TRUST_PROXY === 'string') ? process.env.STARC_WEBAPI_TRUST_PROXY.split(',') : false
+    ) : false
 });
 const webapiPort = Number(process.env.STARC_WEBAPI_PORT ?? 8090);
 

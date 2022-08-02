@@ -22,6 +22,7 @@ x-common-env: &common-env
   STARC_WEBAPI_HOSTNAME_WHITELIST: ${STARC_WEBAPI_HOSTNAME_WHITELIST:??}
   STARC_WEBAPI_RATE_LIMIT_MAX: ${STARC_WEBAPI_RATE_LIMIT_MAX-}
   STARC_WEBAPI_RATE_LIMIT_TIME_WINDOW_SEC: ${STARC_WEBAPI_RATE_LIMIT_TIME_WINDOW_SEC-}
+  STARC_WEBAPI_TRUST_PROXY: ${STARC_WEBAPI_TRUST_PROXY-}
   STARC_APP_SECRET: ${STARC_APP_SECRET:??}
   STARC_S2MDEC_PATH: ${STARC_S2MDEC_PATH:??}
   STARC_DHOST_MR_QUEUE_LIMIT: ${STARC_DHOST_MR_QUEUE_LIMIT:??}
@@ -50,7 +51,7 @@ services:
       - mariadbd
       - "--character-set-server=utf8mb4"
       - "--collation-server=utf8mb4_unicode_ci"
-      - "--innodb-buffer-pool-size=6G"
+      - "--innodb-buffer-pool-size=2G"
     hostname: db
     restart: unless-stopped
     environment:
@@ -63,13 +64,13 @@ services:
       MARIADB_DATABASE: db
       # MARIADB_AUTO_UPGRADE: ${MARIADB_AUTO_UPGRADE-}
     volumes:
-      - type: volume
-        source: db_data
-        target: /var/lib/mysql
-        volume:
-          nocopy: true
       - type: bind
-        source: /srv/${COMPOSE_PROJECT_NAME:??}/mysqld
+        source: /srv/sc2arcade.com/data/mysql
+        target: /var/lib/mysql
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /srv/sc2arcade.com/run/mysqld
         target: /run/mysqld
         bind:
           create_host_path: true

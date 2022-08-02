@@ -316,7 +316,7 @@ const defaultConfig: BattleAPIClientConfig = {
     clientSecret: process.env.STARC_BNET_API_CLIENT_SECRET,
     accessToken: (function() {
         try {
-            return fs.readFileSync('data/.battle_token', 'utf8');
+            return fs.readFileSync('etc/.battle_token', 'utf8');
         }
         catch (err) {
             return void 0;
@@ -392,7 +392,7 @@ export class BattleAPI {
             const tokenInfo = (await this.oauth.acquireToken({ grantType: 'client_credentials' })).data;
             this.sc2.axios.defaults.headers['Authorization'] = `Bearer ${tokenInfo.accessToken}`;
             logger.verbose(`Refreshed Battle token, accessToken=${tokenInfo.accessToken} expiresIn=${tokenInfo.expiresIn}`);
-            await fs.writeFile('data/.battle_token', tokenInfo.accessToken, { encoding: 'utf8' });
+            await fs.writeFile('etc/.battle_token', tokenInfo.accessToken, { encoding: 'utf8' });
             battleTokenRefreshEvent.emit(tokenInfo.accessToken);
             return tokenInfo.accessToken;
         }

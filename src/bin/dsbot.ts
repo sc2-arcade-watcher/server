@@ -122,11 +122,6 @@ export class DsBot extends CommandoClient {
     }
 
     async prepare() {
-        // TODO: remove or fix?
-        // there's something wrong with that implementation, also it's not used for anything apart `prefix` cmd
-        // logger.verbose(`Opening sqlite db..`);
-        // this.slitedb = await sqlite.open('data/commando-settings.db');
-        // await this.setProvider(new SQLiteProvider(this.slitedb));
         logger.verbose(`Connecting to mariadb..`);
         this.conn = await orm.createConnection();
     }

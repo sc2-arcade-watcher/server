@@ -1260,6 +1260,7 @@ export class LobbyReporterTask extends BotTask {
         const isCompleted = (
             typeof msg === 'undefined' ||
             typeof lobbyMsg.msg.subscription === 'undefined' ||
+            lobbyMsg.msg.subscription === null ||
             (trackedLobby.lobby.status === GameLobbyStatus.Started && lobbyMsg.msg.subscription.deleteMessageStarted) ||
             trackedLobby.lobby.status !== GameLobbyStatus.Started
         );
