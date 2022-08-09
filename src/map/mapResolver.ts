@@ -393,7 +393,7 @@ export class MapDependencyError extends Error {
 }
 
 export class MapResolver {
-    public readonly depot = new BattleDepot('data/depot');
+    public readonly depot = new BattleDepot('data/public/depot');
 
     constructor(protected conn: orm.Connection) {
     }

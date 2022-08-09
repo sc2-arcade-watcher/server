@@ -87,8 +87,8 @@ services:
     environment:
       <<: *common-env
     volumes:
-      - source: /mnt/data/starc_data
-        target: /app/data
+      - source: /srv/sc2arcade.com/data/public
+        target: /app/data/public
         type: bind
         bind:
           create_host_path: false
@@ -110,8 +110,8 @@ services:
     environment:
       <<: *common-env
     volumes:
-      - source: /mnt/data/starc_data
-        target: /app/data
+      - source: /srv/sc2arcade.com/data/public
+        target: /app/data/public
         type: bind
         bind:
           create_host_path: false
@@ -131,8 +131,8 @@ services:
     environment:
       <<: *common-env
     volumes:
-      - source: /mnt/data/starc_data
-        target: /app/data
+      - source: /srv/sc2arcade.com/data/public
+        target: /app/data/public
         type: bind
         bind:
           create_host_path: false
@@ -154,8 +154,8 @@ services:
     environment:
       <<: *common-env
     volumes:
-      - source: /mnt/data/starc_data
-        target: /app/data
+      - source: /srv/sc2arcade.com/data/public
+        target: /app/data/public
         type: bind
         bind:
           create_host_path: false
@@ -175,8 +175,8 @@ services:
     environment:
       <<: *common-env
     volumes:
-      - source: /mnt/data/starc_data
-        target: /app/data
+      - source: /srv/sc2arcade.com/data/public
+        target: /app/data/public
         type: bind
         bind:
           create_host_path: false
@@ -196,17 +196,14 @@ services:
     environment:
       <<: *common-env
     volumes:
-      - source: /mnt/data/starc_data
-        target: /app/data
+      - source: /srv/sc2arcade.com/data/public
+        target: /app/data/public
         type: bind
         bind:
           create_host_path: false
     # depends_on:
     #   - redis
     #   - db
-
-volumes:
-  db_data:
 
 networks:
   default:

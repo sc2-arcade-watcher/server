@@ -6,8 +6,8 @@ import { logger } from '../../logger';
 import { GameRegion } from '../../common';
 import { isAxiosError } from '../../helpers';
 
-const bnDepot = new BattleDepot('data/depot');
-const pubBnetDir = new NestedHashDir('data/bnet');
+const bnDepot = new BattleDepot('data/public/depot');
+const pubBnetDir = new NestedHashDir('data/public/bnet');
 
 export default fp(async (server, opts) => {
     async function getDepotImage(hash: string, region?: GameRegion) {

@@ -12,7 +12,7 @@ export default fp(async (server, opts) => {
         },
     }, async (request, reply) => {
         const donations = (await new Promise(async (resolve, reject) => {
-            csvParse(await fs.readFile('data/content/donations.csv'), {
+            csvParse(await fs.readFile('data/public/content/donations.csv'), {
                 columns: true,
                 cast: (value, context) => {
                     if (context.column === 'amount') return Number(value);

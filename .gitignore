@@ -1,14 +1,26 @@
+# non-standard config
 /.vscode/
+
+# deps
 /node_modules/
+
+# compiled TS files
 /out/
-/coverage/
-/data
+
+# data & stuff
+/data/*/*
+!/data/*/.gitkeep
 /etc/*
 !/etc/.gitkeep
 /logs/*
 !/logs/.gitkeep
+
+# tests & tmp
+/coverage/
 /tmp/
 /tests/dbg/
-sync*.sh
+
+# env & docker
 .env*
 !.env-example
+docker-compose.local.yml
