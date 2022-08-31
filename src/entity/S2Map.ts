@@ -13,7 +13,9 @@ export enum S2MapType {
     DependencyMod = 'dependency_mod',
 }
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 @Unique('region_bnet_idx', ['regionId', 'bnetId'])
 @Index('local_profile_region_idx', ['authorLocalProfileId', 'regionId'])
 @Index('category_type_region_idx', ['mainCategoryId', 'type', 'regionId'])
@@ -42,12 +44,18 @@ export class S2Map {
 
     @ManyToOne(type => S2MapHeader, {
         nullable: false,
+        // foreign keys not supported on RocksDB
+        onDelete: 'NO ACTION',
+        onUpdate: 'NO ACTION',
     })
     @Index('current_version_idx')
     currentVersion: S2MapHeader;
 
     @ManyToOne(type => S2MapHeader, {
         nullable: false,
+        // foreign keys not supported on RocksDB
+        onDelete: 'NO ACTION',
+        onUpdate: 'NO ACTION',
     })
     @Index('initial_version_idx')
     initialVersion: S2MapHeader;

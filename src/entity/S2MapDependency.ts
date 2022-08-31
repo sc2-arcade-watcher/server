@@ -1,6 +1,8 @@
 import { Entity, Column, Index } from 'typeorm';
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 @Index('region_dependency_idx', ['regionId', 'dependencyMapId'])
 export class S2MapDependency {
     @Column({

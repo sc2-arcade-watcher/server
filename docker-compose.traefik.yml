@@ -8,7 +8,7 @@ services:
       - "traefik.docker.network=webproxy"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-datahost.rule=Host(`gateway.sc2arcade.com`)"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-datahost.entrypoints=websecure"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-datahost.tls.certresolver=cfresolver"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-datahost.tls.certresolver=le-http"
       - "traefik.http.services.${COMPOSE_PROJECT_NAME:??}-datahost.loadbalancer.server.port=8089"
   
   webapi:
@@ -21,29 +21,11 @@ services:
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-webapi.rule=Host(`api.sc2arcade.com`)"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-webapi.entrypoints=websecure"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-webapi.tls=true"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-webapi.middlewares=real-ip-foo@file"
-
-  whoami:
-    image: traefik/whoami:v1.8.1
-    container_name: ${COMPOSE_PROJECT_NAME:??}-whoami
-    hostname: whoami
-    restart: "no"
-    profiles:
-      - dev
-    expose:
-      - 80
-    networks:
-      - default
-      - webproxy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=webproxy"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-whoami.rule=Host(`whoami.sc2arcade.com`)"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-whoami.entrypoints=websecure"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-whoami.tls=true"
-      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-whoami.middlewares=real-ip-foo@file"
-      # - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-whoami.middlewares=internal-restricted-cloudflare@file"
-      # - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-whoami.tls.certresolver=cfresolver"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-webapi.middlewares=real-ip-cf@file"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-static.rule=Host(`static.sc2arcade.com`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-static.entrypoints=websecure"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-static.tls=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-static.middlewares=real-ip-cf@file"
 
 networks:
   webproxy:

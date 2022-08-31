@@ -1,7 +1,9 @@
 import { Entity, Column, OneToOne, JoinColumn } from 'typeorm';
 import { SysFeedProvider } from './SysFeedProvider';
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 export class SysFeedPosition {
     @OneToOne(type => SysFeedProvider, {
         nullable: false,

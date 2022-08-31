@@ -3,7 +3,6 @@ import * as pMap from 'p-map';
 import { addDays, addWeeks, addMonths, addSeconds } from 'date-fns';
 import { S2GameLobbyRepository } from '../repository/S2GameLobbyRepository';
 import { logger, logIt } from '../logger';
-import { S2GameLobbySlotKind, S2GameLobbySlot } from '../entity/S2GameLobbySlot';
 import { S2StatsPeriod, S2StatsPeriodKind } from '../entity/S2StatsPeriod';
 import { S2StatsPeriodMap } from '../entity/S2StatsPeriodMap';
 import { S2GameLobby } from '../entity/S2GameLobby';

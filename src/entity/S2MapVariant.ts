@@ -1,7 +1,9 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, Unique, ManyToOne } from 'typeorm';
 import { S2Map } from './S2Map';
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 @Unique('map_variant_idx', ['map', 'variantIndex'])
 export class S2MapVariant {
     @PrimaryGeneratedColumn()
@@ -9,8 +11,9 @@ export class S2MapVariant {
 
     @ManyToOne(type => S2Map, map => map.variants, {
         nullable: false,
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE',
+        // foreign keys not supported on RocksDB
+        onDelete: 'NO ACTION',
+        onUpdate: 'NO ACTION',
     })
     @Index('map_idx')
     map: S2Map;

@@ -8,7 +8,9 @@ import { GameRegion, GameLobbyStatus } from '../common';
 import { S2LobbyMatch } from './S2LobbyMatch';
 import { S2GameLobbyMap } from './S2GameLobbyMap';
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 @Unique('bnet_id', ['bnetBucketId', 'bnetRecordId'])
 export class S2GameLobby {
     @PrimaryGeneratedColumn()

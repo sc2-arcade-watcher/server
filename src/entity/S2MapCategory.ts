@@ -1,6 +1,8 @@
 import { Entity, PrimaryColumn, Column, Index } from 'typeorm';
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 export class S2MapCategory {
     @PrimaryColumn({
         type: 'tinyint',

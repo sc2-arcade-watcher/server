@@ -32,7 +32,7 @@ x-common-env: &common-env
 services:
   redis:
     build:
-      context: ./redis
+      context: ./docker/redis
       # args:
       #   <<: *common-args
     container_name: ${COMPOSE_PROJECT_NAME:??}-redis
@@ -42,7 +42,7 @@ services:
 
   db:
     build:
-      context: ./mariadb
+      context: ./docker/mariadb
       # args:
       #   <<: *common-args
     container_name: ${COMPOSE_PROJECT_NAME:??}-mariadb
@@ -87,8 +87,23 @@ services:
     environment:
       <<: *common-env
     volumes:
+      - source: /srv/sc2arcade.com/data/config
+        target: /app/data/config
+        type: bind
+        bind:
+          create_host_path: false
       - source: /srv/sc2arcade.com/data/public
         target: /app/data/public
+        type: bind
+        bind:
+          create_host_path: false
+      - source: /srv/sc2arcade.com/data/lbstream
+        target: /app/data/lbstream
+        type: bind
+        bind:
+          create_host_path: false
+      - source: /srv/sc2arcade.com/data/logs
+        target: /app/data/logs
         type: bind
         bind:
           create_host_path: false
@@ -101,6 +116,8 @@ services:
   dataproc:
     build:
       context: .
+      ssh:
+        default: ${SSH_AUTH_SOCK}
     command:
       - node
       - "out/src/bin/dataproc.js"
@@ -110,8 +127,23 @@ services:
     environment:
       <<: *common-env
     volumes:
+      - source: /srv/sc2arcade.com/data/config
+        target: /app/data/config
+        type: bind
+        bind:
+          create_host_path: false
       - source: /srv/sc2arcade.com/data/public
         target: /app/data/public
+        type: bind
+        bind:
+          create_host_path: false
+      - source: /srv/sc2arcade.com/data/lbstream
+        target: /app/data/lbstream
+        type: bind
+        bind:
+          create_host_path: false
+      - source: /srv/sc2arcade.com/data/logs
+        target: /app/data/logs
         type: bind
         bind:
           create_host_path: false
@@ -131,8 +163,23 @@ services:
     environment:
       <<: *common-env
     volumes:
+      - source: /srv/sc2arcade.com/data/config
+        target: /app/data/config
+        type: bind
+        bind:
+          create_host_path: false
       - source: /srv/sc2arcade.com/data/public
         target: /app/data/public
+        type: bind
+        bind:
+          create_host_path: false
+      - source: /srv/sc2arcade.com/data/lbstream
+        target: /app/data/lbstream
+        type: bind
+        bind:
+          create_host_path: false
+      - source: /srv/sc2arcade.com/data/logs
+        target: /app/data/logs
         type: bind
         bind:
           create_host_path: false
@@ -145,6 +192,8 @@ services:
   drec:
     build:
       context: .
+      ssh:
+        default: ${SSH_AUTH_SOCK}
     command:
       - node
       - "out/src/bin/drec.js"
@@ -154,8 +203,23 @@ services:
     environment:
       <<: *common-env
     volumes:
+      - source: /srv/sc2arcade.com/data/config
+        target: /app/data/config
+        type: bind
+        bind:
+          create_host_path: false
       - source: /srv/sc2arcade.com/data/public
         target: /app/data/public
+        type: bind
+        bind:
+          create_host_path: false
+      - source: /srv/sc2arcade.com/data/lbstream
+        target: /app/data/lbstream
+        type: bind
+        bind:
+          create_host_path: false
+      - source: /srv/sc2arcade.com/data/logs
+        target: /app/data/logs
         type: bind
         bind:
           create_host_path: false
@@ -166,6 +230,8 @@ services:
   dsbot:
     build:
       context: .
+      ssh:
+        default: ${SSH_AUTH_SOCK}
     command:
       - node
       - "out/src/bin/dsbot.js"
@@ -175,8 +241,23 @@ services:
     environment:
       <<: *common-env
     volumes:
+      - source: /srv/sc2arcade.com/data/config
+        target: /app/data/config
+        type: bind
+        bind:
+          create_host_path: false
       - source: /srv/sc2arcade.com/data/public
         target: /app/data/public
+        type: bind
+        bind:
+          create_host_path: false
+      - source: /srv/sc2arcade.com/data/lbstream
+        target: /app/data/lbstream
+        type: bind
+        bind:
+          create_host_path: false
+      - source: /srv/sc2arcade.com/data/logs
+        target: /app/data/logs
         type: bind
         bind:
           create_host_path: false
@@ -187,6 +268,8 @@ services:
   btrack:
     build:
       context: .
+      ssh:
+        default: ${SSH_AUTH_SOCK}
     command:
       - node
       - "out/src/bin/btrack.js"
@@ -196,8 +279,23 @@ services:
     environment:
       <<: *common-env
     volumes:
+      - source: /srv/sc2arcade.com/data/config
+        target: /app/data/config
+        type: bind
+        bind:
+          create_host_path: false
       - source: /srv/sc2arcade.com/data/public
         target: /app/data/public
+        type: bind
+        bind:
+          create_host_path: false
+      - source: /srv/sc2arcade.com/data/lbstream
+        target: /app/data/lbstream
+        type: bind
+        bind:
+          create_host_path: false
+      - source: /srv/sc2arcade.com/data/logs
+        target: /app/data/logs
         type: bind
         bind:
           create_host_path: false

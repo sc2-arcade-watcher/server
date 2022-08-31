@@ -62,7 +62,7 @@ server.register(fastifyRateLimit, {
 });
 
 server.register(fastifyCors, {
-    origin: process.env.ENV === 'dev' ? '*' : process.env.STARC_WEBAPI_HOSTNAME_WHITELIST.split(' ').map(x => `https://${x}`),
+    origin: process.env.ENV === 'dev' ? '*' : process.env.STARC_WEBAPI_HOSTNAME_WHITELIST.split(':').map(x => `https://${x}`),
     maxAge: 3600 * 24,
 });
 

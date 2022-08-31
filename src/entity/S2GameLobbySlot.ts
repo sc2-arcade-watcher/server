@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, Unique, JoinColumn } from 'typeorm';
 import { S2GameLobby } from './S2GameLobby';
 import { S2Profile } from './S2Profile';
 import { S2GameLobbyPlayerJoin } from './S2GameLobbyPlayerJoin';
@@ -15,20 +15,30 @@ const slotKindMap = {
     [S2GameLobbySlotKind.Human]: 3,
 };
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 export class S2GameLobbySlot {
     @PrimaryGeneratedColumn()
     id: number;
 
     @ManyToOne(type => S2GameLobby, lobby => lobby.slots, {
+        primary: true,
         nullable: false,
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE',
+        // foreign keys not supported on RocksDB
+        onDelete: 'NO ACTION',
+        onUpdate: 'NO ACTION',
     })
-    @Index('lobby_idx')
+    @JoinColumn()
+    // probably not needed due to lobbyId being first part of PK (and the only part)
+    // @Index('lobby_idx', { unique: true })
     lobby: S2GameLobby;
 
-    @Column()
+    @Column({
+        primary: true,
+        type: 'int',
+        unsigned: true,
+    })
     lobbyId: number;
 
     @Column({
@@ -52,8 +62,9 @@ export class S2GameLobbySlot {
 
     @ManyToOne(type => S2Profile, {
         nullable: true,
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE',
+        // foreign keys not supported on RocksDB
+        onDelete: 'NO ACTION',
+        onUpdate: 'NO ACTION',
     })
     @Index('profile_idx')
     profile: S2Profile;
@@ -65,8 +76,9 @@ export class S2GameLobbySlot {
 
     @ManyToOne(type => S2GameLobbyPlayerJoin, {
         nullable: true,
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE',
+        // foreign keys not supported on RocksDB
+        onDelete: 'NO ACTION',
+        onUpdate: 'NO ACTION',
     })
     joinInfo: S2GameLobbyPlayerJoin;
 

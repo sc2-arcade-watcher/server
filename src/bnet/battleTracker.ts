@@ -5,7 +5,7 @@ const lru: typeof lruFactory = require('tiny-lru');
 import { GameRegion, GameLobbyStatus } from '../common';
 import { S2ProfileMatch, S2MatchType } from '../entity/S2ProfileMatch';
 import { S2GameLobbyRepository } from '../repository/S2GameLobbyRepository';
-import { S2GameLobbySlotKind, S2GameLobbySlot } from '../entity/S2GameLobbySlot';
+import { S2GameLobbySlotKind } from '../entity/S2GameLobbySlot';
 import { logger, logIt } from '../logger';
 import { S2Profile } from '../entity/S2Profile';
 import { S2ProfileBattleTracking } from '../entity/S2ProfileBattleTracking';

@@ -2,7 +2,9 @@ import { Entity, PrimaryGeneratedColumn, Column, Index, ManyToOne, Unique, OneTo
 import { S2Region } from './S2Region';
 import { SysFeedPosition } from './SysFeedPosition';
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 @Unique('region_name', ['region', 'name'])
 export class SysFeedProvider {
     @PrimaryGeneratedColumn()
@@ -11,14 +13,13 @@ export class SysFeedProvider {
     @ManyToOne(type => S2Region, {
         nullable: false,
         eager: true,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
+        // foreign keys not supported on RocksDB
+        onDelete: 'NO ACTION',
+        onUpdate: 'NO ACTION',
     })
-    @Index()
     region: S2Region;
 
     @Column()
-    @Index()
     name: string;
 
     @Column({
@@ -29,8 +30,9 @@ export class SysFeedProvider {
     @OneToOne(type => SysFeedPosition, position => position.provider, {
         nullable: false,
         eager: true,
-        onDelete: 'RESTRICT',
-        onUpdate: 'RESTRICT',
+        // foreign keys not supported on RocksDB
+        onDelete: 'NO ACTION',
+        onUpdate: 'NO ACTION',
     })
     position: SysFeedPosition;
 }

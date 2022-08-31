@@ -1,7 +1,9 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index, Unique, JoinColumn } from 'typeorm';
 import { S2Map } from './S2Map';
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 @Unique('region_map_ver_idx', ['regionId', 'bnetId', 'majorVersion', 'minorVersion'])
 export class S2MapHeader {
     @PrimaryGeneratedColumn()

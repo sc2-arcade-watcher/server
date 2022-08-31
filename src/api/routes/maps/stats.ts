@@ -1,6 +1,4 @@
 import fp from 'fastify-plugin';
-import { S2GameLobby } from '../../../entity/S2GameLobby';
-import { S2GameLobbySlotKind } from '../../../entity/S2GameLobbySlot';
 import { S2StatsPeriodMap } from '../../../entity/S2StatsPeriodMap';
 import { S2StatsPeriod, S2StatsPeriodKind } from '../../../entity/S2StatsPeriod';
 

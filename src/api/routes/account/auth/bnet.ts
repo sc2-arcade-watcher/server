@@ -25,7 +25,7 @@ export default fp(async (server, opts) => {
     }, async (request, reply) => {
         try {
             const redirectURL = new URL(request.body.redirectUri);
-            const whitelist = process.env.STARC_WEBAPI_HOSTNAME_WHITELIST.split(' ');
+            const whitelist = process.env.STARC_WEBAPI_HOSTNAME_WHITELIST.split(':');
             if (!whitelist.find(x => x === redirectURL.hostname)) {
                 return reply.code(400).send({
                     message: `Unknown hostname in redirect URI`,

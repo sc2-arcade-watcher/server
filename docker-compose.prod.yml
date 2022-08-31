@@ -1,6 +1,21 @@
 services:
+  db:
+    command:
+      - mariadbd
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--innodb-buffer-pool-size=4G"
+
   drec:
     stop_grace_period: 45s
 
   dsbot:
     stop_grace_period: 45s
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: "172.20.0.0/24"
+          gateway: "172.20.0.1"
+          ip_range: "172.20.0.0/24"

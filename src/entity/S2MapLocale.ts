@@ -1,7 +1,9 @@
 import { Entity, Column, Index } from 'typeorm';
 import { GameLocale } from '../common';
 
-@Entity()
+@Entity({
+    engine: 'ROCKSDB',
+})
 @Index('name_idx', ['name'])
 @Index('original_name_idx', ['originalName'])
 export class S2MapLocale {
