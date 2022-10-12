@@ -1,309 +1,153 @@
 # x-common-args: &common-args
 
-x-common-env: &common-env
+x-restart-policy: &restart_policy
+  restart: ${APP_RESTART_POLICY-no}
+
+x-service-volumes: &service_volumes
+  volumes:
+    - source: /srv/sc2arcade.com/data/config
+      target: /app/data/config
+      type: bind
+      bind:
+        create_host_path: false
+    - source: /srv/sc2arcade.com/data/public
+      target: /app/data/public
+      type: bind
+      bind:
+        create_host_path: false
+    - source: /srv/sc2arcade.com/data/lbstream
+      target: /app/data/lbstream
+      type: bind
+      bind:
+        create_host_path: false
+    - source: /srv/sc2arcade.com/data/logs
+      target: /app/data/logs
+      type: bind
+      bind:
+        create_host_path: false
+
+x-service-build: &service_build
+  build:
+    context: .
+    ssh:
+      default: ${SSH_AUTH_SOCK}
+
+x-common-env: &common_env
   ENV: ${ENV:??}
-  TZ: ${TZ:??}
-  LOG_LEVEL: ${LOG_LEVEL}
-  STARC_SQL_TYPE: ${STARC_SQL_TYPE:??}
-  STARC_SQL_HOST: ${STARC_SQL_HOST:??}
-  STARC_SQL_PORT: ${STARC_SQL_PORT:??}
-  STARC_SQL_USER: ${STARC_SQL_USER:??}
-  STARC_SQL_PASS: ${STARC_SQL_PASS:??}
-  STARC_SQL_DATABASE: ${STARC_SQL_DATABASE:??}
+  TZ: ${TZ-UTC}
+  LOG_LEVEL: ${LOG_LEVEL-info}
+  # ---
   STARC_QUEUE_REDIS_HOST: ${STARC_QUEUE_REDIS_HOST:??}
   STARC_QUEUE_REDIS_PORT: ${STARC_QUEUE_REDIS_PORT:??}
+  # ---
   DPROC_AUTH_TOKEN: ${DPROC_AUTH_TOKEN:??}
+  # ---
   DS_BOT_TOKEN: ${DS_BOT_TOKEN:??}
   DS_BOT_OWNER: ${DS_BOT_OWNER:??}
   DS_BOT_STAFF: ${DS_BOT_STAFF:??}
-  # DS_BOT_STATUS_MESSAGE: ${DS_BOT_STATUS_MESSAGE}
-  # STARC_LBFEED_DIR: ${STARC_LBFEED_DIR}
-  # STARC_WEBAPI_PORT: ${STARC_WEBAPI_PORT}
+  # ---
   STARC_WEBAPI_HOSTNAME_WHITELIST: ${STARC_WEBAPI_HOSTNAME_WHITELIST:??}
   STARC_WEBAPI_RATE_LIMIT_MAX: ${STARC_WEBAPI_RATE_LIMIT_MAX-}
   STARC_WEBAPI_RATE_LIMIT_TIME_WINDOW_SEC: ${STARC_WEBAPI_RATE_LIMIT_TIME_WINDOW_SEC-}
   STARC_WEBAPI_TRUST_PROXY: ${STARC_WEBAPI_TRUST_PROXY-}
   STARC_APP_SECRET: ${STARC_APP_SECRET:??}
-  STARC_S2MDEC_PATH: ${STARC_S2MDEC_PATH:??}
-  STARC_DHOST_MR_QUEUE_LIMIT: ${STARC_DHOST_MR_QUEUE_LIMIT:??}
+  # ---
   STARC_BNET_API_CLIENT_ID: ${STARC_BNET_API_CLIENT_ID:??}
   STARC_BNET_API_CLIENT_SECRET: ${STARC_BNET_API_CLIENT_SECRET:??}
 
 services:
   redis:
+    <<: [ *restart_policy ]
     build:
       context: ./docker/redis
-      # args:
-      #   <<: *common-args
     container_name: ${COMPOSE_PROJECT_NAME:??}-redis
-    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-redis:${IMAGE_VERSION}
     hostname: redis
-    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /srv/sc2arcade.com/redis
+        target: /data
 
   db:
+    <<: [ *restart_policy ]
     build:
       context: ./docker/mariadb
-      # args:
-      #   <<: *common-args
     container_name: ${COMPOSE_PROJECT_NAME:??}-mariadb
-    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-mariadb:${IMAGE_VERSION}
     command:
       - mariadbd
       - "--character-set-server=utf8mb4"
       - "--collation-server=utf8mb4_unicode_ci"
-      - "--innodb-buffer-pool-size=2G"
+      - "--innodb-buffer-pool-size=${INNODB_BUFFER_POOL_SIZE-2G}"
     hostname: db
-    restart: unless-stopped
     environment:
-      MARIADB_ROOT_HOST: db
-      # MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD-}
-      # MARIADB_RANDOM_ROOT_PASSWORD: 1
-      MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 1
-      MARIADB_USER: db
-      MARIADB_PASSWORD: db
-      MARIADB_DATABASE: db
-      # MARIADB_AUTO_UPGRADE: ${MARIADB_AUTO_UPGRADE-}
+      MARIADB_ROOT_HOST: ${STARC_SQL_HOST-db}
+      MARIADB_USER: ${STARC_SQL_USER-db}
+      MARIADB_PASSWORD: ${STARC_SQL_PASSWORD-db}
+      MARIADB_DATABASE: ${STARC_SQL_DATABASE-db}
+      MARIADB_RANDOM_ROOT_PASSWORD: 1
+      MARIADB_AUTO_UPGRADE: ${MARIADB_AUTO_UPGRADE-1}
     volumes:
       - type: bind
         source: /srv/sc2arcade.com/data/mysql
         target: /var/lib/mysql
-        bind:
-          create_host_path: false
-      - type: bind
-        source: /srv/sc2arcade.com/run/mysqld
-        target: /run/mysqld
-        bind:
-          create_host_path: true
 
   datahost:
-    build:
-      context: .
-    command:
-      - node
-      - "out/src/bin/datahost.js"
+    <<: [ *service_build, *restart_policy, *service_volumes ]
+    command: 'node out/src/bin/datahost.js'
     container_name: ${COMPOSE_PROJECT_NAME:??}-datahost
-    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-datahost:${IMAGE_VERSION}
-    restart: unless-stopped
     environment:
-      <<: *common-env
-    volumes:
-      - source: /srv/sc2arcade.com/data/config
-        target: /app/data/config
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/public
-        target: /app/data/public
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/lbstream
-        target: /app/data/lbstream
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/logs
-        target: /app/data/logs
-        type: bind
-        bind:
-          create_host_path: false
+      <<: *common_env
     expose:
       - 8089
-    # depends_on:
-    #   - redis
-    #   - db
+    depends_on: [ redis, db ]
 
   dataproc:
-    build:
-      context: .
-      ssh:
-        default: ${SSH_AUTH_SOCK}
-    command:
-      - node
-      - "out/src/bin/dataproc.js"
+    <<: [ *service_build, *restart_policy, *service_volumes ]
+    command: 'node out/src/bin/dataproc.js'
     container_name: ${COMPOSE_PROJECT_NAME:??}-dataproc
-    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-dataproc:${IMAGE_VERSION}
-    restart: unless-stopped
     environment:
-      <<: *common-env
-    volumes:
-      - source: /srv/sc2arcade.com/data/config
-        target: /app/data/config
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/public
-        target: /app/data/public
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/lbstream
-        target: /app/data/lbstream
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/logs
-        target: /app/data/logs
-        type: bind
-        bind:
-          create_host_path: false
-    # depends_on:
-    #   - redis
-    #   - db
+      <<: *common_env
+    depends_on: [ redis, db ]
 
   webapi:
-    build:
-      context: .
-    command:
-      - node
-      - "out/src/bin/webapi.js"
+    <<: [ *service_build, *restart_policy, *service_volumes ]
+    command: 'node out/src/bin/webapi.js'
     container_name: ${COMPOSE_PROJECT_NAME:??}-webapi
-    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-webapi:${IMAGE_VERSION}
-    restart: unless-stopped
     environment:
-      <<: *common-env
-    volumes:
-      - source: /srv/sc2arcade.com/data/config
-        target: /app/data/config
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/public
-        target: /app/data/public
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/lbstream
-        target: /app/data/lbstream
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/logs
-        target: /app/data/logs
-        type: bind
-        bind:
-          create_host_path: false
+      <<: *common_env
     expose:
       - 8090
-    # depends_on:
-    #   - redis
-    #   - db
+    depends_on: [ redis, db ]
 
   drec:
-    build:
-      context: .
-      ssh:
-        default: ${SSH_AUTH_SOCK}
-    command:
-      - node
-      - "out/src/bin/drec.js"
+    <<: [ *service_build, *restart_policy, *service_volumes ]
+    command: 'node out/src/bin/drec.js'
     container_name: ${COMPOSE_PROJECT_NAME:??}-drec
-    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-drec:${IMAGE_VERSION}
-    restart: unless-stopped
     environment:
-      <<: *common-env
-    volumes:
-      - source: /srv/sc2arcade.com/data/config
-        target: /app/data/config
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/public
-        target: /app/data/public
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/lbstream
-        target: /app/data/lbstream
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/logs
-        target: /app/data/logs
-        type: bind
-        bind:
-          create_host_path: false
-    # depends_on:
-    #   - redis
-    #   - db
+      <<: *common_env
+    depends_on: [ redis, db ]
 
   dsbot:
-    build:
-      context: .
-      ssh:
-        default: ${SSH_AUTH_SOCK}
-    command:
-      - node
-      - "out/src/bin/dsbot.js"
+    <<: [ *service_build, *restart_policy, *service_volumes ]
+    command: 'node out/src/bin/dsbot.js'
     container_name: ${COMPOSE_PROJECT_NAME:??}-dsbot
-    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-dsbot:${IMAGE_VERSION}
-    restart: unless-stopped
     environment:
-      <<: *common-env
-    volumes:
-      - source: /srv/sc2arcade.com/data/config
-        target: /app/data/config
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/public
-        target: /app/data/public
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/lbstream
-        target: /app/data/lbstream
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/logs
-        target: /app/data/logs
-        type: bind
-        bind:
-          create_host_path: false
-    # depends_on:
-    #   - redis
-    #   - db
+      <<: *common_env
+    depends_on: [ redis, db ]
 
   btrack:
-    build:
-      context: .
-      ssh:
-        default: ${SSH_AUTH_SOCK}
-    command:
-      - node
-      - "out/src/bin/btrack.js"
+    <<: [ *service_build, *restart_policy, *service_volumes ]
+    command: 'node out/src/bin/btrack.js'
     container_name: ${COMPOSE_PROJECT_NAME:??}-btrack
-    image: ${IMAGE_VENDOR}/${IMAGE_PREFIX}-btrack:${IMAGE_VERSION}
-    restart: unless-stopped
     environment:
-      <<: *common-env
-    volumes:
-      - source: /srv/sc2arcade.com/data/config
-        target: /app/data/config
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/public
-        target: /app/data/public
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/lbstream
-        target: /app/data/lbstream
-        type: bind
-        bind:
-          create_host_path: false
-      - source: /srv/sc2arcade.com/data/logs
-        target: /app/data/logs
-        type: bind
-        bind:
-          create_host_path: false
-    # depends_on:
-    #   - redis
-    #   - db
+      <<: *common_env
+    depends_on: [ redis, db ]
 
-networks:
-  default:
-    driver: bridge
-    attachable: true
+  cron:
+    <<: [ *service_build, *restart_policy, *service_volumes ]
+    init: true
+    user: root
+    command: ['crond', '-f', '-L', '/proc/1/fd/1', '-l', '6', '-c', '/app/cron']
+    container_name: ${COMPOSE_PROJECT_NAME:??}-cron
+    environment:
+      <<: *common_env
+    depends_on: [ redis, db ]

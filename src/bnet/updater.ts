@@ -14,6 +14,7 @@ import { TypedEvent, isAxiosError } from '../helpers';
 import { stripIndents } from 'common-tags';
 import { subMinutes, differenceInHours } from 'date-fns';
 import { ServiceProcess } from '../proc/process';
+import PQueue from 'p-queue';
 
 interface BattleTrackedProfile {
     profile: S2Profile | null;
@@ -314,18 +315,25 @@ interface ProfileRefreshPlan {
 }
 
 export class BattleProfileRefreshDirector extends ServiceProcess {
-    protected queue = new pQueue({
-        concurrency: 15,
-    });
+    protected queue: PQueue;
     protected plans: ProfileRefreshPlan[] = [];
 
     constructor(
         protected conn: orm.Connection,
         protected bProfileUpdater: BattleProfileUpdater,
         protected readonly region: GameRegion,
-        protected readonly startStagger: number = 0,
+        protected readonly options: {
+            startStagger: number,
+            concurrency: number,
+        } = {
+            startStagger: 0,
+            concurrency: 10,
+        },
     ) {
         super();
+        this.queue = new pQueue({
+            concurrency: options.concurrency,
+        });
         this.plans = [
             {
                 name: 'new',
@@ -537,8 +545,8 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
     protected async doStart() {
         for (const [i, sPlan] of this.plans.entries()) {
             let startDelay = 0;
-            if (this.startStagger > 0) {
-                startDelay = ((this.startStagger - 1 + i) * 7500) + (i * 10000);
+            if (this.options.startStagger > 0) {
+                startDelay = ((this.options.startStagger - 1 + i) * 7500) + (i * 10000);
             }
             setTimeout(this.proceed.bind(this, sPlan), startDelay).unref();
         }

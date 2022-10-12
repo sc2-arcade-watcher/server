@@ -7,9 +7,9 @@
 /node_modules/*
 /redis
 /out/*
+/tests
 /tmp
-/.env
-/docker-compose.yml
-/docker-compose.*.yml
+/.env*
+/docker-compose*.yml
 /Dockerfile
 /sync-*.sh

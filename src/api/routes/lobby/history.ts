@@ -15,12 +15,6 @@ export default fp(async (server, opts) => {
         Querystring: any,
         Params: any,
     }>('/lobbies/history', {
-        config: {
-            rateLimit: {
-                max: 20,
-                timeWindow: 1000 * 40,
-            },
-        },
         schema: {
             tags: ['Lobbies'],
             summary: 'History of public lobbies.',

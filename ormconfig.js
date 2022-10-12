@@ -3,12 +3,12 @@ require('dotenv').config();
 // /** @type {import('typeorm/connection/ConnectionOptions').ConnectionOptions} */
 /** @type {import('typeorm/driver/mysql/MysqlConnectionOptions').MysqlConnectionOptions} */
 module.exports = {
-    type: process.env.STARC_SQL_TYPE,
-    host: process.env.STARC_SQL_HOST,
-    port: Number(process.env.STARC_SQL_PORT),
-    username: process.env.STARC_SQL_USER,
-    password: process.env.STARC_SQL_PASS,
-    database: process.env.STARC_SQL_DATABASE,
+    type: process.env.STARC_SQL_TYPE || 'mariadb',
+    host: process.env.STARC_SQL_HOST || 'db',
+    port: process.env.STARC_SQL_PORT ? Number(process.env.STARC_SQL_PORT) : 3306,
+    username: process.env.STARC_SQL_USER || 'db',
+    password: process.env.STARC_SQL_PASS || 'db',
+    database: process.env.STARC_SQL_DATABASE || 'db',
     charset: 'utf8mb4',
     timezone: '+00:00',
     synchronize: false,

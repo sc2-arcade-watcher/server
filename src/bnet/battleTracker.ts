@@ -759,7 +759,7 @@ export class BattleLobbyProvider extends ServiceProcess {
     }
 
     async doWork() {
-        const qLimit = 500;
+        const qLimit = 3000;
 
         const qbMain = this.conn.getCustomRepository(S2GameLobbyRepository).createQueryBuilder('lobby')
             .select([
@@ -768,7 +768,6 @@ export class BattleLobbyProvider extends ServiceProcess {
                 'lobby.status',
                 'lobby.regionId',
             ])
-            .andWhere('lobby.regionId NOT IN (5)')
             .orderBy('lobby.id', 'ASC')
             .limit(qLimit)
         ;

@@ -23,7 +23,7 @@ process.on('unhandledRejection', e => {
         GameRegion.US,
         GameRegion.EU,
         GameRegion.KR,
-        // GameRegion.CN,
+        GameRegion.CN,
     ];
     if (process.argv.length > 2) {
         activeRegions = process.argv[2].split(',').map(Number);
@@ -37,7 +37,7 @@ process.on('unhandledRejection', e => {
     const conn = await orm.createConnection();
     const bProfUpdater = new BattleProfileUpdater(conn);
     const bmTracker = new BattleMatchTracker(conn, {
-        concurrency: 80,
+        concurrency: 30,
     });
     const bmProvider = new BattleLobbyProvider(conn, bmTracker);
     const bWorkers: BattleWorker[] = [];
@@ -48,7 +48,10 @@ process.on('unhandledRejection', e => {
         bmTracker.bProfileUpdater = bProfUpdater;
         bWorkers.push({
             region: region,
-            bProfUpdateDirector: new BattleProfileRefreshDirector(conn, bProfUpdater, region, activeRegions.length > 1 ? idx + 1 : 0),
+            bProfUpdateDirector: new BattleProfileRefreshDirector(conn, bProfUpdater, region, {
+                startStagger: activeRegions.length > 1 ? idx + 1 : 0,
+                concurrency: 2,
+            }),
         });
     }
 

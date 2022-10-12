@@ -358,7 +358,7 @@ export class BattleAPI {
                     error.config.headers['Authorization'] = `Bearer ${accessToken}`;
                 }
                 else if (error?.response?.status === 429) {
-                    await sleep(1000 * Math.pow((error.config as any).retryAttempt, 1.6));
+                    await sleep(1800 * Math.pow((error.config as any).retryAttempt, 1.6));
                 }
                 else if (error?.response?.status === 503) {
                     await sleep(400 * Math.pow((error.config as any).retryAttempt, 1.3));

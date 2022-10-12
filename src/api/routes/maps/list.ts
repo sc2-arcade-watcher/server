@@ -175,32 +175,10 @@ export default fp(async (server, opts) => {
 
         if (request.query.name !== void 0 && request.query.name.trim().length) {
             let nameQuery = String(request.query.name);
-            // https://mariadb.com/kb/en/full-text-index-overview/#in-boolean-mode
-            // strip all operators except: " + - *
-            // nameQuery = nameQuery.replace(/[<>()~]/g, '').trim();
-            // .. actually, strip all of them, since it currently is used unitentionally
-            // and can lead to parse errors which aren't even shown on the frontend
-            nameQuery = nameQuery.replace(/[<>()~"*+-]/g, ' ').trim();
-
-            if (nameQuery.search(/[\p{L}\p{Nd}]{3}/iu) !== -1 || nameQuery.endsWith('*')) {
-                // nameQuery = nameQuery.replace(/[\+\-]+$/, '');
-
-                if (nameQuery.search(/[\+\-\*\"]/g) === -1) {
-                    nameQuery = nameQuery.replace(/[\"\+\-\*]/g, '').split(/\s+/).map(x => {
-                        if (x.length < 3) return `${x}*`;
-                        return fulltextStopWords.indexOf(x.toLowerCase()) === -1 ? `+${x}` : `${x}*`;
-                    }).join(' ');
-                }
-                qb
-                    .andWhere('MATCH (map.name) AGAINST(:name IN BOOLEAN MODE)', { name: nameQuery })
-                ;
-            }
-            else {
-                nameQuery = nameQuery.replace(/([\%\?])/g, '\\$1');
-                qb
-                    .andWhere('map.name LIKE :name', { name: nameQuery + '%' })
-                ;
-            }
+            nameQuery = nameQuery.replace(/([\%\?])/g, '\\$1');
+            qb
+                .andWhere('map.name LIKE :name', { name: nameQuery + '%' })
+            ;
         }
 
         if (typeof request.query.mainCategoryId === 'number') {
