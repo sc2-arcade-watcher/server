@@ -37,6 +37,8 @@ x-common-env: &common_env
   TZ: ${TZ-UTC}
   LOG_LEVEL: ${LOG_LEVEL-info}
   # ---
+  STARC_SQL_DATABASE: ${STARC_SQL_DATABASE-db}
+  # ---
   STARC_QUEUE_REDIS_HOST: ${STARC_QUEUE_REDIS_HOST:??}
   STARC_QUEUE_REDIS_PORT: ${STARC_QUEUE_REDIS_PORT:??}
   # ---
@@ -64,7 +66,7 @@ services:
     hostname: redis
     volumes:
       - type: bind
-        source: /srv/sc2arcade.com/redis
+        source: /srv/sc2arcade.com/data/redis
         target: /data
 
   db:

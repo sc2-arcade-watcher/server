@@ -2,7 +2,7 @@
 35  * * * * cd /app ; node out/src/bin/cmd.js stats:players:update --query-concurrency 1 >/proc/1/fd/1 2>/proc/1/fd/2
 
  0 12 * * * cd /app ; node out/src/bin/cmd.js s2cmd:periodic --region 1 >/proc/1/fd/1 2>/proc/1/fd/2
- 0  3 * * * cd /app ; node out/src/bin/cmd.js s2cmd:periodic --region 2 >/proc/1/fd/1 2>/proc/1/fd/2
+ 0  5 * * * cd /app ; node out/src/bin/cmd.js s2cmd:periodic --region 2 >/proc/1/fd/1 2>/proc/1/fd/2
  0 22 * * * cd /app ; node out/src/bin/cmd.js s2cmd:periodic --region 3 >/proc/1/fd/1 2>/proc/1/fd/2
 
 # fd --no-ignore '^[0-9]+$' --changed-before 5d -x zstd -z -12 -c {} -o {.}.zst --rm -f
