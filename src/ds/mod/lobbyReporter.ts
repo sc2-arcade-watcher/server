@@ -450,7 +450,7 @@ export class LobbyReporterTask extends BotTask {
                 postLimit = Math.min(8, postLimit + credits);
                 actionLimit = Math.min(15, actionLimit + credits);
                 subLimit = Math.max(
-                    Math.min(credits, 30),
+                    Math.min(credits, 60),
                     subLimit
                 );
 
