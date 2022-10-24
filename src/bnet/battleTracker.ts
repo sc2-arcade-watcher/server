@@ -2,7 +2,7 @@ import * as orm from 'typeorm';
 import PQueue from 'p-queue';
 import type lruFactory from 'tiny-lru';
 const lru: typeof lruFactory = require('tiny-lru');
-import { GameRegion, GameLobbyStatus } from '../common';
+import { GameRegion, GameLobbyStatus, AllGameRegions } from '../common';
 import { S2ProfileMatch, S2MatchType } from '../entity/S2ProfileMatch';
 import { S2GameLobbyRepository } from '../repository/S2GameLobbyRepository';
 import { S2GameLobbySlotKind } from '../entity/S2GameLobbySlot';
@@ -73,6 +73,7 @@ export interface BattleCompletedLobbyPayload {
 }
 
 export interface BattleMatchTrackerOptions {
+    regions: GameRegion[];
     concurrency: number;
     reevaluate: boolean | 'failed-only' | 'successful-only';
 }
@@ -87,13 +88,14 @@ export class BattleMatchTracker {
 
     /** composite key of `mapId/profileCacheKey` */
     protected currentlyEvaluated = new Set<string>();
-    protected options: BattleMatchTrackerOptions;
+    public readonly options: BattleMatchTrackerOptions;
 
     public readonly taskQueue: PQueue;
     protected isRunning = false;
 
     constructor(protected conn: orm.Connection, options?: Partial<BattleMatchTrackerOptions>) {
         this.options = {
+            regions: options?.regions ?? [].concat(AllGameRegions),
             concurrency: options?.concurrency ?? 10,
             reevaluate: options?.reevaluate ?? false,
         };
@@ -771,6 +773,9 @@ export class BattleLobbyProvider extends ServiceProcess {
             .orderBy('lobby.id', 'ASC')
             .limit(qLimit)
         ;
+
+        // limit to region(s)..
+        qbMain.andWhere('lobby.regionId IN (:includedRegions)', { includedRegions: this.bmTracker.options.regions });
 
         const qbClosed = qbMain.clone()
             .andWhere('(lobby.closedAt IS NOT NULL AND lobby.closedAt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 60 SECOND))')

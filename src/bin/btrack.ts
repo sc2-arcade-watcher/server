@@ -23,7 +23,7 @@ process.on('unhandledRejection', e => {
         GameRegion.US,
         GameRegion.EU,
         GameRegion.KR,
-        GameRegion.CN,
+        // GameRegion.CN,
     ];
     if (process.argv.length > 2) {
         activeRegions = process.argv[2].split(',').map(Number);
@@ -37,6 +37,7 @@ process.on('unhandledRejection', e => {
     const conn = await orm.createConnection();
     const bProfUpdater = new BattleProfileUpdater(conn);
     const bmTracker = new BattleMatchTracker(conn, {
+        regions: activeRegions,
         concurrency: 30,
     });
     const bmProvider = new BattleLobbyProvider(conn, bmTracker);

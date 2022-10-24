@@ -505,10 +505,11 @@ export class BattleDataUpdater {
                 return this.bAPIEntry.eu;
             }
             case GameRegion.KR: {
-                return this.bAPIEntry.kr;
+                return this.bAPIEntry.eu;
+                // return this.bAPIEntry.kr;
             }
             case GameRegion.CN: {
-                // return this.bAPIEntry.cn;
+                return this.bAPIEntry.cn;
                 // TW gateway supports CN and is faster to respond
                 return this.bAPIEntry.tw;
             }
