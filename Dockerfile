@@ -29,33 +29,22 @@ RUN <<EOF
         bash
 EOF
 
-RUN <<EOF
-    mkdir /app
-    chown node:node /app
-EOF
-
-ENV YARN_CACHE_FOLDER=/tmp/.yarn_cache
-
 WORKDIR /app
+
+RUN chown node:node /app
 
 COPY package.json yarn.lock ./
 
-RUN --mount=type=cache,target=/tmp/.yarn_cache <<EOF
-    set -eux
-    yarn install --pure-lockfile --no-interactive
-EOF
+RUN --mount=type=cache,target=/tmp/.yarn_cache \
+    YARN_CACHE_FOLDER=/tmp/.yarn_cache yarn install --pure-lockfile --no-interactive
 
 COPY . .
 
-RUN <<EOF
-    set -eux
-    chmod -R a+rx .
-    yarn run build
-EOF
-
-USER node:node
+RUN yarn run build
 
 COPY --from=s2mdec /go/s2mdec/cmd/s2mdec/s2mdec /usr/local/bin/s2mdec
 
+USER node:node
+
 # CMD ["pm2-runtime", "--json", "process.yml"]
-CMD ["node", "out/src/bin/datahost.js"]
+CMD ["node"]
