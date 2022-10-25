@@ -41,4 +41,6 @@ ALTER TABLE s2_stats_player_status ENGINE=RocksDB;
 
 -- ALTER TABLE tmp_query_cache ENGINE=RocksDB;
 
+CREATE UNIQUE INDEX `lobby_slot_idx` ON `s2_game_lobby_slot` (`lobby_id`, `slot_number`);
+
 SET session rocksdb_bulk_load=0;

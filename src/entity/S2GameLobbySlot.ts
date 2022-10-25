@@ -15,27 +15,25 @@ const slotKindMap = {
     [S2GameLobbySlotKind.Human]: 3,
 };
 
-@Entity({
-    engine: 'ROCKSDB',
-})
+// @Entity({
+//     engine: 'ROCKSDB',
+// })
+// @Index('lobby_slot_idx', ['lobbyId', 'slotNumber'], { unique: true })
+@Entity()
 export class S2GameLobbySlot {
     @PrimaryGeneratedColumn()
     id: number;
 
     @ManyToOne(type => S2GameLobby, lobby => lobby.slots, {
-        primary: true,
         nullable: false,
         // foreign keys not supported on RocksDB
         onDelete: 'NO ACTION',
         onUpdate: 'NO ACTION',
     })
     @JoinColumn()
-    // probably not needed due to lobbyId being first part of PK (and the only part)
-    // @Index('lobby_idx', { unique: true })
     lobby: S2GameLobby;
 
     @Column({
-        primary: true,
         type: 'int',
         unsigned: true,
     })
