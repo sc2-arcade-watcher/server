@@ -54,7 +54,7 @@ export class S2StatsPeriodMap {
 
     @Column({
         type: 'decimal',
-        precision: 8,
+        precision: 10,
         scale: 2,
         default: 0,
         unsigned: true,
