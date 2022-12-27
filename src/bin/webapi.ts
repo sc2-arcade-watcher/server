@@ -170,9 +170,9 @@ process.on('unhandledRejection', e => { throw e; });
     }
     setupFileLogger('webapi');
 
-    server.listen(webapiPort, process.env.ENV === 'dev' ? '127.0.0.1' : '0.0.0.0', (err, address) => {
+    server.listen(webapiPort, process.env.STARC_WEBAPI_LISTEN_ADDR ?? '0.0.0.0', (err, address) => {
         if (err) throw err;
-        logger.info(`server.listen port=${webapiPort}`);
+        logger.info(`server.listen port=${webapiPort} addr=${address}`);
         // logger.verbose('routes\n' + server.printRoutes());
     });
 

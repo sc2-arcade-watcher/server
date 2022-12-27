@@ -5,22 +5,22 @@ x-restart-policy: &restart_policy
 
 x-service-volumes: &service_volumes
   volumes:
-    - source: /srv/sc2arcade.com/data/config
+    - source: ${APP_DATA_DIR-.}/data/config
       target: /app/data/config
       type: bind
       bind:
         create_host_path: false
-    - source: /srv/sc2arcade.com/data/public
+    - source: ${APP_DATA_DIR-.}/data/public
       target: /app/data/public
       type: bind
       bind:
         create_host_path: false
-    - source: /srv/sc2arcade.com/data/lbstream
+    - source: ${APP_DATA_DIR-.}/data/lbstream
       target: /app/data/lbstream
       type: bind
       bind:
         create_host_path: false
-    - source: /srv/sc2arcade.com/data/logs
+    - source: ${APP_DATA_DIR-.}/data/logs
       target: /app/data/logs
       type: bind
       bind:
@@ -66,7 +66,7 @@ services:
     hostname: redis
     volumes:
       - type: bind
-        source: /srv/sc2arcade.com/data/redis
+        source: ${APP_DATA_DIR-.}/data/redis
         target: /data
 
   db:
@@ -89,7 +89,7 @@ services:
       MARIADB_AUTO_UPGRADE: ${MARIADB_AUTO_UPGRADE-1}
     volumes:
       - type: bind
-        source: /srv/sc2arcade.com/data/mysql
+        source: ${APP_DATA_DIR-.}/data/mysql
         target: /var/lib/mysql
 
   datahost:
