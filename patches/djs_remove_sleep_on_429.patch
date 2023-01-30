@@ -1,0 +1,15 @@
+diff --git a/node_modules/discord.js/src/rest/RequestHandler.js b/node_modules/discord.js/src/rest/RequestHandler.js
+index b15b2fa..be71fd2 100644
+--- a/node_modules/discord.js/src/rest/RequestHandler.js
++++ b/node_modules/discord.js/src/rest/RequestHandler.js
+@@ -139,8 +139,8 @@ class RequestHandler {
+       if (res.status === 429) {
+         // A ratelimit was hit - this should never happen
+         this.manager.client.emit('debug', `429 hit on route ${request.route}`);
+-        await Util.delayFor(this.retryAfter);
+-        return this.execute(request);
++        // await Util.delayFor(this.retryAfter);
++        // return this.execute(request);
+       }
+ 
+       // Handle possible malformed requests

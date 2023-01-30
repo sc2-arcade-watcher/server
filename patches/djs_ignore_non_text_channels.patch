@@ -1,0 +1,103 @@
+diff --git a/node_modules/discord.js/src/client/actions/MessageCreate.js b/node_modules/discord.js/src/client/actions/MessageCreate.js
+index badf67131f6b..2b5a1bb8e0e0 100644
+--- a/node_modules/discord.js/src/client/actions/MessageCreate.js
++++ b/node_modules/discord.js/src/client/actions/MessageCreate.js
+@@ -8,6 +8,8 @@ class MessageCreateAction extends Action {
+     const client = this.client;
+     const channel = this.getChannel(data);
+     if (channel) {
++      if (!channel.isText()) return {};
++
+       const existing = channel.messages.cache.get(data.id);
+       if (existing) return { message: existing };
+       const message = channel.messages._add(data);
+diff --git a/node_modules/discord.js/src/client/actions/MessageDelete.js b/node_modules/discord.js/src/client/actions/MessageDelete.js
+index 0210625f1cb0..3c5f86aaabff 100644
+--- a/node_modules/discord.js/src/client/actions/MessageDelete.js
++++ b/node_modules/discord.js/src/client/actions/MessageDelete.js
+@@ -9,6 +9,8 @@ class MessageDeleteAction extends Action {
+     const channel = this.getChannel(data);
+     let message;
+     if (channel) {
++      if (!channel.isText()) return {};
++
+       message = this.getMessage(data, channel);
+       if (message) {
+         channel.messages.cache.delete(message.id);
+diff --git a/node_modules/discord.js/src/client/actions/MessageDeleteBulk.js b/node_modules/discord.js/src/client/actions/MessageDeleteBulk.js
+index 8bda69511c37..e43d0f327220 100644
+--- a/node_modules/discord.js/src/client/actions/MessageDeleteBulk.js
++++ b/node_modules/discord.js/src/client/actions/MessageDeleteBulk.js
+@@ -10,6 +10,8 @@ class MessageDeleteBulkAction extends Action {
+     const channel = client.channels.cache.get(data.channel_id);
+ 
+     if (channel) {
++      if (!channel.isText()) return {};
++
+       const ids = data.ids;
+       const messages = new Collection();
+       for (const id of ids) {
+diff --git a/node_modules/discord.js/src/client/actions/MessageReactionAdd.js b/node_modules/discord.js/src/client/actions/MessageReactionAdd.js
+index e5f5d1deb4c4..736b1e42ad61 100644
+--- a/node_modules/discord.js/src/client/actions/MessageReactionAdd.js
++++ b/node_modules/discord.js/src/client/actions/MessageReactionAdd.js
+@@ -23,7 +23,7 @@ class MessageReactionAdd extends Action {
+ 
+     // Verify channel
+     const channel = this.getChannel(data);
+-    if (!channel || channel.type === 'voice') return false;
++    if (!channel || !channel.isText()) return false;
+ 
+     // Verify message
+     const message = this.getMessage(data, channel);
+diff --git a/node_modules/discord.js/src/client/actions/MessageReactionRemove.js b/node_modules/discord.js/src/client/actions/MessageReactionRemove.js
+index 8b66899e2886..7a05949a8f55 100644
+--- a/node_modules/discord.js/src/client/actions/MessageReactionRemove.js
++++ b/node_modules/discord.js/src/client/actions/MessageReactionRemove.js
+@@ -20,7 +20,7 @@ class MessageReactionRemove extends Action {
+ 
+     // Verify channel
+     const channel = this.getChannel(data);
+-    if (!channel || channel.type === 'voice') return false;
++    if (!channel || !channel.isText()) return false;
+ 
+     // Verify message
+     const message = this.getMessage(data, channel);
+diff --git a/node_modules/discord.js/src/client/actions/MessageReactionRemoveAll.js b/node_modules/discord.js/src/client/actions/MessageReactionRemoveAll.js
+index ee4170402aba..e2a3924767f7 100644
+--- a/node_modules/discord.js/src/client/actions/MessageReactionRemoveAll.js
++++ b/node_modules/discord.js/src/client/actions/MessageReactionRemoveAll.js
+@@ -6,7 +6,7 @@ class MessageReactionRemoveAll extends Action {
+   handle(data) {
+     // Verify channel
+     const channel = this.getChannel(data);
+-    if (!channel || channel.type === 'voice') return false;
++    if (!channel || !channel.isText()) return false;
+ 
+     // Verify message
+     const message = this.getMessage(data, channel);
+diff --git a/node_modules/discord.js/src/client/actions/MessageReactionRemoveEmoji.js b/node_modules/discord.js/src/client/actions/MessageReactionRemoveEmoji.js
+index 8a8a71e23140..f8f28e87ca9d 100644
+--- a/node_modules/discord.js/src/client/actions/MessageReactionRemoveEmoji.js
++++ b/node_modules/discord.js/src/client/actions/MessageReactionRemoveEmoji.js
+@@ -6,6 +6,6 @@ class MessageReactionRemoveEmoji extends Action {
+   handle(data) {
+     const channel = this.getChannel(data);
+-    if (!channel || channel.type === 'voice') return false;
++    if (!channel || !channel.isText()) return false;
+ 
+     const message = this.getMessage(data, channel);
+     if (!message) return false;
+diff --git a/node_modules/discord.js/src/client/actions/MessageUpdate.js b/node_modules/discord.js/src/client/actions/MessageUpdate.js
+index dda5d09306db..9448ed6ccbb5 100644
+--- a/node_modules/discord.js/src/client/actions/MessageUpdate.js
++++ b/node_modules/discord.js/src/client/actions/MessageUpdate.js
+@@ -6,6 +6,8 @@ class MessageUpdateAction extends Action {
+   handle(data) {
+     const channel = this.getChannel(data);
+     if (channel) {
++      if (!channel.isText()) return {};
++
+       const { id, channel_id, guild_id, author, timestamp, type } = data;
+       const message = this.getMessage({ id, channel_id, guild_id, author, timestamp, type }, channel);
+       if (message) {

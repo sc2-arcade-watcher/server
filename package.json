@@ -7,6 +7,7 @@
     },
     "scripts": {
         "clean": "rm -rf out/*",
+        "patch-modules": "fd -j1 -e patch . patches -x patch -p1 --forward --no-backup-if-mismatch --directory . -i '{}'",
         "build": "rm -rf out/* && yarn run tsc -p ./",
         "build:watch": "rm -rf out/* && yarn run tsc -watch -p ./",
         "lint": "tslint -p .",
