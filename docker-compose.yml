@@ -8,27 +8,20 @@ x-service-volumes: &service_volumes
     - source: ${APP_DATA_DIR-.}/data/config
       target: /app/data/config
       type: bind
-      bind:
-        create_host_path: false
     - source: ${APP_DATA_DIR-.}/data/public
       target: /app/data/public
       type: bind
-      bind:
-        create_host_path: false
     - source: ${APP_DATA_DIR-.}/data/lbstream
       target: /app/data/lbstream
       type: bind
-      bind:
-        create_host_path: false
     - source: ${APP_DATA_DIR-.}/data/logs
       target: /app/data/logs
       type: bind
-      bind:
-        create_host_path: false
 
 x-service-build: &service_build
   build:
     context: .
+    target: app-prod
     ssh:
       default: ${SSH_AUTH_SOCK}
 
@@ -69,7 +62,7 @@ services:
         source: ${APP_DATA_DIR-.}/data/redis
         target: /data
 
-  db:
+  mariadb:
     <<: [ *restart_policy ]
     build:
       context: ./docker/mariadb
@@ -86,7 +79,8 @@ services:
       MARIADB_PASSWORD: ${STARC_SQL_PASSWORD-db}
       MARIADB_DATABASE: ${STARC_SQL_DATABASE-db}
       MARIADB_RANDOM_ROOT_PASSWORD: 1
-      MARIADB_AUTO_UPGRADE: ${MARIADB_AUTO_UPGRADE-1}
+      MARIADB_AUTO_UPGRADE: ${MARIADB_AUTO_UPGRADE-0}
+      MARIADB_DISABLE_UPGRADE_BACKUP: ${MARIADB_DISABLE_UPGRADE_BACKUP-1}
     volumes:
       - type: bind
         source: ${APP_DATA_DIR-.}/data/mysql
@@ -100,7 +94,9 @@ services:
       <<: *common_env
     expose:
       - 8089
-    depends_on: [ redis, db ]
+    depends_on:
+      redis: { condition: service_started }
+      mariadb: { condition: service_started }
 
   dataproc:
     <<: [ *service_build, *restart_policy, *service_volumes ]
@@ -108,7 +104,9 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:??}-dataproc
     environment:
       <<: *common_env
-    depends_on: [ redis, db ]
+    depends_on:
+      redis: { condition: service_started }
+      mariadb: { condition: service_started }
 
   webapi:
     <<: [ *service_build, *restart_policy, *service_volumes ]
@@ -118,7 +116,9 @@ services:
       <<: *common_env
     expose:
       - 8090
-    depends_on: [ redis, db ]
+    depends_on:
+      redis: { condition: service_started }
+      mariadb: { condition: service_started }
 
   drec:
     <<: [ *service_build, *restart_policy, *service_volumes ]
@@ -126,7 +126,9 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:??}-drec
     environment:
       <<: *common_env
-    depends_on: [ redis, db ]
+    depends_on:
+      redis: { condition: service_started }
+      mariadb: { condition: service_started }
 
   dsbot:
     <<: [ *service_build, *restart_policy, *service_volumes ]
@@ -134,7 +136,9 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:??}-dsbot
     environment:
       <<: *common_env
-    depends_on: [ redis, db ]
+    depends_on:
+      redis: { condition: service_started }
+      mariadb: { condition: service_started }
 
   btrack:
     <<: [ *service_build, *restart_policy, *service_volumes ]
@@ -142,14 +146,17 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:??}-btrack
     environment:
       <<: *common_env
-    depends_on: [ redis, db ]
+    depends_on:
+      redis: { condition: service_started }
+      mariadb: { condition: service_started }
 
   cron:
     <<: [ *service_build, *restart_policy, *service_volumes ]
     init: true
-    user: root
     command: ['crond', '-f', '-L', '/proc/1/fd/1', '-l', '6', '-c', '/app/cron']
     container_name: ${COMPOSE_PROJECT_NAME:??}-cron
     environment:
       <<: *common_env
-    depends_on: [ redis, db ]
+    depends_on:
+      redis: { condition: service_started }
+      mariadb: { condition: service_started }

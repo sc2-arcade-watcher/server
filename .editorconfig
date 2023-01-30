@@ -14,7 +14,7 @@ indent_size = 4
 [*.yml]
 indent_size = 2
 
-[*.{py,sh,ts,js,json,md,service,sql}]
+[*.{py,sh,ts,js,json,md,service,sql,yml,yaml}]
 insert_final_newline = true
 trim_trailing_whitespace = true
 end_of_line = lf

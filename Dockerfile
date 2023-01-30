@@ -14,7 +14,7 @@ RUN <<EOF
 EOF
 
 
-FROM node:16-alpine
+FROM node:16-alpine as app-dev
 
 RUN --mount=type=cache,target=/var/cache/apk \
     apk add --update \
@@ -26,11 +26,19 @@ RUN --mount=type=cache,target=/var/cache/apk \
         inotify-tools \
         coreutils \
         patch \
-        bash
+        bash \
+        zstd
 
 WORKDIR /app
 RUN chown node:node /app
 USER node
+
+COPY --from=s2mdec --link /go/s2mdec/cmd/s2mdec/s2mdec /usr/local/bin/s2mdec
+
+CMD ["node"]
+
+
+FROM app-dev as app-prod
 
 COPY --chown=node:node package.json yarn.lock ./
 
@@ -40,8 +48,3 @@ RUN --mount=type=cache,target=/tmp/.yarn_cache,uid=1000 \
 COPY --chown=node:node . .
 
 RUN yarn run patch-modules && yarn run build
-
-COPY --from=s2mdec --link /go/s2mdec/cmd/s2mdec/s2mdec /usr/local/bin/s2mdec
-
-# CMD ["pm2-runtime", "--json", "process.yml"]
-CMD ["node"]

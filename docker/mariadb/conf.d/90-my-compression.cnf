@@ -1,8 +1,11 @@
-[mysqld]
+[mariadb]
 
 plugin_load_add = provider_lz4
 
 innodb_compression_algorithm = lz4
-innodb_compression_default = ON
-innodb_compression_pad_pct_max = 70
-innodb_compression_level = 6
+innodb_compression_default = OFF
+# ^ maybe someday..
+
+# innodb_compression_level = 6
+# ^ not supported for lz4?
+# https://mariadb.com/kb/en/innodb-page-compression/#configuring-the-compression-level

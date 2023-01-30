@@ -3,10 +3,23 @@ services:
     networks:
       - default
       - dbproxy
-  db:
+    healthcheck:
+      test: 'redis-cli ping || exit 1'
+      start_period: 5s
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  mariadb:
     networks:
       - default
       - dbproxy
+    healthcheck:
+      test: 'mysqladmin ping --user=${STARC_SQL_USER-db} --password=${STARC_SQL_PASSWORD-db}'
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 30
 
   datahost:
     networks:
@@ -19,6 +32,14 @@ services:
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-datahost.entrypoints=websecure"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-datahost.tls.certresolver=le-http"
       - "traefik.http.services.${COMPOSE_PROJECT_NAME:??}-datahost.loadbalancer.server.port=8089"
+    depends_on:
+      redis: { condition: service_healthy }
+      mariadb: { condition: service_healthy }
+
+  dataproc:
+    depends_on:
+      redis: { condition: service_healthy }
+      mariadb: { condition: service_healthy }
 
   webapi:
     networks:
@@ -35,17 +56,32 @@ services:
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-static.entrypoints=websecure"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-static.tls=true"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-static.middlewares=real-ip-cf@file"
+    depends_on:
+      redis: { condition: service_healthy }
+      mariadb: { condition: service_healthy }
 
   drec:
     stop_grace_period: 45s
+    depends_on:
+      redis: { condition: service_healthy }
+      mariadb: { condition: service_healthy }
 
   dsbot:
     stop_grace_period: 45s
+    depends_on:
+      redis: { condition: service_healthy }
+      mariadb: { condition: service_healthy }
+
+  btrack:
+    depends_on:
+      redis: { condition: service_healthy }
+      mariadb: { condition: service_healthy }
 
 networks:
   webproxy:
     name: webproxy
     external: true
+
   dbproxy:
     name: dbproxy
     external: true

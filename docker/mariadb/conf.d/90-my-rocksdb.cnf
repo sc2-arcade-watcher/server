@@ -1,6 +1,6 @@
 [mariadb]
 
-plugin-load-add = ha_rocksdb
+plugin_load_add = ha_rocksdb
 
 #
 # ROCKSDB

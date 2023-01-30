@@ -1,1 +1,46 @@
-services: {}
+x-service-volumes: &service_volumes
+  volumes:
+    - source: ./
+      target: /app
+      type: bind
+
+x-service-build: &service_build
+  context: .
+  target: app-dev
+
+
+services:
+  datahost:
+    <<: [ *service_volumes ]
+    build:
+      <<: [ *service_build ]
+
+  dataproc:
+    <<: [ *service_volumes ]
+    build:
+      <<: [ *service_build ]
+
+  webapi:
+    <<: [ *service_volumes ]
+    build:
+      <<: [ *service_build ]
+
+  drec:
+    <<: [ *service_volumes ]
+    build:
+      <<: [ *service_build ]
+
+  dsbot:
+    <<: [ *service_volumes ]
+    build:
+      <<: [ *service_build ]
+
+  btrack:
+    <<: [ *service_volumes ]
+    build:
+      <<: [ *service_build ]
+
+  cron:
+    <<: [ *service_volumes ]
+    build:
+      <<: [ *service_build ]
