@@ -19,6 +19,21 @@ export interface JournalFeedOptios {
     skipMissing?: boolean;
 }
 
+export enum JournalStreamCompression {
+    None,
+    Zstd,
+}
+
+export interface JournalStreamSource {
+    startTimestamp: number;
+    compression: JournalStreamCompression;
+}
+
+const compressionExtDataMap = {
+    ['.zst']: JournalStreamCompression.Zstd,
+    ['']: JournalStreamCompression.None,
+};
+
 export class JournalFeed {
     cursor: JournalFeedCursor;
     // protected rs: Readable;
@@ -30,7 +45,7 @@ export class JournalFeed {
     protected dataTimeout: NodeJS.Timer;
     protected tailProc: ChildProcessByStdio<Writable, Readable, Readable>;
     protected feedWaitProc: ChildProcessByStdio<Writable, Readable, Readable>;;
-    protected sessionFileList: number[];
+    protected sessionFileList: JournalStreamSource[];
     private waitingForData = false;
     private waitingForFeed = false;
     private closed = false;
@@ -100,7 +115,21 @@ export class JournalFeed {
     }
 
     protected async refreshFileList() {
-        this.sessionFileList = (await fs.readdir(this.baseDir)).filter(v => v.match(/^\d+$/)).map(v => Number(v)).sort();
+        this.sessionFileList = (await fs.readdir(this.baseDir))
+            .map(v => v.match(/^(?<id>\d+)(?<ext>\.zst)?$/))
+            .filter(v => v !== null)
+            .map(v => {
+                const ext: keyof typeof compressionExtDataMap = v.groups?.ext as any ?? '';
+                const jcompression = compressionExtDataMap[ext];
+                if (!jcompression) {}
+                const jss: JournalStreamSource = {
+                    startTimestamp: Number(v.groups.id),
+                    compression: jcompression
+                };
+                return jss;
+            })
+            .sort((a, b) => a.startTimestamp - b.startTimestamp)
+        ;
     }
 
     protected async waitForFeed(timeout = 3600) {
@@ -145,7 +174,25 @@ export class JournalFeed {
     }
 
     protected isCurrSessionLast() {
-        return this.cursor.session === this.sessionFileList[this.sessionFileList.length - 1];
+        return this.cursor.session === this.sessionFileList[this.sessionFileList.length - 1].startTimestamp;
+    }
+
+    protected async decompressCurrent() {
+        const compressedFilename = this.currFilename + '.zst';
+        if (await (fs.pathExists(compressedFilename))) {
+            const presult = await spawnWaitExit(spawn(
+                'zstd', [
+                    '--decompress',
+                    '--rm',
+                    compressedFilename,
+                ], {
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                }
+            ), { captureStdout: true, captureStderr: true });
+            if (presult.rcode !== 0) {
+                throw new Error(`zstd decompress failed rcode=${presult.rcode} args=${presult.proc.spawnargs}`);
+            }
+        }
     }
 
     protected async setupReadstream() {
@@ -192,7 +239,8 @@ export class JournalFeed {
                 if (!this.isCurrSessionLast()) {
                     logger.warn(`tailProc timeout, src=${this.name} sname=${sessName} pid=${tmpTailProc.pid}, new file detected`);
                     this.closeCurrentStream(false);
-                    this.cursor.session = this.sessionFileList[this.sessionFileList.findIndex(v => v === this.cursor.session) + 1];
+                    const idx = this.sessionFileList.findIndex(v => v.startTimestamp === this.cursor.session) + 1;
+                    this.cursor.session = this.sessionFileList[idx].startTimestamp;
                     this.cursor.offset = 0;
                 }
                 else {
@@ -337,13 +385,18 @@ export class JournalFeed {
             this.cursor.offset === this.options.initCursor.offset
         ) {
             await fs.ensureDir(this.baseDir);
-            const exists = await fs.pathExists(this.currFilename);
-            if (!exists) {
+
+            const possibleNames = Object.keys(compressionExtDataMap).map(x => this.currFilename + x);
+            const existingFiles = (await Promise.all(
+                possibleNames.map(async x => (await fs.pathExists(x) ? x : false))
+            )).filter((x): x is string => typeof x === 'string');
+
+            if (!existingFiles.length) {
                 await this.refreshFileList();
                 if (this.options.skipMissing) {
                     logger.warn(`feed file doesn't exist ${this.currFilename}, attempting to advance..`);
-                    const newCursorSession = this.sessionFileList.find(x => x >= this.cursor.session);
-                    if (newCursorSession === void 0) {
+                    const newStreamSource = this.sessionFileList.find(v => v.startTimestamp >= this.cursor.session);
+                    if (newStreamSource === void 0) {
                         this.waitingForFeed = true;
                         setImmediate(async () => {
                             await this.waitForFeed(0);
@@ -351,18 +404,19 @@ export class JournalFeed {
                         });
                         return;
                     }
-                    logger.info(`feed advancing from ${this.currFilename} to ${newCursorSession}`);
-                    this.cursor.session = newCursorSession;
+                    logger.info(`feed advancing from ${this.currFilename} to ${newStreamSource.startTimestamp}`);
+                    this.cursor.session = newStreamSource.startTimestamp;
                     this.cursor.offset = 0;
                 }
                 else {
-                    logger.error(`feed file doesn't exist ${this.currFilename}`, this.sessionFileList);
+                    // logger.error(`feed file doesn't exist ${this.currFilename}`, this.sessionFileList);
                     throw new Error(`feed file doesn't exist ${this.currFilename}`);
                 }
             }
 
             this.firstRead = false;
             if (this.cursor.session === this.options.initCursor.session && this.options.initCursor.offset !== 0) {
+                throw new Error(`not supported`);
                 const headProc = spawn('head', [
                     '--lines',
                     '1',
@@ -379,6 +433,7 @@ export class JournalFeed {
         let readTimeoutCounter = 0;
         while (1) {
             if (!this.rs) {
+                await this.decompressCurrent();
                 await this.refreshFileList();
 
                 const fSize = (await fs.stat(this.currFilename)).size;
@@ -425,7 +480,7 @@ export class JournalFeed {
                         const tmprs = this.rs;
                         const ronce = (() => {
                             clearTimeout(tm);
-                            resolve();
+                            resolve(void 0);
                         }).bind(this);
                         tm = setTimeout(() => {
                             tmprs.off('readable', ronce);
@@ -477,7 +532,7 @@ export class JournalFeed {
                             let tm: NodeJS.Timer;
                             const ronce = () => {
                                 clearTimeout(tm);
-                                resolve();
+                                resolve(void 0);
                             };
                             const tmprs = this.rs;
                             tm = setTimeout(() => {
@@ -512,7 +567,8 @@ export class JournalFeed {
                         );
                     }
                     else {
-                        this.cursor.session = this.sessionFileList[this.sessionFileList.findIndex(v => v === this.cursor.session) + 1];
+                        const idx = this.sessionFileList.findIndex(v => v.startTimestamp === this.cursor.session) + 1;
+                        this.cursor.session = this.sessionFileList[idx].startTimestamp;
                         this.cursor.offset = 0;
                     }
                 }
