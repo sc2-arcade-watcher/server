@@ -339,6 +339,7 @@ export class DataRecordPersistence extends ServiceProcess {
                 profileGameId: profileData.profileGameId,
                 battleTag: profileData.battleHandle,
                 deleted: charName === '',
+                lastOnlineAt: profileData.battleHandle !== null ? new Date(Date.now() - 1000 * 3600 * 24) : null
             }, this.conn);
             logger.verbose(`created profile ${s2profile.fullnameWithHandle}`);
         }

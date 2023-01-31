@@ -15,6 +15,7 @@ export interface BareS2Profile {
     battleTag?: string;
     avatar?: string;
     deleted?: boolean;
+    lastOnlineAt?: Date;
 }
 
 @Entity()
