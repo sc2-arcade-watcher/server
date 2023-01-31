@@ -32,11 +32,13 @@ services:
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-datahost.entrypoints=websecure"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-datahost.tls.certresolver=le-http"
       - "traefik.http.services.${COMPOSE_PROJECT_NAME:??}-datahost.loadbalancer.server.port=8089"
+    stop_grace_period: 20s
     depends_on:
       redis: { condition: service_healthy }
       mariadb: { condition: service_healthy }
 
   dataproc:
+    stop_grace_period: 20s
     depends_on:
       redis: { condition: service_healthy }
       mariadb: { condition: service_healthy }
@@ -56,6 +58,7 @@ services:
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-static.entrypoints=websecure"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-static.tls=true"
       - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-static.middlewares=real-ip-cf@file"
+    stop_grace_period: 30s
     depends_on:
       redis: { condition: service_healthy }
       mariadb: { condition: service_healthy }
@@ -73,6 +76,7 @@ services:
       mariadb: { condition: service_healthy }
 
   btrack:
+    stop_grace_period: 30s
     depends_on:
       redis: { condition: service_healthy }
       mariadb: { condition: service_healthy }

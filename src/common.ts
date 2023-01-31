@@ -7,6 +7,13 @@ export enum GameRegion {
     CN = 5,
 }
 
+export type GameRegionRegistered = (
+    GameRegion.US |
+    GameRegion.EU |
+    GameRegion.KR |
+    GameRegion.CN
+);
+
 export interface GameRegionObjectType<T = any> {
     [GameRegion.US]: T;
     [GameRegion.EU]: T;

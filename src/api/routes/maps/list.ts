@@ -146,7 +146,10 @@ export default fp(async (server, opts) => {
         }
 
         if (request.query.authorHandle !== void 0) {
-            const requestedAuthor = parseProfileHandle(request.query.authorHandle) ?? { regionId: 0, realmId: 0, profileId: 0 };
+            const requestedAuthor = parseProfileHandle(request.query.authorHandle);
+            if (!requestedAuthor) {
+                return reply.code(400).send();
+            }
 
             const canListMaps = await server.accessManager.isProfileAccessGranted(
                 request.query.showPrivate ? ProfileAccessAttributes.PrivateMapList : ProfileAccessAttributes.PublicMapList,

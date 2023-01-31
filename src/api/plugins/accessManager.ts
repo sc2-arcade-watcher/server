@@ -200,20 +200,32 @@ class AccessManager implements IAccessManager {
 
         switch (kind) {
             case ProfileAccessAttributes.Details: {
-                return !preferences.profilePrivate;
+                if (preferences.profilePrivate) {
+                    return false;
+                }
                 break;
             }
 
             case ProfileAccessAttributes.PrivateMapList: {
-                return preferences.mapPrivListed;
+                if (preferences.profilePrivate || !preferences.mapPrivListed) {
+                    return false;
+                }
+                break;
+            }
+
+            case ProfileAccessAttributes.PublicMapList: {
+                if (preferences.profilePrivate) {
+                    return false;
+                }
                 break;
             }
 
             default: {
                 return false;
-                break;
             }
         }
+
+        return true;
     }
 }
 
