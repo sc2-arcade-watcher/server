@@ -153,7 +153,7 @@ services:
   cron:
     <<: [ *service_build, *restart_policy, *service_volumes ]
     init: true
-    command: ['crond', '-f', '-L', '/proc/1/fd/1', '-l', '6', '-c', '/app/cron']
+    command: ['supercronic', '/app/cron/node']
     container_name: ${COMPOSE_PROJECT_NAME:??}-cron
     environment:
       <<: *common_env

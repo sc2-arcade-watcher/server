@@ -27,7 +27,8 @@ RUN --mount=type=cache,target=/var/cache/apk \
         coreutils \
         patch \
         bash \
-        zstd
+        zstd \
+        supercronic
 
 WORKDIR /app
 RUN chown node:node /app
