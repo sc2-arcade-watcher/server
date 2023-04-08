@@ -92,6 +92,35 @@ export class MapDataUpdatePlanner {
         ));
     }
 
+    public async fetchMapsByRecentMatches(region: GameRegion) {
+        const qresult = await this.conn.query(`
+SELECT
+    COUNT(*) as count,
+    region_id,
+    GROUP_CONCAT(map_id) as map_id
+FROM (
+    SELECT
+        s2_map.region_id as region_id,
+        s2_map.bnet_id as map_id,
+        (SELECT s2pm.date FROM s2_profile_match s2pm WHERE s2pm.region_id = s2_map.region_id AND s2pm.map_id = s2_map.bnet_id ORDER BY s2pm.date DESC LIMIT 1) as last_match_at,
+        IFNULL(s2_map_tracking.reviews_updated_partially_at, s2_map_tracking.reviews_updated_entirely_at) as review_updated_at
+    FROM s2_map
+    INNER JOIN s2_map_tracking ON s2_map.region_id = s2_map_tracking.region_id AND s2_map.bnet_id = s2_map_tracking.map_id
+    WHERE (
+        s2_map.region_id = $1 AND
+        s2_map.type IN ('melee_map', 'arcade_map') AND
+        IFNULL(s2_map_tracking.reviews_updated_partially_at, s2_map_tracking.reviews_updated_entirely_at) <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)
+    )
+) tmp
+WHERE (
+    tmp.last_match_at IS NOT NULL AND TIMESTAMPDIFF(DAY, tmp.review_updated_at, tmp.last_match_at) > $2
+)
+GROUP BY region_id
+ORDER BY region_id ASC, tmp.last_match_at DESC
+        `, [region, 14]);
+        console.log(qresult);
+    }
+
     public async prepareMrevRequests(region: GameRegion, maps: number[]) {
         const qb = this.conn.getRepository(S2MapTracking).createQueryBuilder('mTrack')
             .select([

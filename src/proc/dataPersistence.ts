@@ -299,6 +299,9 @@ export class DataRecordPersistence extends ServiceProcess {
             if (newProfileData.isOnline) {
                 const hdiff = differenceInHours(newProfileData.updatedAt * 1000, s2profile.lastOnlineAt ?? 0);
                 if (s2profile.lastOnlineAt === null || hdiff > 0) {
+                    updatedProfile.lastOnlineAt = new Date(newProfileData.updatedAt * 1000);
+                }
+                if (hdiff >= (24 * 365)) {
                     logger.verbose(`updated onlineAt hdiff=${hdiff} prev=${s2profile.lastOnlineAt} now=${(new Date(newProfileData.updatedAt * 1000))} for ${s2profile.fullnameWithHandle}`)
                 }
             }

@@ -54,6 +54,10 @@ program.command('s2cmd:periodic')
         const uPlanner = new MapDataUpdatePlanner(conn);
 
         logger.verbose(`Preparing map list..`);
+
+        // await uPlanner.fetchMapsByRecentMatches(cmd.region);
+        // return;
+
         const maps = await uPlanner.fetchActiveMaps(cmd.region, 24 * 14 * 1);
         const mreqs = await uPlanner.prepareMrevRequests(cmd.region, maps);
         if (cmd.dryRun) {
