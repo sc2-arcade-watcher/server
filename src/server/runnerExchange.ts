@@ -143,7 +143,10 @@ export interface ProfileDiscoverItem {
     profileId: number;
     profileGameId: number | null;
     characterHandle: string;
+    clanTag: string | null;
     battleHandle: string | null;
+    isOnline: boolean;
+    updatedAt: number;
 }
 
 export interface ProfileDiscover {

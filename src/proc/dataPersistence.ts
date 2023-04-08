@@ -12,6 +12,7 @@ import { S2MapReview } from '../entity/S2MapReview';
 import { S2MapReviewRevision } from '../entity/S2MapReviewRevision';
 import { S2MapTrackingRepository } from '../repository/S2MapTrackingRepository';
 import { S2Map } from '../entity/S2Map';
+import { differenceInHours } from 'date-fns';
 
 export class DataRecordPersistence extends ServiceProcess {
     protected queue: Queue<DataRecordType>;
@@ -295,6 +296,13 @@ export class DataRecordPersistence extends ServiceProcess {
                 }
             }
 
+            if (newProfileData.isOnline) {
+                const hdiff = differenceInHours(newProfileData.updatedAt * 1000, s2profile.lastOnlineAt ?? 0);
+                if (s2profile.lastOnlineAt === null || hdiff > 0) {
+                    logger.verbose(`updated onlineAt hdiff=${hdiff} prev=${s2profile.lastOnlineAt} now=${(new Date(newProfileData.updatedAt * 1000))} for ${s2profile.fullnameWithHandle}`)
+                }
+            }
+
             if (Object.keys(updatedProfile).length > 0 || Object.keys(updatedTracking).length > 0) {
                 profileUpdates.set(s2profile.localProfileId, {
                     updatedProfile: updatedProfile,
@@ -339,7 +347,7 @@ export class DataRecordPersistence extends ServiceProcess {
                 profileGameId: profileData.profileGameId,
                 battleTag: profileData.battleHandle,
                 deleted: charName === '',
-                lastOnlineAt: profileData.battleHandle !== null ? new Date(Date.now() - 1000 * 3600 * 24) : null
+                lastOnlineAt: new Date(profileData.updatedAt * 1000)
             }, this.conn);
             logger.verbose(`created profile ${s2profile.fullnameWithHandle}`);
         }

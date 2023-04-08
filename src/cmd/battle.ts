@@ -166,7 +166,7 @@ program.command('battle:sync-profile')
                 if (cmd.onlineMax) {
                     qb.andWhere('profile.lastOnlineAt > DATE_SUB(UTC_TIMESTAMP(), INTERVAL :onlineMax HOUR)', { onlineMax: cmd.onlineMax });
                 }
-                qb.andWhere('(pTrack.battleAPIErrorCounter IS NULL OR pTrack.battleAPIErrorCounter < :errLimit)', {
+                qb.andWhere('(pTrack.battleAPIErrorCounter IS NULL OR pTrack.battleAPIErrorCounter <= :errLimit)', {
                     errLimit: cmd.errLimit,
                 });
             }

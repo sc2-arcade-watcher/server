@@ -611,15 +611,15 @@ export class BattleMatchTracker {
         this.isRunning = true;
         let firstCycle = true;
         const minCheckPeriod = {
-            [GameRegion.US]: 30,
-            [GameRegion.EU]: 30,
-            [GameRegion.KR]: 300,
+            [GameRegion.US]: 60,
+            [GameRegion.EU]: 60,
+            [GameRegion.KR]: 900,
             [GameRegion.CN]: 3000,
         };
         const maxCheckPeriod = {
             [GameRegion.US]: 1800,
             [GameRegion.EU]: 1600,
-            [GameRegion.KR]: 3600,
+            [GameRegion.KR]: 4000,
             [GameRegion.CN]: 6000,
         };
         while (true) {

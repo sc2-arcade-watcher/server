@@ -444,7 +444,7 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
                 bTrack.battleAPIErrorCounter < (
                     TIMESTAMPDIFF(
                         WEEK,
-                        IFNULL(bTrack.matchHistoryUpdatedAt, bTrack.battleAPIErrorLast),
+                        IFNULL(bTrack.battleAPIErrorLast, bTrack.matchHistoryUpdatedAt),
                         UTC_TIMESTAMP()
                     ) * 2
                 )
