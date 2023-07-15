@@ -1,7 +1,7 @@
 # x-common-args: &common-args
 
 x-restart-policy: &restart_policy
-  restart: ${APP_RESTART_POLICY-no}
+  restart: ${APP_RESTART_POLICY-unless-stopped}
 
 x-service-volumes: &service_volumes
   volumes:
@@ -32,14 +32,14 @@ x-common-env: &common_env
   # ---
   STARC_SQL_DATABASE: ${STARC_SQL_DATABASE-db}
   # ---
-  STARC_QUEUE_REDIS_HOST: ${STARC_QUEUE_REDIS_HOST:??}
-  STARC_QUEUE_REDIS_PORT: ${STARC_QUEUE_REDIS_PORT:??}
+  STARC_QUEUE_REDIS_HOST: ${STARC_QUEUE_REDIS_HOST-redis}
+  STARC_QUEUE_REDIS_PORT: ${STARC_QUEUE_REDIS_PORT-6379}
   # ---
   DPROC_AUTH_TOKEN: ${DPROC_AUTH_TOKEN:??}
   # ---
   DS_BOT_TOKEN: ${DS_BOT_TOKEN:??}
   DS_BOT_OWNER: ${DS_BOT_OWNER:??}
-  DS_BOT_STAFF: ${DS_BOT_STAFF:??}
+  DS_BOT_STAFF: ${DS_BOT_STAFF-}
   # ---
   STARC_WEBAPI_HOSTNAME_WHITELIST: ${STARC_WEBAPI_HOSTNAME_WHITELIST:??}
   STARC_WEBAPI_RATE_LIMIT_MAX: ${STARC_WEBAPI_RATE_LIMIT_MAX-}
@@ -56,7 +56,10 @@ services:
     build:
       context: ./docker/redis
     container_name: ${COMPOSE_PROJECT_NAME:??}-redis
-    hostname: redis
+    networks:
+      default:
+        aliases:
+          - "redis"
     volumes:
       - type: bind
         source: ${APP_DATA_DIR-.}/data/redis
@@ -72,7 +75,10 @@ services:
       - "--character-set-server=utf8mb4"
       - "--collation-server=utf8mb4_unicode_ci"
       - "--innodb-buffer-pool-size=${INNODB_BUFFER_POOL_SIZE-2G}"
-    hostname: db
+    networks:
+      default:
+        aliases:
+          - "db"
     environment:
       MARIADB_ROOT_HOST: ${STARC_SQL_HOST-db}
       MARIADB_USER: ${STARC_SQL_USER-db}
@@ -160,3 +166,7 @@ services:
     depends_on:
       redis: { condition: service_started }
       mariadb: { condition: service_started }
+
+networks:
+  default:
+    name: ${COMPOSE_PROJECT_NAME:??}-internal

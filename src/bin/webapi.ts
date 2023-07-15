@@ -52,13 +52,13 @@ server.register(fastifyStatic, {
 server.register(fastifyRateLimit, {
     global: true,
     max: (req, key) => {
-        let m = Number(process.env.STARC_WEBAPI_RATE_LIMIT_MAX ?? 100);
+        let m = Number(process.env.STARC_WEBAPI_RATE_LIMIT_MAX || 100);
         if (req.userAccount && (req.userAccount.privileges & AccountPrivileges.SuperAdmin) !== 0) {
             m *= 10;
         }
         return m;
     },
-    timeWindow: Number(process.env.STARC_WEBAPI_RATE_LIMIT_TIME_WINDOW_SEC ?? (40 * 1)) * 1000,
+    timeWindow: Number(process.env.STARC_WEBAPI_RATE_LIMIT_TIME_WINDOW_SEC || (40 * 1)) * 1000,
 });
 
 server.register(fastifyCors, {
@@ -170,7 +170,7 @@ process.on('unhandledRejection', e => { throw e; });
     }
     setupFileLogger('webapi');
 
-    server.listen(webapiPort, process.env.STARC_WEBAPI_LISTEN_ADDR ?? '0.0.0.0', (err, address) => {
+    server.listen(webapiPort, process.env.STARC_WEBAPI_LISTEN_ADDR || '0.0.0.0', (err, address) => {
         if (err) throw err;
         logger.info(`server.listen port=${webapiPort} addr=${address}`);
         // logger.verbose('routes\n' + server.printRoutes());

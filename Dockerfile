@@ -1,4 +1,4 @@
-# syntax = docker/dockerfile:1.4.2-labs
+# syntax = docker/dockerfile:1.5-labs
 
 FROM golang:1.18-alpine as s2mdec
 

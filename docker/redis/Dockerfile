@@ -1,4 +1,4 @@
-# syntax = docker/dockerfile:1.4.2-labs
+# syntax = docker/dockerfile:1.5-labs
 
 FROM redis:6.2-alpine
 

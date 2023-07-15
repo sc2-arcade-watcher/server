@@ -10,6 +10,16 @@ x-service-build: &service_build
 
 
 services:
+  redis:
+    networks:
+      - default
+      - dbproxy
+
+  mariadb:
+    networks:
+      - default
+      - dbproxy
+
   datahost:
     <<: [ *service_volumes ]
     build:
@@ -24,6 +34,15 @@ services:
     <<: [ *service_volumes ]
     build:
       <<: [ *service_build ]
+    networks:
+      - default
+      - webproxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=webproxy"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-webapi.rule=Host(`api-sc2arcade.site.localhost`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-webapi.entrypoints=websecure"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME:??}-webapi.tls=true"
 
   drec:
     <<: [ *service_volumes ]
@@ -44,3 +63,12 @@ services:
     <<: [ *service_volumes ]
     build:
       <<: [ *service_build ]
+
+networks:
+  webproxy:
+    name: webproxy
+    external: true
+
+  dbproxy:
+    name: dbproxy
+    external: true
