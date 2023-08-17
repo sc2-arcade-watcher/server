@@ -498,11 +498,12 @@ export class BattleDataUpdater {
         }
         switch (regionId) {
             case GameRegion.US: {
+                return this.bAPIEntry.eu;
                 // return this.bAPIEntry.us;
-                return this.bAPIEntry.pub;
             }
             case GameRegion.EU: {
-                return this.bAPIEntry.eu;
+                return this.bAPIEntry.pub;
+                // return this.bAPIEntry.eu;
             }
             case GameRegion.KR: {
                 return this.bAPIEntry.eu;
@@ -716,7 +717,7 @@ export class BattleDataUpdater {
 
     @retry({
         onFailedAttempt: async err => {
-            if (isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 500)) {
+            if (isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 500 || err.response?.status === 503)) {
                 if (
                     err.response?.status === 404 &&
                     (

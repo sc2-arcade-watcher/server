@@ -51,7 +51,7 @@ process.on('unhandledRejection', e => {
             region: region,
             bProfUpdateDirector: new BattleProfileRefreshDirector(conn, bProfUpdater, region, {
                 startStagger: activeRegions.length > 1 ? idx + 1 : 0,
-                concurrency: 2,
+                concurrency: 1,
             }),
         });
     }

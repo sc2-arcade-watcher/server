@@ -22,7 +22,7 @@ import { AppStorage } from '../entity/AppStorage';
 import { AppStorageRepository } from '../repository/AppStorageRepository';
 
 // can actually be more, due to game pauses
-const battleMatchMaxSecs = 3600 * 9;
+const battleMatchMaxSecs = 3600 * 9 * 1.4;
 
 type BattlePartialS2Lobby = Pick<S2GameLobby,
     'id' |
@@ -613,7 +613,7 @@ export class BattleMatchTracker {
         const minCheckPeriod = {
             [GameRegion.US]: 60,
             [GameRegion.EU]: 60,
-            [GameRegion.KR]: 900,
+            [GameRegion.KR]: 1800,
             [GameRegion.CN]: 3000,
         };
         const maxCheckPeriod = {
