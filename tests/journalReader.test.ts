@@ -68,3 +68,39 @@ describe('restore player toon from incomplete lobby preview where slot positions
         await journal.close();
     }, 10000);
 });
+
+describe('ignore incomplete signal', () => {
+    test('LBUD 17466235', async () => {
+        const journal = prepareJournal(GameRegion.US, [
+            { name: 'TA01', session: 1692188326 },
+        ]);
+        const mockLobbyEvHandler = jest.fn();
+        while (true) {
+            const ev = await journal.proceed();
+            if (!ev) break;
+
+            if (ev.kind === JournalEventKind.UpdateLobbySnapshot && ev.lobby.initInfo.lobbyId === 17466235) {
+                mockLobbyEvHandler(ev);
+            }
+        }
+        expect(mockLobbyEvHandler).toBeCalledTimes(4);
+        await journal.close();
+    }, 10000);
+
+    test('LBCR 17466235', async () => {
+        const journal = prepareJournal(GameRegion.US, [
+            { name: 'TA01', session: 1692194973 },
+        ]);
+        const mockLobbyEvHandler = jest.fn();
+        while (true) {
+            const ev = await journal.proceed();
+            if (!ev) break;
+
+            if (ev.kind === JournalEventKind.NewLobby && ev.lobby.initInfo.lobbyId === 17466235) {
+                mockLobbyEvHandler(ev);
+            }
+        }
+        expect(mockLobbyEvHandler).toBeCalledTimes(0);
+        await journal.close();
+    }, 10000);
+});

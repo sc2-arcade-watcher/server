@@ -130,11 +130,18 @@ export class JournalReader {
         if (this.nextSignal) {
             return this.nextSignal;
         }
-        else {
+
+        while (!this.nextSignal) {
             this.prevCursorPos = Object.assign({}, this.jfeed.cursor);
             const tmp = await this.jfeed.read();
             if (typeof tmp === 'string') {
-                this.nextSignal = this.decodeSignal(tmp);
+                const tmpSig = this.decodeSignal(tmp);
+                if (tmpSig) {
+                    this.nextSignal = tmpSig;
+                }
+                else {
+                    continue;
+                }
             }
             else if (tmp === false) {
                 this._onFeedEnd.emit(this.jfeed);

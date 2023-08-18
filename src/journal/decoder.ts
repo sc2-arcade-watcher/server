@@ -203,7 +203,7 @@ export type SignalDesc = SignalInit
     | SignalLobbyPvEx
 ;
 
-type unserializeEvFn = (version: number, args: string[]) => {};
+type unserializeEvFn = (version: number, args: string[]) => {} | undefined;
 
 function popFirst<T>(v: T[]): T {
     return v.shift();
@@ -286,7 +286,16 @@ export class JournalDecoder {
         return ed;
     }
 
-    unserializeLobbyCreate(version: number, args: string[]): DataLobbyCreate {
+    unserializeLobbyCreate(version: number, args: string[]): DataLobbyCreate | undefined {
+        switch (version) {
+            case 4:
+            case 5:
+                if (args.length !== 11) {
+                    return void 0;
+                }
+                break;
+        }
+
         const ed = {} as DataLobbyCreate;
         ed.lobbyId = Number(popFirst(args));
         ed.mapHandle = numberPair(popFirst(args));
@@ -342,6 +351,14 @@ export class JournalDecoder {
     }
 
     unserializeLobbyUpdate(version: number, args: string[]): DataLobbyUpdate {
+        switch (version) {
+            case 2:
+                if (args.length !== 6) {
+                    return void 0;
+                }
+                break;
+        }
+
         const ed = {} as DataLobbyUpdate;
         ed.lobbyId = Number(popFirst(args));
 
@@ -480,6 +497,7 @@ export class JournalDecoder {
         }
 
         const args = payload.split('\x01');
+        const initArgs = [].concat(args);
 
         const tmp = popFirst(args).split(':');
         const evKind = tmp[0] as SignalKind;
@@ -495,11 +513,18 @@ export class JournalDecoder {
             throw new SigDataCorruption(payload, '');
         }
 
+        const data = handler(evVersion, args);
+
+        if (!data) {
+            logger.warn(`sigproc: failed to unseralize payload args=[${initArgs.join(', ')}]`);
+            return void 0;
+        }
+
         return {
             $kind: evKind,
             $version: evVersion,
             $timestamp: evTimestamp,
-            ...handler(evVersion, args)
+            ...data,
         } as SignalDesc;
     }
 }
