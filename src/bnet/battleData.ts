@@ -459,7 +459,7 @@ export interface BattleDataUpdateOptions {
 export class BattleDataUpdater {
     protected bAPIEntry = {
         pub: new BattleAPI({
-            gateway: { sc2: 'starcraft2.com/en-us/api' },
+            gateway: { sc2: 'starcraft2.blizzard.com/en-us/api' },
         }),
         us: new BattleAPI({
             gateway: { sc2: '{region}.api.blizzard.com' },
@@ -498,7 +498,7 @@ export class BattleDataUpdater {
         }
         switch (regionId) {
             case GameRegion.US: {
-                return this.bAPIEntry.eu;
+                return this.bAPIEntry.us;
                 // return this.bAPIEntry.us;
             }
             case GameRegion.EU: {
@@ -506,13 +506,16 @@ export class BattleDataUpdater {
                 // return this.bAPIEntry.eu;
             }
             case GameRegion.KR: {
-                return this.bAPIEntry.eu;
+                return this.bAPIEntry.pub;
                 // return this.bAPIEntry.kr;
             }
-            case GameRegion.CN: {
-                return this.bAPIEntry.cn;
-                // TW gateway supports CN and is faster to respond
-                return this.bAPIEntry.tw;
+            // case GameRegion.CN: {
+            //     return this.bAPIEntry.cn;
+            //     // TW gateway supports CN and is faster to respond
+            //     return this.bAPIEntry.tw;
+            // }
+            default: {
+                throw new Error(`region ${regionId} not supported`);
             }
         }
     }
@@ -715,32 +718,6 @@ export class BattleDataUpdater {
         return result;
     }
 
-    @retry({
-        onFailedAttempt: async err => {
-            if (isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 500 || err.response?.status === 503)) {
-                if (
-                    err.response?.status === 404 &&
-                    (
-                        err.config.baseURL.indexOf('api.blizzard.com') !== -1 ||
-                        err.config.baseURL.indexOf('gateway.battlenet.com.cn') !== -1
-                    )
-                ) {
-                    throw err;
-                }
-
-                const st = Math.min(
-                    1500 * Math.pow(err.attemptNumber, 1.5),
-                    15000
-                );
-                logger.debug(`retrieveMatchHistory failed, status ${err.response?.status} attempt ${err.attemptNumber} retry in ${st}ms`);
-                await sleep(st);
-            }
-            else {
-                throw err;
-            }
-        },
-        retries: 2,
-    })
     protected async retrieveMatchHistorySingle(bAPI: BattleAPI, profile: S2Profile, locale: GameLocale) {
         const bLocale = `${locale.substr(0, 2)}_${locale.substr(2, 2)}`;
         return (await bAPI.sc2.getProfileMatchHistory({ ...profile, locale: bLocale })).data.matches;
@@ -757,12 +734,7 @@ export class BattleDataUpdater {
 
         try {
             let bAPI: BattleAPI;
-            if (profile.regionId === GameRegion.CN && profile.battleTracking.battleAPIErrorCounter % 2 === 1) {
-                bAPI = this.bAPIEntry.cn;
-            }
-            else {
-                bAPI = this.getAPIForRegion(profile.regionId, profile.battleTracking.publicGatewaySince !== null);
-            }
+            bAPI = this.getAPIForRegion(profile.regionId, profile.battleTracking.publicGatewaySince !== null);
             const tdiff = profile.battleTracking.matchHistoryUpdatedAt ? (
                 (new Date()).getTime() - profile.battleTracking.matchHistoryUpdatedAt.getTime()
             ) / 1000 / 3600.0 : 0;

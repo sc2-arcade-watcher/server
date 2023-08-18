@@ -22,7 +22,7 @@ import { AppStorage } from '../entity/AppStorage';
 import { AppStorageRepository } from '../repository/AppStorageRepository';
 
 // can actually be more, due to game pauses
-const battleMatchMaxSecs = 3600 * 9 * 1.4;
+const battleMatchMaxSecs = 3600 * 9 * 1.1;
 
 type BattlePartialS2Lobby = Pick<S2GameLobby,
     'id' |

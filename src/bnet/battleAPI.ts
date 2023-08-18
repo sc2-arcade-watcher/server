@@ -20,7 +20,7 @@ export type BattleAPIGateway = '{region}.battle.net'
     | 'kr.api.blizzard.com'
     | 'tw.api.blizzard.com'
     | 'gateway.battlenet.com.cn'
-    | 'starcraft2.com/en-us/api'
+    | 'starcraft2.blizzard.com/en-us/api'
 ;
 
 export interface BattleAPIClientConfig {
@@ -274,7 +274,7 @@ class BattleSC2 extends BattleAPIBase {
         Object.assign(customAxios.defaults, <AxiosRequestConfig>{
             baseURL: `${gatewayURL(this.mConfig.client.gateway.sc2, this.mConfig.client.region)}/sc2`,
         });
-        if (this.mConfig.client.gateway.sc2 !== 'starcraft2.com/en-us/api' && this.mConfig.client.accessToken) {
+        if (this.mConfig.client.gateway.sc2 !== 'starcraft2.blizzard.com/en-us/api' && this.mConfig.client.accessToken) {
             customAxios.defaults.headers['Authorization'] = `Bearer ${this.mConfig.client.accessToken}`;
         }
         return customAxios;
@@ -339,18 +339,23 @@ export class BattleAPI {
         this.oauth = new BattleOAuth(modConfig);
         this.sc2 = new BattleSC2(modConfig);
 
-        this.sc2.axios.interceptors.response.use(function (response) {
+        this.sc2.axios.interceptors.response.use((response) => {
+            const retryAttempt = (response.config as any).retryAttempt || null;
+            const url = [(response.config.baseURL || ''), '/', this.sc2.axios.getUri(response.config)].join('');
+            logger.debug(`received url=${url} status=${response.status} retry=${retryAttempt}`);
             return response;
         }, async (error) => {
             if (isAxiosError(error)) {
+                const url = [(error.config.baseURL || ''), '/', this.sc2.axios.getUri(error.config)].join('');
+
                 if ((error.config as any).retryAttempt && (error.config as any).retryAttempt > 5) {
-                    logger.warn(`exceeded retry limit reqUrl=${error.config.url}`);
+                    logger.warn(`exceeded retry limit url=${url} errCode=${error?.code} status=${error?.response?.status}`);
                     throw error;
                 }
                 (error.config as any).retryAttempt = ((error.config as any).retryAttempt ?? 0) + 1;
 
                 if (error?.response?.status === 401) {
-                    logger.warn(`Battle accessToken expired? reqUrl=${error.config.url}`);
+                    logger.verbose(`Battle accessToken expired? request aborted ..`);
                     const accessToken = await this.refreshToken();
                     if (!accessToken) {
                         throw error;
@@ -358,7 +363,7 @@ export class BattleAPI {
                     error.config.headers['Authorization'] = `Bearer ${accessToken}`;
                 }
                 else if (error?.response?.status === 429) {
-                    await sleep(1800 * Math.pow((error.config as any).retryAttempt, 1.6));
+                    await sleep(2500 * Math.pow((error.config as any).retryAttempt, 1.4));
                 }
                 else if (error?.response?.status === 503) {
                     await sleep(400 * Math.pow((error.config as any).retryAttempt, 1.3));
@@ -367,9 +372,11 @@ export class BattleAPI {
                     await sleep(300 * Math.pow((error.config as any).retryAttempt, 1.1));
                 }
                 else if (error?.code === 'ECONNRESET') {
-                    logger.warn(`req failed due to ${error?.code}, retrying in..`);
                     await sleep(1000 * Math.pow((error.config as any).retryAttempt, 1.4));
                 }
+                // else if (error?.code === 'ECONNABORTED') {
+                //     await sleep(1000 * Math.pow((error.config as any).retryAttempt, 1.4));
+                // }
                 else {
                     throw error;
                 }

@@ -80,7 +80,7 @@ program.command('discover:profile')
                 break;
             }
             case 'sc2': {
-                gateway = 'starcraft2.com/en-us/api';
+                gateway = 'starcraft2.blizzard.com/en-us/api';
                 break;
             }
             default: {

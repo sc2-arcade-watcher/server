@@ -38,7 +38,7 @@ process.on('unhandledRejection', e => {
     const bProfUpdater = new BattleProfileUpdater(conn);
     const bmTracker = new BattleMatchTracker(conn, {
         regions: activeRegions,
-        concurrency: 30,
+        concurrency: 12,
     });
     const bmProvider = new BattleLobbyProvider(conn, bmTracker);
     const bWorkers: BattleWorker[] = [];
