@@ -101,6 +101,10 @@ export class BattleMatchEntryMapper {
                 qb.andWhere('mapLocale.regionId IN (:regionId)', { regionId: params.regionId });
             }
         }
+        else {
+            // exclude CN region as default (no longer exists)
+            qb.andWhere('mapLocale.regionId IN (:regionId)', { regionId: [GameRegion.US, GameRegion.EU, GameRegion.KR] });
+        }
 
         if (params.mapId) {
             qb.andWhere('mapLocale.bnetId = :mapId', { mapId: params.mapId });
@@ -217,7 +221,7 @@ export class BattleMatchEntryMapper {
         }
 
         const reqRegionId = profile.regionId;
-        const otherRegions = [GameRegion.US, GameRegion.EU, GameRegion.KR, GameRegion.CN];
+        const otherRegions = [GameRegion.US, GameRegion.EU, GameRegion.KR];
         otherRegions.splice(otherRegions.findIndex(x => x === reqRegionId), 1);
         const mappedEntries: BattleMatchMapMapped[] = [];
 
@@ -374,13 +378,7 @@ export class BattleMatchEntryMapper {
                     (isMainLocaleMatching || entryMapNamesUnique.length === availableUniqueNames.length)
                 ) {
                     if (matchedMap.mapType === S2MapType.DependencyMod || matchedMap.mapType === S2MapType.ExtensionMod) {
-                        if (bSrcs.length < sourcesLimit) {
-                            return false;
-                        }
-                        logger.warn(`${profile.nameAndId} matched mod of type=${matchedMap.mapType} instead of map - wtf?`, matchedMap, entryMapNamesUnique);
-                        currMappedEntry.mapId = 0;
-                        mappedEntries.push(currMappedEntry);
-                        continue;
+                        logger.verbose(`${profile.nameAndId} matched mod of type=${matchedMap.mapType} instead of map - published entry was updated or missmatched`, matchedMap, entryMapNamesUnique);
                     }
 
                     currMappedEntry.mapId = matchedMap.mapId;
