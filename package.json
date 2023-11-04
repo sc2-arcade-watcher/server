@@ -70,5 +70,8 @@
         "erlpack": "^0.1.3",
         "utf-8-validate": "^5.0.2",
         "zlib-sync": "^0.1.6"
-    }
+    },
+    "workspaces": [
+        "packages/*"
+    ]
 }

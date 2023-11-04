@@ -38,7 +38,7 @@ process.on('unhandledRejection', e => {
     const bProfUpdater = new BattleProfileUpdater(conn);
     const bmTracker = new BattleMatchTracker(conn, {
         regions: activeRegions,
-        concurrency: 12,
+        concurrency: 20,
     });
     const bmProvider = new BattleLobbyProvider(conn, bmTracker);
     const bWorkers: BattleWorker[] = [];
@@ -51,7 +51,7 @@ process.on('unhandledRejection', e => {
             region: region,
             bProfUpdateDirector: new BattleProfileRefreshDirector(conn, bProfUpdater, region, {
                 startStagger: activeRegions.length > 1 ? idx + 1 : 0,
-                concurrency: 1,
+                concurrency: 5,
             }),
         });
     }

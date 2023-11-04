@@ -22,7 +22,7 @@ import { AppStorage } from '../entity/AppStorage';
 import { AppStorageRepository } from '../repository/AppStorageRepository';
 
 // can actually be more, due to game pauses
-const battleMatchMaxSecs = 3600 * 9 * 1.1;
+const battleMatchMaxSecs = 3600 * 9;
 
 type BattlePartialS2Lobby = Pick<S2GameLobby,
     'id' |
@@ -163,8 +163,10 @@ export class BattleMatchTracker {
             !tPlayer.matchHistoryUpdatedAt || tPlayer.matchHistoryUpdatedAt < toDate
         ) {
             let updatedMHStatus: BattleTrackedPlayerMHStatus;
-            if (tPlayer.battleAPIErrorCounter > 5 && differenceInMinutes(Date.now(), tPlayer.battleAPIErrorLast) < 5) {
+            const lastErrDiffM = differenceInMinutes(Date.now(), tPlayer.battleAPIErrorLast);
+            if (tPlayer.battleAPIErrorCounter > 0 && lastErrDiffM > Math.min(120, Math.pow(tPlayer.battleAPIErrorCounter, 1.5))) {
                 // don't even try
+                logger.debug(`aborting getPlayerMatches due to error ratio errCounter=${tPlayer.battleAPIErrorCounter} lastErrDiffM=${lastErrDiffM}`);
             }
             else if (this.bProfileUpdater) {
                 updatedMHStatus = await this.bProfileUpdater.updateProfileMatches(profParams, toDate);
@@ -614,7 +616,7 @@ export class BattleMatchTracker {
             [GameRegion.US]: 60,
             [GameRegion.EU]: 60,
             [GameRegion.KR]: 1800,
-            [GameRegion.CN]: 3000,
+            [GameRegion.CN]: 2000,
         };
         const maxCheckPeriod = {
             [GameRegion.US]: 1800,

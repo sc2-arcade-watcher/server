@@ -347,12 +347,12 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
                 cycleInterval: 60 * 130,
                 priority: 10,
             },
-            // {
-            //     name: 'stale',
-            //     qb: this.createQueryStale(),
-            //     cycleInterval: 60 * 60 * 8,
-            //     priority: 0,
-            // },
+            {
+                name: 'stale',
+                qb: this.createQueryStale(),
+                cycleInterval: 60 * 60 * 8,
+                priority: 0,
+            },
         ];
     }
 
@@ -446,7 +446,7 @@ export class BattleProfileRefreshDirector extends ServiceProcess {
                         WEEK,
                         IFNULL(bTrack.battleAPIErrorLast, bTrack.matchHistoryUpdatedAt),
                         UTC_TIMESTAMP()
-                    ) * 2
+                    ) * 3
                 )
             )`)
         ;
